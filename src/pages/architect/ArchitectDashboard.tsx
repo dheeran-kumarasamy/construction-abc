@@ -39,6 +39,22 @@ export default function ArchitectDashboard() {
         >
           Upload BOQ
         </button>
+        <button
+        onClick={() => navigate("/architect/comparison")}
+        style={{
+            marginTop: 12,
+            background: "#16A34A",
+            color: "white",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 10,
+            cursor: "pointer",
+            fontWeight: 600,
+        }}
+        >
+        Compare Builder Estimates
+        </button>
+
       </div>
     </div>
   );

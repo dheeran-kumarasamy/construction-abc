@@ -5,6 +5,10 @@ import BOQUpload from "./pages/architect/BOQUploadWithParsing";
 import BOQMapping from "./pages/architect/BOQMapping";
 import PricingEngine from "./pages/architect/PricingEngine";
 import ArchitectDashboard from "./pages/architect/ArchitectDashboard";
+import BuilderBasePricing from "./pages/builder/BuilderBasePricing";
+import ApplyBasePricing from "./pages/builder/ApplyBasePricing";
+import MarginEngine from "./pages/builder/MarginEngine";
+import ComparisonDashboard from "./pages/architect/ComparisonDashboard";
 
 // --- Landing Page ---
 function Landing() {
@@ -67,6 +71,10 @@ export default function App() {
         <Route path="/architect/boq-upload" element={<BOQUpload />} />
         <Route path="/architect/boq-mapping" element={<BOQMapping />} />
         <Route path="/architect/pricing" element={<PricingEngine />} />
+        <Route path="/builder/base-pricing" element={<BuilderBasePricing />} />
+        <Route path="/builder/apply-pricing" element={<ApplyBasePricing />} />
+        <Route path="/builder/margins" element={<MarginEngine />} />
+        <Route path="/architect/comparison" element={<ComparisonDashboard />} />
 
       </Routes>
     </BrowserRouter>
