@@ -14,21 +14,45 @@ export default function BuilderDashboard() {
       <div style={{ marginTop: 20, display: "flex", gap: 12, flexWrap: "wrap" }}>
         <button
           onClick={() => navigate("/builder/base-pricing")}
-          style={primaryBtn}
+          style={{
+            background: "#3B5BDB",
+            color: "white",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 10,
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
         >
           Manage Base Pricing
         </button>
 
         <button
           onClick={() => navigate("/builder/apply-pricing")}
-          style={successBtn}
+          style={{
+            background: "#16A34A",
+            color: "white",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 10,
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
         >
           Apply Pricing to BOQ
         </button>
 
         <button
           onClick={() => navigate("/builder/margins")}
-          style={warningBtn}
+          style={{
+            background: "#F59E0B",
+            color: "white",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 10,
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
         >
           Configure Margins & Uplifts
         </button>
@@ -36,23 +60,3 @@ export default function BuilderDashboard() {
     </div>
   );
 }
-
-const primaryBtn: React.CSSProperties = {
-  background: "#3B5BDB",
-  color: "white",
-  border: "none",
-  padding: "10px 16px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: 600,
-};
-
-const successBtn: React.CSSProperties = {
-  ...primaryBtn,
-  background: "#16A34A",
-};
-
-const warningBtn: React.CSSProperties = {
-  ...primaryBtn,
-  background: "#F59E0B",
-};

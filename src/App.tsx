@@ -5,6 +5,7 @@ import BOQUpload from "./pages/architect/BOQUploadWithParsing";
 import BOQMapping from "./pages/architect/BOQMapping";
 import PricingEngine from "./pages/architect/PricingEngine";
 import ArchitectDashboard from "./pages/architect/ArchitectDashboard";
+import BuilderDashboard from "./pages/builder/BuilderDashboard";
 import BuilderBasePricing from "./pages/builder/BuilderBasePricing";
 import ApplyBasePricing from "./pages/builder/ApplyBasePricing";
 import MarginEngine from "./pages/builder/MarginEngine";
@@ -37,16 +38,6 @@ function Landing() {
   );
 }
 
-
-// --- Builder Dashboard ---
-function BuilderDashboard() {
-  return (
-    <div style={styles.page}>
-      <h1>Builder Dashboard</h1>
-      <p>Upload base pricing, map BOQs, apply margins, review totals, and export estimates.</p>
-    </div>
-  );
-}
 
 // --- Client View ---
 function ClientView() {
