@@ -10,6 +10,12 @@ import BuilderBasePricing from "./pages/builder/BuilderBasePricing";
 import ApplyBasePricing from "./pages/builder/ApplyBasePricing";
 import MarginEngine from "./pages/builder/MarginEngine";
 import ComparisonDashboard from "./pages/architect/ComparisonDashboard";
+import LoginPage from "./pages/LoginPage";
+import { RequireAuth } from "./auth/AuthContext";
+import InviteBuilders from "./pages/architect/InviteBuilders";
+import SubmitEstimate from "./pages/builder/SubmitEstimate";
+import ReceivedEstimates from "./pages/architect/ReceivedEstimates";
+import AuditTrail from "./pages/architect/AuditTrail";
 
 // --- Landing Page ---
 function Landing() {
@@ -66,6 +72,63 @@ export default function App() {
         <Route path="/builder/apply-pricing" element={<ApplyBasePricing />} />
         <Route path="/builder/margins" element={<MarginEngine />} />
         <Route path="/architect/comparison" element={<ComparisonDashboard />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/architect"
+          element={
+            <RequireAuth role="architect">
+              <ArchitectDashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/builder"
+          element={
+            <RequireAuth role="builder">
+              <BuilderDashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/client"
+          element={
+            <RequireAuth role="client">
+              <ClientView />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/architect/invite"
+          element={
+            <RequireAuth role="architect">
+            <InviteBuilders />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/builder/submit"
+          element={
+          <RequireAuth role="builder">
+          <SubmitEstimate />
+          </RequireAuth>
+          }
+        />
+        <Route
+          path="/architect/received"
+          element={
+            <RequireAuth role="architect">
+              <ReceivedEstimates />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/architect/audit"
+          element={
+            <RequireAuth role="architect">
+              <AuditTrail />
+            </RequireAuth>
+          }
+        />
 
       </Routes>
     </BrowserRouter>

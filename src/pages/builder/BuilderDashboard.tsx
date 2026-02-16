@@ -56,6 +56,22 @@ export default function BuilderDashboard() {
         >
           Configure Margins & Uplifts
         </button>
+        <button
+          onClick={() => navigate("/builder/submit")}
+          style={{
+            background: "#8B5CF6",
+            color: "white",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 10,
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
+        >
+          Submit Estimate to Architect
+        </button>
+
+
       </div>
     </div>
   );

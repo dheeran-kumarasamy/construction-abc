@@ -10,7 +10,7 @@ export default function ArchitectDashboard() {
         Create projects, upload BOQs, invite builders, review estimates, and
         export reports.
       </p>
-      <div style={{ display: "flex", gap: "12px", marginTop: 16 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginTop: 16 }}>
         <button
           onClick={() => navigate("/architect/create")}
           style={{
@@ -40,9 +40,8 @@ export default function ArchitectDashboard() {
           Upload BOQ
         </button>
         <button
-        onClick={() => navigate("/architect/comparison")}
-        style={{
-            marginTop: 12,
+          onClick={() => navigate("/architect/comparison")}
+          style={{
             background: "#16A34A",
             color: "white",
             border: "none",
@@ -50,9 +49,51 @@ export default function ArchitectDashboard() {
             borderRadius: 10,
             cursor: "pointer",
             fontWeight: 600,
-        }}
+          }}
         >
-        Compare Builder Estimates
+          Compare Builder Estimates
+        </button>
+        <button
+          onClick={() => navigate("/architect/invite")}
+          style={{
+            background: "#8B5CF6",
+            color: "white",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 10,
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
+        >
+          Invite Builders
+        </button>
+        <button
+          onClick={() => navigate("/architect/received")}
+          style={{
+            background: "#F59E0B",
+            color: "white",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 10,
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
+        >
+          View Submitted Estimates
+        </button>
+        <button
+          onClick={() => navigate("/architect/audit")}
+          style={{
+            background: "#111827",
+            color: "white",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 10,
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
+        >
+          View Audit Trail
         </button>
 
       </div>
