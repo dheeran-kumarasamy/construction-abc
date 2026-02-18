@@ -5,15 +5,38 @@ export default function CreateProject() {
   const navigate = useNavigate();
 
   const [projectName, setProjectName] = useState("");
+  const [description, setDescription] = useState("");
+  const [siteAddress, setSiteAddress] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [durationMonths, setDurationMonths] = useState(1);
+
   const [currency, setCurrency] = useState("INR");
   const [confirmDollar, setConfirmDollar] = useState(false);
-  const [error, setError] = useState("");
 
-  function handleSubmit(e: React.FormEvent) {
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError("");
 
     if (!projectName.trim()) {
       setError("Project name is required");
+      return;
+    }
+
+    if (!siteAddress.trim()) {
+      setError("Site address is required");
+      return;
+    }
+
+    if (!startDate) {
+      setError("Start date is required");
+      return;
+    }
+
+    if (!durationMonths || durationMonths < 1) {
+      setError("Duration must be at least 1 month");
       return;
     }
 
@@ -22,11 +45,38 @@ export default function CreateProject() {
       return;
     }
 
-    // Temporary: simulate save
-    console.log({ projectName, currency });
+    try {
+      setLoading(true);
 
-    // Navigate to architect dashboard after creation
-    navigate("/architect");
+      const token = localStorage.getItem("token");
+
+      const res = await fetch("http://localhost:4000/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: projectName,
+          description: description.trim() || undefined,
+          siteAddress,
+          startDate,
+          durationMonths,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create project");
+      }
+
+      navigate("/architect/projects");
+    } catch (err: any) {
+      setError(err.message || "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -35,7 +85,6 @@ export default function CreateProject() {
         <h2>Create Project</h2>
 
         <form onSubmit={handleSubmit} style={styles.form}>
-          {/* Project Name */}
           <div style={styles.field}>
             <label>Project Name</label>
             <input
@@ -44,10 +93,56 @@ export default function CreateProject() {
               onChange={(e) => setProjectName(e.target.value)}
               style={styles.input}
               placeholder="Enter project name"
+              required
             />
           </div>
 
-          {/* Currency */}
+          <div style={styles.field}>
+            <label>Description (optional)</label>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              style={styles.input}
+              placeholder="Short description"
+            />
+          </div>
+
+          <div style={styles.field}>
+            <label>Site Address</label>
+            <input
+              type="text"
+              value={siteAddress}
+              onChange={(e) => setSiteAddress(e.target.value)}
+              style={styles.input}
+              placeholder="Enter site address"
+              required
+            />
+          </div>
+
+          <div style={styles.field}>
+            <label>Start Date</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              style={styles.input}
+              required
+            />
+          </div>
+
+          <div style={styles.field}>
+            <label>Duration (months)</label>
+            <input
+              type="number"
+              min={1}
+              value={durationMonths}
+              onChange={(e) => setDurationMonths(Number(e.target.value))}
+              style={styles.input}
+              required
+            />
+          </div>
+
           <div style={styles.field}>
             <label>Currency</label>
             <select
@@ -63,7 +158,6 @@ export default function CreateProject() {
             </select>
           </div>
 
-          {/* Dollar Confirmation */}
           {currency === "USD" && (
             <div style={styles.checkboxRow}>
               <input
@@ -75,17 +169,20 @@ export default function CreateProject() {
             </div>
           )}
 
-          {/* Error */}
           {error && <div style={styles.error}>{error}</div>}
 
-          {/* Actions */}
           <div style={styles.actions}>
-            <button type="button" onClick={() => navigate(-1)} style={styles.secondaryBtn}>
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              style={styles.secondaryBtn}
+              disabled={loading}
+            >
               Cancel
             </button>
 
-            <button type="submit" style={styles.primaryBtn}>
-              Create Project
+            <button type="submit" style={styles.primaryBtn} disabled={loading}>
+              {loading ? "Creating..." : "Create Project"}
             </button>
           </div>
         </form>
