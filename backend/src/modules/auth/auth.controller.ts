@@ -26,18 +26,24 @@ export async function acceptInvite(req: Request, res: Response) {
 }
 
 export async function inviteUser(req: Request, res: Response) {
-    console.log("BODY RECEIVED:", req.body); // ← ADD THIS
-
   try {
-    const { email, role, organizationId } = req.body || {};
+    const { email, role = "builder", projectId } = req.body || {};
+    const orgId = (req as any).user?.organizationId || null;
 
-    if (!email || !role || !organizationId) {
-      return res.status(400).json({
-        error: "email, role, and organizationId are required",
-      });
+    if (!email) {
+      return res.status(400).json({ error: "email is required" });
     }
 
-    const result = await service.createInvite(email, role, organizationId);
+    if (!orgId) {
+      return res.status(403).json({ error: "Missing organization context" });
+    }
+
+    // projectId can be required for project-scoped invites
+    if (!projectId) {
+      return res.status(400).json({ error: "projectId is required for project invites" });
+    }
+
+    const result = await service.createInvite(email, role, orgId, projectId);
 
     res.json(result);
   } catch (err: any) {

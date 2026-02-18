@@ -5,6 +5,7 @@ import {
   addBasePrice,
   clearBasePricing,
 } from "../../services/basePricingStore";
+import { pageStyles } from "../../layouts/pageStyles";
 
 export default function BuilderBasePricing() {
   const [items, setItems] = useState<BasePriceItem[]>([]);
@@ -34,17 +35,17 @@ export default function BuilderBasePricing() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h2>Builder Base Pricing</h2>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(900px, 100%)" }}>
+        <h2 style={pageStyles.title}>Builder Base Pricing</h2>
 
         {/* Form */}
-        <div style={styles.formRow}>
+        <div style={pageStyles.formGrid}>
           <input
             placeholder="Item name"
             value={form.item}
             onChange={(e) => setForm({ ...form, item: e.target.value })}
-            style={styles.input}
+            style={pageStyles.input}
           />
 
           <input
@@ -52,7 +53,7 @@ export default function BuilderBasePricing() {
             placeholder="Rate"
             value={form.rate}
             onChange={(e) => setForm({ ...form, rate: Number(e.target.value) })}
-            style={styles.input}
+            style={pageStyles.input}
           />
 
           <select
@@ -60,7 +61,7 @@ export default function BuilderBasePricing() {
             onChange={(e) =>
               setForm({ ...form, category: e.target.value as BasePriceItem["category"] })
             }
-            style={styles.input}
+            style={pageStyles.select}
           >
             <option>Material</option>
             <option>Labor</option>
@@ -68,13 +69,13 @@ export default function BuilderBasePricing() {
             <option>Other</option>
           </select>
 
-          <button onClick={handleAdd} style={styles.primaryBtn}>
+          <button onClick={handleAdd} style={pageStyles.primaryBtn}>
             Add
           </button>
         </div>
 
         {/* Table */}
-        <table style={styles.table}>
+        <table style={pageStyles.table}>
           <thead>
             <tr>
               <th>Item</th>
@@ -93,61 +94,10 @@ export default function BuilderBasePricing() {
           </tbody>
         </table>
 
-        <button onClick={handleClear} style={styles.secondaryBtn}>
+        <button onClick={handleClear} style={pageStyles.secondaryBtn}>
           Clear All
         </button>
       </div>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#F8F9FB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "Inter, sans-serif",
-  },
-  card: {
-    background: "#FFFFFF",
-    padding: "32px",
-    borderRadius: "16px",
-    width: "720px",
-    border: "1px solid #E5E7EB",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  formRow: {
-    display: "grid",
-    gridTemplateColumns: "2fr 1fr 1fr auto",
-    gap: "8px",
-  },
-  input: {
-    padding: "8px",
-    borderRadius: "8px",
-    border: "1px solid #D1D5DB",
-  },
-  primaryBtn: {
-    background: "#3B5BDB",
-    color: "white",
-    border: "none",
-    padding: "8px 12px",
-    borderRadius: "8px",
-    cursor: "pointer",
-  },
-  secondaryBtn: {
-    alignSelf: "flex-end",
-    background: "white",
-    border: "1px solid #D1D5DB",
-    padding: "8px 12px",
-    borderRadius: "8px",
-    cursor: "pointer",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-};

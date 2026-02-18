@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import ExportButtons from "../../components/ExportButtons";
+import { pageStyles } from "../../layouts/pageStyles";
 
 interface BOQRow {
   [key: string]: any;
@@ -67,21 +68,21 @@ export default function PricingEngine() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h2>Pricing Summary</h2>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(640px, 100%)" }}>
+        <h2 style={pageStyles.title}>Pricing Summary</h2>
 
-        <div style={styles.marginRow}>
+        <div style={pageStyles.marginRow}>
           <label>Overall Margin (%)</label>
           <input
             type="number"
             value={margin}
             onChange={handleMarginChange}
-            style={styles.input}
+            style={pageStyles.inputSm}
           />
         </div>
 
-        <table style={styles.table}>
+        <table style={pageStyles.table}>
           <tbody>
             <tr>
               <td>Material</td>
@@ -99,7 +100,7 @@ export default function PricingEngine() {
               <td>Other</td>
               <td>{totals.other.toFixed(2)}</td>
             </tr>
-            <tr style={styles.grandRow}>
+            <tr style={pageStyles.grandRow}>
               <td>Grand Total</td>
               <td>{totals.grandTotal.toFixed(2)}</td>
             </tr>
@@ -112,42 +113,4 @@ export default function PricingEngine() {
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#F8F9FB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "Inter, sans-serif",
-  },
-  card: {
-    background: "#FFFFFF",
-    padding: "32px",
-    borderRadius: "16px",
-    width: "520px",
-    border: "1px solid #E5E7EB",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  marginRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  input: {
-    width: "100px",
-    padding: "8px",
-    borderRadius: "8px",
-    border: "1px solid #D1D5DB",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-  grandRow: {
-    fontWeight: "bold",
-    borderTop: "2px solid #111",
-  },
-};
+// remove local styles object

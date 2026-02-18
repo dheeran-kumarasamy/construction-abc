@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getBasePricing, type BasePriceItem } from "../../services/basePricingStore";
+import { pageStyles } from "../../layouts/pageStyles";
 
 interface BOQRow {
   [key: string]: any;
@@ -45,15 +46,15 @@ export default function ApplyBasePricing() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h2>Apply Base Pricing</h2>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(980px, 100%)" }}>
+        <h2 style={pageStyles.title}>Apply Base Pricing</h2>
 
-        <button style={styles.primaryBtn} onClick={applyPricing}>
+        <button style={pageStyles.primaryBtn} onClick={applyPricing}>
           Apply Stored Pricing
         </button>
 
-        <table style={styles.table}>
+        <table style={pageStyles.table}>
           <thead>
             <tr>
               <th>Item</th>
@@ -79,38 +80,3 @@ export default function ApplyBasePricing() {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#F8F9FB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "Inter, sans-serif",
-  },
-  card: {
-    background: "#FFFFFF",
-    padding: "32px",
-    borderRadius: "16px",
-    width: "900px",
-    border: "1px solid #E5E7EB",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  primaryBtn: {
-    alignSelf: "flex-start",
-    background: "#3B5BDB",
-    color: "white",
-    border: "none",
-    padding: "10px 16px",
-    borderRadius: "10px",
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-};

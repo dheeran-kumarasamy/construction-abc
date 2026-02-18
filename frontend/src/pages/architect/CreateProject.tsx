@@ -80,78 +80,78 @@ export default function CreateProject() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h2>Create Project</h2>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(520px, 100%)" }}>
+        <h2 style={pageStyles.title}>Create Project</h2>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.field}>
-            <label>Project Name</label>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={pageStyles.field}>
+            <label style={pageStyles.label}>Project Name</label>
             <input
               type="text"
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              style={styles.input}
+              style={pageStyles.input}
               placeholder="Enter project name"
               required
             />
           </div>
 
-          <div style={styles.field}>
-            <label>Description (optional)</label>
+          <div style={pageStyles.field}>
+            <label style={pageStyles.label}>Description (optional)</label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              style={styles.input}
+              style={pageStyles.input}
               placeholder="Short description"
             />
           </div>
 
-          <div style={styles.field}>
-            <label>Site Address</label>
+          <div style={pageStyles.field}>
+            <label style={pageStyles.label}>Site Address</label>
             <input
               type="text"
               value={siteAddress}
               onChange={(e) => setSiteAddress(e.target.value)}
-              style={styles.input}
+              style={pageStyles.input}
               placeholder="Enter site address"
               required
             />
           </div>
 
-          <div style={styles.field}>
-            <label>Start Date</label>
+          <div style={pageStyles.field}>
+            <label style={pageStyles.label}>Start Date</label>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              style={styles.input}
+              style={pageStyles.input}
               required
             />
           </div>
 
-          <div style={styles.field}>
-            <label>Duration (months)</label>
+          <div style={pageStyles.field}>
+            <label style={pageStyles.label}>Duration (months)</label>
             <input
               type="number"
               min={1}
               value={durationMonths}
               onChange={(e) => setDurationMonths(Number(e.target.value))}
-              style={styles.input}
+              style={pageStyles.input}
               required
             />
           </div>
 
-          <div style={styles.field}>
-            <label>Currency</label>
+          <div style={pageStyles.field}>
+            <label style={pageStyles.label}>Currency</label>
             <select
               value={currency}
               onChange={(e) => {
                 setCurrency(e.target.value);
                 setConfirmDollar(false);
               }}
-              style={styles.input}
+              style={pageStyles.input}
             >
               <option value="INR">INR (₹)</option>
               <option value="USD">USD ($)</option>
@@ -159,7 +159,7 @@ export default function CreateProject() {
           </div>
 
           {currency === "USD" && (
-            <div style={styles.checkboxRow}>
+            <div style={pageStyles.checkboxRow}>
               <input
                 type="checkbox"
                 checked={confirmDollar}
@@ -169,19 +169,19 @@ export default function CreateProject() {
             </div>
           )}
 
-          {error && <div style={styles.error}>{error}</div>}
+          {error && <div style={pageStyles.error}>{error}</div>}
 
-          <div style={styles.actions}>
+          <div style={pageStyles.actions}>
             <button
               type="button"
               onClick={() => navigate(-1)}
-              style={styles.secondaryBtn}
+              style={pageStyles.secondaryBtn}
               disabled={loading}
             >
               Cancel
             </button>
 
-            <button type="submit" style={styles.primaryBtn} disabled={loading}>
+            <button type="submit" style={pageStyles.primaryBtn} disabled={loading}>
               {loading ? "Creating..." : "Create Project"}
             </button>
           </div>
@@ -192,7 +192,7 @@ export default function CreateProject() {
 }
 
 // --- Styles ---
-const styles: Record<string, React.CSSProperties> = {
+const pageStyles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
     background: "#F8F9FB",

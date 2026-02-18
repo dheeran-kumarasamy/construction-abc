@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { pageStyles } from "../../layouts/pageStyles";
 
 interface AuditEntry {
   action: string;
@@ -32,27 +33,27 @@ export default function AuditTrail() {
   }, []);
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h2>Audit Trail</h2>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(980px, 100%)" }}>
+        <h2 style={pageStyles.title}>Audit Trail</h2>
 
         {entries.length === 0 ? (
           <p>No audit records yet.</p>
         ) : (
-          <table style={styles.table}>
+          <table style={pageStyles.table}>
             <thead>
               <tr>
-                <th>Action</th>
-                <th>User</th>
-                <th>Timestamp</th>
+                <th style={pageStyles.th}>Action</th>
+                <th style={pageStyles.th}>User</th>
+                <th style={pageStyles.th}>Timestamp</th>
               </tr>
             </thead>
             <tbody>
               {entries.map((e, idx) => (
-                <tr key={idx}>
-                  <td>{e.action}</td>
-                  <td>{e.user}</td>
-                  <td>{new Date(e.timestamp).toLocaleString()}</td>
+                <tr key={idx} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                  <td style={pageStyles.td}>{e.action}</td>
+                  <td style={pageStyles.td}>{e.user}</td>
+                  <td style={pageStyles.td}>{new Date(e.timestamp).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -63,27 +64,4 @@ export default function AuditTrail() {
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#F8F9FB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "Inter, sans-serif",
-  },
-  card: {
-    background: "#FFFFFF",
-    padding: "32px",
-    borderRadius: "16px",
-    width: "900px",
-    border: "1px solid #E5E7EB",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-};
+// remove local styles object

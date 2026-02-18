@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { pageStyles } from "../../layouts/pageStyles";
 
 // NOTE: Excel parsing library (SheetJS) will be connected in the next step.
 // This screen focuses on column detection + user mapping UI.
@@ -46,21 +47,19 @@ export default function BOQMapping() {
 }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h2>BOQ Column Mapping</h2>
-        <p style={styles.subtext}>
-          Match your spreadsheet columns to the required BOQ fields.
-        </p>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(600px, 100%)" }}>
+        <h2 style={pageStyles.title}>BOQ Column Mapping</h2>
+        <p style={pageStyles.subtext}>Match your spreadsheet columns to the required BOQ fields.</p>
 
         {REQUIRED_FIELDS.map((field) => (
-          <div key={field} style={styles.row}>
-            <label style={styles.label}>{field}</label>
+          <div key={field} style={pageStyles.formRow}>
+            <label style={{ ...pageStyles.label, width: "120px" }}>{field}</label>
 
             <select
               value={mapping[field]}
               onChange={(e) => handleChange(field, e.target.value)}
-              style={styles.select}
+              style={pageStyles.select}
             >
               <option value="">Select column</option>
               {detectedColumns.map((col) => (
@@ -72,10 +71,10 @@ export default function BOQMapping() {
           </div>
         ))}
 
-        {error && <div style={styles.error}>{error}</div>}
+        {error && <div style={pageStyles.error}>{error}</div>}
 
-        <div style={styles.actions}>
-          <button style={styles.primaryBtn} onClick={handleApprove}>
+        <div style={pageStyles.actions}>
+          <button style={pageStyles.primaryBtn} onClick={handleApprove}>
             Approve Mapping
           </button>
         </div>
@@ -83,63 +82,3 @@ export default function BOQMapping() {
     </div>
   );
 }
-
-// --- Styles ---
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#F8F9FB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "Inter, sans-serif",
-  },
-  card: {
-    background: "#FFFFFF",
-    padding: "32px",
-    borderRadius: "16px",
-    width: "520px",
-    border: "1px solid #E5E7EB",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  subtext: {
-    fontSize: "14px",
-    color: "#6B7280",
-  },
-  row: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "12px",
-  },
-  label: {
-    fontWeight: 600,
-    width: "120px",
-  },
-  select: {
-    flex: 1,
-    padding: "10px",
-    borderRadius: "8px",
-    border: "1px solid #D1D5DB",
-  },
-  error: {
-    color: "#DC2626",
-    fontSize: "14px",
-  },
-  actions: {
-    display: "flex",
-    justifyContent: "flex-end",
-    marginTop: "8px",
-  },
-  primaryBtn: {
-    background: "#3B5BDB",
-    color: "white",
-    border: "none",
-    padding: "10px 16px",
-    borderRadius: "10px",
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-};
