@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { pageStyles } from "../../layouts/pageStyles";
 
 interface ProjectRow {
   id: string;
@@ -48,41 +49,41 @@ export default function ProjectsList() {
   }, []);
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <div style={styles.header}>
-          <h2 style={{ margin: 0 }}>Projects</h2>
-          <button style={styles.primaryBtn} onClick={() => navigate("/architect/create")}>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(980px, 100%)" }}>
+        <div style={pageStyles.header}>
+          <h2 style={pageStyles.title}>Projects</h2>
+          <button style={pageStyles.primaryBtn} onClick={() => navigate("/architect/create")}>
             New Project
           </button>
         </div>
 
         {loading && <div>Loading projects...</div>}
-        {error && <div style={styles.error}>{error}</div>}
+        {error && <div style={pageStyles.error}>{error}</div>}
 
         {!loading && !error && projects.length === 0 && (
           <div>No projects yet. Create your first project.</div>
         )}
 
         {!loading && !error && projects.length > 0 && (
-          <table style={styles.table}>
+          <table style={pageStyles.table}>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Site</th>
-                <th>Start</th>
-                <th>Duration (mo)</th>
-                <th>Created</th>
+                <th style={pageStyles.th}>Name</th>
+                <th style={pageStyles.th}>Site</th>
+                <th style={pageStyles.th}>Start</th>
+                <th style={pageStyles.th}>Duration (mo)</th>
+                <th style={pageStyles.th}>Created</th>
               </tr>
             </thead>
             <tbody>
-              {projects.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.name}</td>
-                  <td>{p.site_address || "-"}</td>
-                  <td>{p.tentative_start_date ? new Date(p.tentative_start_date).toLocaleDateString() : "-"}</td>
-                  <td>{p.duration_months ?? "-"}</td>
-                  <td>{new Date(p.created_at).toLocaleDateString()}</td>
+              {projects.map((p, idx) => (
+                <tr key={p.id} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                  <td style={pageStyles.td}>{p.name}</td>
+                  <td style={pageStyles.td}>{p.site_address || "-"}</td>
+                  <td style={pageStyles.td}>{p.tentative_start_date ? new Date(p.tentative_start_date).toLocaleDateString() : "-"}</td>
+                  <td style={pageStyles.td}>{p.duration_months ?? "-"}</td>
+                  <td style={pageStyles.td}>{new Date(p.created_at).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -92,46 +93,3 @@ export default function ProjectsList() {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#F8F9FB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "Inter, sans-serif",
-  },
-  card: {
-    background: "#FFFFFF",
-    padding: "32px",
-    borderRadius: "16px",
-    width: "900px",
-    border: "1px solid #E5E7EB",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  primaryBtn: {
-    background: "#3B5BDB",
-    color: "white",
-    border: "none",
-    padding: "10px 16px",
-    borderRadius: "10px",
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-  error: {
-    color: "#DC2626",
-    fontSize: "13px",
-  },
-};

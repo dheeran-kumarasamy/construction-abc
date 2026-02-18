@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { pageStyles } from "../../layouts/pageStyles";
 
 export default function AcceptInvite() {
   const navigate = useNavigate();
@@ -39,9 +40,12 @@ export default function AcceptInvite() {
   }
 
   return (
-    <div style={styles.wrapper}>
-      <form style={styles.card} onSubmit={handleAccept}>
-        <h2>Accept Invite</h2>
+    <div style={pageStyles.page}>
+      <form
+        style={{ ...pageStyles.card, width: "min(380px, 100%)" }}
+        onSubmit={handleAccept}
+      >
+        <h2 style={pageStyles.title}>Accept Invite</h2>
 
         <input
           type="password"
@@ -49,47 +53,15 @@ export default function AcceptInvite() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          style={styles.input}
+          style={pageStyles.input}
         />
 
-        {error && <div style={styles.error}>{error}</div>}
+        {error && <div style={pageStyles.error}>{error}</div>}
 
-        <button disabled={loading} style={styles.button}>
+        <button disabled={loading} style={pageStyles.primaryBtn}>
           {loading ? "Creating account..." : "Accept & Continue"}
         </button>
       </form>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  wrapper: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#F8F9FB",
-  },
-  card: {
-    background: "#FFF",
-    padding: 32,
-    borderRadius: 16,
-    width: 360,
-    display: "flex",
-    flexDirection: "column",
-    gap: 16,
-  },
-  input: {
-    padding: 12,
-    borderRadius: 8,
-    border: "1px solid #ddd",
-  },
-  button: {
-    padding: 12,
-    borderRadius: 8,
-    border: "none",
-    background: "#111827",
-    color: "white",
-  },
-  error: { color: "red", fontSize: 12 },
-};

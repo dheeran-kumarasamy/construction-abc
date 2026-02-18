@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { pageStyles } from "../../layouts/pageStyles";
 
 interface Estimate {
   builderEmail: string;
@@ -27,14 +28,14 @@ export default function ReceivedEstimates() {
       : null;
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h2>Received Builder Estimates</h2>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(980px, 100%)" }}>
+        <h2 style={pageStyles.title}>Received Builder Estimates</h2>
 
         {estimates.length === 0 ? (
           <p>No estimates submitted yet.</p>
         ) : (
-          <table style={styles.table}>
+          <table style={pageStyles.table}>
             <thead>
               <tr>
                 <th>Builder</th>
@@ -61,7 +62,7 @@ export default function ReceivedEstimates() {
 
                   <td>
                     <button
-                      style={styles.approveBtn}
+                      style={pageStyles.primaryBtn}
                       onClick={() => approveEstimate(e.builderEmail)}
                     >
                       Approve
@@ -74,7 +75,7 @@ export default function ReceivedEstimates() {
         )}
 
         {approved && (
-          <div style={styles.result}>
+          <div style={pageStyles.result}>
             ✅ Approved Builder: <strong>{approved}</strong>
           </div>
         )}
@@ -82,42 +83,3 @@ export default function ReceivedEstimates() {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#F8F9FB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "Inter, sans-serif",
-  },
-  card: {
-    background: "#FFFFFF",
-    padding: "32px",
-    borderRadius: "16px",
-    width: "900px",
-    border: "1px solid #E5E7EB",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-  approveBtn: {
-    background: "#3B5BDB",
-    color: "white",
-    border: "none",
-    padding: "6px 10px",
-    borderRadius: "6px",
-    cursor: "pointer",
-  },
-  result: {
-    marginTop: "12px",
-    fontSize: "16px",
-    fontWeight: 600,
-    color: "#111827",
-  },
-};

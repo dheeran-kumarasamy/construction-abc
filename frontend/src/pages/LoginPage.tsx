@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import type { Role } from "../auth/AuthContext";
+import { pageStyles } from "../layouts/pageStyles";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -24,64 +25,31 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={styles.page}>
-      <form onSubmit={handleLogin} style={styles.card}>
-        <h2>Login</h2>
+    <div style={pageStyles.page}>
+      <form onSubmit={handleLogin} style={{ ...pageStyles.card, width: "min(360px, 100%)" }}>
+        <h2 style={pageStyles.title}>Login</h2>
 
         <input
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          style={styles.input}
+          style={pageStyles.input}
         />
 
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as Role)}
-          style={styles.input}
+          style={pageStyles.select}
         >
           <option value="architect">Architect</option>
           <option value="builder">Builder</option>
           <option value="client">Client</option>
         </select>
 
-        <button type="submit" style={styles.btn}>
+        <button type="submit" style={pageStyles.primaryBtn}>
           Login
         </button>
       </form>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#F8F9FB",
-  },
-  card: {
-    background: "white",
-    padding: 32,
-    borderRadius: 16,
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    width: 320,
-  },
-  input: {
-    padding: 10,
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-  },
-  btn: {
-    background: "#3B5BDB",
-    color: "white",
-    border: "none",
-    padding: 10,
-    borderRadius: 10,
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-};

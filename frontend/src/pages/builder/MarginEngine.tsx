@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { pageStyles } from "../../layouts/pageStyles";
 
 interface PricedRow {
   item?: string;
@@ -103,11 +104,11 @@ export default function MarginEngine() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h2>Margin & Uplift Engine</h2>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(720px, 100%)" }}>
+        <h2 style={pageStyles.title}>Margin & Uplift Engine</h2>
 
-        <div style={styles.controls}>
+        <div style={pageStyles.controls}>
           <label>
             Overall Margin %
             <input
@@ -119,7 +120,7 @@ export default function MarginEngine() {
                 sessionStorage.setItem("overallMargin", String(v));
                 recalc(v, laborUplift, machineryUplift);
               }}
-              style={styles.input}
+              style={pageStyles.inputSm}
             />
           </label>
 
@@ -134,7 +135,7 @@ export default function MarginEngine() {
                 sessionStorage.setItem("laborUplift", String(v));
                 recalc(overallMargin, v, machineryUplift);
               }}
-              style={styles.input}
+              style={pageStyles.inputSm}
             />
           </label>
 
@@ -149,12 +150,12 @@ export default function MarginEngine() {
                 sessionStorage.setItem("machineryUplift", String(v));
                 recalc(overallMargin, laborUplift, v);
               }}
-              style={styles.input}
+              style={pageStyles.inputSm}
             />
           </label>
         </div>
 
-        <table style={styles.table}>
+        <table style={pageStyles.table}>
           <tbody>
             <tr>
               <td>Material</td>
@@ -172,7 +173,7 @@ export default function MarginEngine() {
               <td>Other</td>
               <td>{totals.other.toFixed(2)}</td>
             </tr>
-            <tr style={styles.grandRow}>
+            <tr style={pageStyles.grandRow}>
               <td>Grand Total (with margin)</td>
               <td>{totals.grandTotal.toFixed(2)}</td>
             </tr>
@@ -182,45 +183,3 @@ export default function MarginEngine() {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#F8F9FB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "Inter, sans-serif",
-  },
-  card: {
-    background: "#FFFFFF",
-    padding: "32px",
-    borderRadius: "16px",
-    width: "640px",
-    border: "1px solid #E5E7EB",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  controls: {
-    display: "flex",
-    gap: "16px",
-    flexWrap: "wrap",
-  },
-  input: {
-    display: "block",
-    marginTop: "4px",
-    padding: "6px",
-    borderRadius: "6px",
-    border: "1px solid #D1D5DB",
-    width: "100px",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-  grandRow: {
-    fontWeight: "bold",
-    borderTop: "2px solid #111",
-  },
-};

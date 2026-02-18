@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { pageStyles } from "../../layouts/pageStyles";
 
 interface Estimate {
   builder: string;
@@ -27,11 +28,11 @@ export default function ComparisonDashboard() {
   const lowest = Math.min(...estimates.map((e) => e.grandTotal));
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h2>Builder Estimate Comparison</h2>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(820px, 100%)" }}>
+        <h2 style={pageStyles.title}>Builder Estimate Comparison</h2>
 
-        <table style={styles.table}>
+        <table style={pageStyles.table}>
           <thead>
             <tr>
               <th>Builder</th>
@@ -56,7 +57,7 @@ export default function ComparisonDashboard() {
                 <td>
                   <button
                     onClick={() => selectBuilder(e.builder)}
-                    style={styles.selectBtn}
+                    style={pageStyles.primaryBtn}
                   >
                     Select
                   </button>
@@ -67,7 +68,7 @@ export default function ComparisonDashboard() {
         </table>
 
         {selected && (
-          <div style={styles.result}>
+          <div style={pageStyles.result}>
             ✅ Selected Estimate: <strong>{selected}</strong>
           </div>
         )}
@@ -75,41 +76,3 @@ export default function ComparisonDashboard() {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#F8F9FB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "Inter, sans-serif",
-  },
-  card: {
-    background: "#FFFFFF",
-    padding: "32px",
-    borderRadius: "16px",
-    width: "720px",
-    border: "1px solid #E5E7EB",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-  selectBtn: {
-    background: "#3B5BDB",
-    color: "white",
-    border: "none",
-    padding: "8px 12px",
-    borderRadius: "8px",
-    cursor: "pointer",
-  },
-  result: {
-    marginTop: "12px",
-    fontSize: "16px",
-    color: "#111827",
-  },
-};

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { pageStyles } from "../../layouts/pageStyles";
 
 interface Estimate {
   builderEmail: string;
@@ -42,9 +43,9 @@ export default function SubmitEstimate() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h2>Submit Estimate to Architect</h2>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(520px, 100%)" }}>
+        <h2 style={pageStyles.title}>Submit Estimate to Architect</h2>
 
         {grandTotal !== null ? (
           <>
@@ -53,11 +54,11 @@ export default function SubmitEstimate() {
             </p>
 
             {!submitted ? (
-              <button style={styles.primaryBtn} onClick={handleSubmit}>
+              <button style={pageStyles.primaryBtn} onClick={handleSubmit}>
                 Submit Estimate
               </button>
             ) : (
-              <div style={styles.success}>
+              <div style={pageStyles.success}>
                 ✅ Estimate submitted successfully
               </div>
             )}
@@ -70,37 +71,4 @@ export default function SubmitEstimate() {
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#F8F9FB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "Inter, sans-serif",
-  },
-  card: {
-    background: "#FFFFFF",
-    padding: "32px",
-    borderRadius: "16px",
-    width: "420px",
-    border: "1px solid #E5E7EB",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-    textAlign: "center",
-  },
-  primaryBtn: {
-    background: "#3B5BDB",
-    color: "white",
-    border: "none",
-    padding: "10px 16px",
-    borderRadius: "10px",
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-  success: {
-    color: "#16A34A",
-    fontWeight: 600,
-  },
-};
+// remove local styles object

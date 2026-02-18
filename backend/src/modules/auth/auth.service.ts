@@ -77,7 +77,8 @@ export async function acceptInvite(token: string, password: string) {
 export async function createInvite(
   email: string,
   role: string,
-  organizationId: string
+  organizationId: string,
+  projectId?: string | null
 ) {
   const token = crypto.randomBytes(32).toString("hex");
 
@@ -85,13 +86,11 @@ export async function createInvite(
   expiresAt.setDate(expiresAt.getDate() + 7);
 
   await pool.query(
-    `INSERT INTO user_invites (email, role, organization_id, token, expires_at)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [email, role, organizationId, token, expiresAt]
+    `INSERT INTO user_invites (email, role, organization_id, project_id, token, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [email, role, organizationId || null, projectId || null, token, expiresAt]
   );
 
-  // In real SaaS → send email
-  // For MVP → return invite link
   const inviteLink = `http://localhost:5173/accept-invite?token=${token}`;
 
   return { inviteLink };
