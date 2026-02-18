@@ -1,22 +1,18 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { flightMonitorService } from "../../services/flightMonitorService";
-import { FlightReport, FlightDestination } from "../../types/flightTypes";
+import type { FlightReport, FlightDestination } from "../../types/flightTypes";
 
 export default function FlightMonitorAgent() {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [flightBudget, setFlightBudget] = useState(50000);
   const [stayBudget, setStayBudget] = useState(100000);
-  const [latestReport, setLatestReport] = useState<FlightReport | null>(null);
-  const [allReports, setAllReports] = useState<FlightReport[]>([]);
+  const [latestReport, setLatestReport] = useState<FlightReport | null>(() => 
+    flightMonitorService.getLatestReport()
+  );
+  const [allReports, setAllReports] = useState<FlightReport[]>(() => 
+    flightMonitorService.getAllReports()
+  );
   const [selectedDestination, setSelectedDestination] = useState<FlightDestination | null>(null);
-
-  useEffect(() => {
-    // Load existing reports on mount
-    const reports = flightMonitorService.getAllReports();
-    setAllReports(reports);
-    const latest = flightMonitorService.getLatestReport();
-    setLatestReport(latest);
-  }, []);
 
   const handleStartMonitoring = () => {
     const now = new Date();

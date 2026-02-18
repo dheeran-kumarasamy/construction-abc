@@ -1,4 +1,4 @@
-import { FlightDestination, FlightMonitorConfig, FlightReport } from "../types/flightTypes";
+import type { FlightDestination, FlightMonitorConfig, FlightReport } from "../types/flightTypes";
 
 // Mock flight data for demonstration
 const mockDestinations: Omit<FlightDestination, 'departureDate' | 'returnDate' | 'id'>[] = [
@@ -107,7 +107,7 @@ const mockDestinations: Omit<FlightDestination, 'departureDate' | 'returnDate' |
 class FlightMonitorService {
   private config: FlightMonitorConfig | null = null;
   private reports: FlightReport[] = [];
-  private monitoringInterval: NodeJS.Timeout | null = null;
+  private monitoringInterval: number | null = null;
 
   setConfig(config: FlightMonitorConfig): void {
     this.config = config;
@@ -118,7 +118,7 @@ class FlightMonitorService {
   }
 
   // Search for destinations within budget
-  searchDestinations(startDate: Date, endDate: Date): FlightDestination[] {
+  searchDestinations(startDate: Date): FlightDestination[] {
     if (!this.config) {
       throw new Error("Flight monitor not configured");
     }
@@ -156,9 +156,8 @@ class FlightMonitorService {
 
     const now = new Date();
     const travelStart = this.config.travelStartDate;
-    const travelEnd = this.config.travelEndDate;
 
-    const destinations = this.searchDestinations(travelStart, travelEnd);
+    const destinations = this.searchDestinations(travelStart);
 
     const report: FlightReport = {
       id: `report-${Date.now()}`,
