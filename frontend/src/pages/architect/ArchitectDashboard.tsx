@@ -95,7 +95,20 @@ export default function ArchitectDashboard() {
         >
           View Audit Trail
         </button>
-
+        <button
+          onClick={() => navigate("/architect/projects")}
+          style={{
+            background: "#111827",
+            color: "white",
+            border: "none",
+            padding: "10px 16px",
+            borderRadius: 10,
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
+        >
+          View Projects
+        </button>
       </div>
     </div>
   );

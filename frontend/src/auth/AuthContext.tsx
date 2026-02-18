@@ -22,14 +22,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // --- Provider ---
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem("auth_user");
-    return stored ? JSON.parse(stored) : null;
+    try {
+      const stored = localStorage.getItem("auth_user");
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      console.error("Failed to parse stored auth user", e);
+      return null;
+    }
   });
 
   function login(email: string, role: Role) {
     const newUser = { email, role };
     setUser(newUser);
     localStorage.setItem("auth_user", JSON.stringify(newUser));
+    console.log("User logged in:", newUser);
   }
 
   function logout() {
@@ -61,9 +67,17 @@ export function RequireAuth({
 }) {
   const { user } = useAuth();
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    console.warn("No user in auth context, redirecting to login");
+    return <Navigate to="/login" replace />;
+  }
 
-  if (role && user.role !== role) return <Navigate to="/" replace />;
+  if (role && user.role !== role) {
+    console.warn(
+      `User role ${user.role} does not match required role ${role}`
+    );
+    return <Navigate to="/" replace />;
+  }
 
   return children;
 }
