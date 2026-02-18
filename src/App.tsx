@@ -16,6 +16,7 @@ import InviteBuilders from "./pages/architect/InviteBuilders";
 import SubmitEstimate from "./pages/builder/SubmitEstimate";
 import ReceivedEstimates from "./pages/architect/ReceivedEstimates";
 import AuditTrail from "./pages/architect/AuditTrail";
+import FlightMonitorAgent from "./pages/flightAgent/FlightMonitorAgent";
 
 // --- Landing Page ---
 function Landing() {
@@ -25,6 +26,7 @@ function Landing() {
     { id: "architect", label: "Architect" },
     { id: "builder", label: "Builder" },
     { id: "client", label: "Client" },
+    { id: "flight-agent", label: "Flight Agent" },
   ];
 
   return (
@@ -72,6 +74,7 @@ export default function App() {
         <Route path="/builder/apply-pricing" element={<ApplyBasePricing />} />
         <Route path="/builder/margins" element={<MarginEngine />} />
         <Route path="/architect/comparison" element={<ComparisonDashboard />} />
+        <Route path="/flight-agent" element={<FlightMonitorAgent />} />
         <Route path="/login" element={<LoginPage />} />
         <Route
           path="/architect"
