@@ -367,8 +367,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: "8px",
     height: "8px",
     backgroundColor: "#28a745",
-    borderRadius: "50%",
-    animation: "pulse 2s infinite"
+    borderRadius: "50%"
   },
   reportSection: {
     backgroundColor: "white",

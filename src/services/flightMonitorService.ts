@@ -132,7 +132,8 @@ class FlightMonitorService {
 
     // Add dates to destinations
     return affordableDestinations.map((dest, index) => {
-      const daysOffset = Math.floor(Math.random() * 30); // Random day within a month
+      // Random departure within 30-day window (approximation for demo)
+      const daysOffset = Math.floor(Math.random() * 30);
       const departure = new Date(startDate);
       departure.setDate(departure.getDate() + daysOffset);
       
@@ -202,11 +203,13 @@ class FlightMonitorService {
     const initialReport = this.generateReport();
     onNewReport(initialReport);
 
-    // Set up periodic monitoring (every 24 hours in production, 60 seconds for demo)
+    // Set up periodic monitoring
+    // Production: 86400000 ms (24 hours)
+    // Demo: 60000 ms (60 seconds) for quick demonstration
     this.monitoringInterval = setInterval(() => {
       const report = this.generateReport();
       onNewReport(report);
-    }, 60000); // 60 seconds for demo purposes
+    }, 60000);
   }
 
   // Stop monitoring
