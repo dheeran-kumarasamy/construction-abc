@@ -17,6 +17,7 @@ import SubmitEstimate from "./pages/builder/SubmitEstimate";
 import ReceivedEstimates from "./pages/architect/ReceivedEstimates";
 import AuditTrail from "./pages/architect/AuditTrail";
 import ProjectsList from "./pages/architect/ProjectsList";
+import ComparisonScreen from "./pages/architect/ComparisonScreen";
 
 // Auth
 import LoginPage from "./pages/Login";
@@ -203,6 +204,11 @@ export default function App() {
                 <ClientView />
               </RequireAuth>
             }
+          />
+
+          <Route
+            path="/architect/comparison/:projectId"
+            element={<ComparisonScreen projectId="REPLACE_WITH_PARAM" />}
           />
 
           {/* Fallback */}
