@@ -17,6 +17,8 @@ app.use("/projects", authenticate, boqRoutes);
 app.use("/", authenticate, estimateRoutes);
 app.use("/", authenticate, comparisonRoutes);
 
+app.use("/api/boq", boqRoutes);
+
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
