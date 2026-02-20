@@ -73,6 +73,7 @@ export async function getProjects(architectId: string | null) {
        p.description,
        p.created_at,
        p.architect_id,
+       p.boq_id,
        pr.site_address,
        pr.tentative_start_date,
        pr.duration_months

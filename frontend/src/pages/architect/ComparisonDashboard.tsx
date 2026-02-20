@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
+import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 
 interface Estimate {
   builder: string;
@@ -31,6 +32,9 @@ export default function ComparisonDashboard() {
     <div style={pageStyles.page}>
       <div style={{ ...pageStyles.card, width: "min(820px, 100%)" }}>
         <h2 style={pageStyles.title}>Builder Estimate Comparison</h2>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+          <ConstructionIllustration type="blueprint" size={90} />
+        </div>
 
         <table style={pageStyles.table}>
           <thead>

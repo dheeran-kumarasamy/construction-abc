@@ -79,10 +79,12 @@ async function checkProjectOwnership(req: Request, res: Response, next: NextFunc
 router.post(
   "/:projectId/upload",
   authenticateToken,
-  checkProjectOwnership, // <-- Add this middleware
+  checkProjectOwnership,
   upload.single("boq"),
   controller.uploadBOQ
 );
+
+router.get("/:projectId/check", authenticateToken, controller.checkBOQ);
 
 router.get("/:projectId", authenticateToken, controller.getBOQ);
 

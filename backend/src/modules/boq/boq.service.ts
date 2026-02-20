@@ -1,6 +1,7 @@
 import { pool } from "../../config/db";
 import { unlink } from "fs/promises";
 import XLSX from "xlsx";
+import path from "path";
 
 export async function saveOrUpdateBOQ(
   projectId: string,
@@ -74,13 +75,52 @@ export async function saveOrUpdateBOQ(
 
 export async function getBOQByProject(projectId: string) {
   const result = await pool.query(
-    `SELECT b.*, u.name as uploaded_by_name 
+    `SELECT b.id, b.project_id, b.file_name, b.file_path, b.file_type, 
+            b.file_size, b.column_mapping, b.uploaded_at,
+            COALESCE(u.email, '') as uploaded_by_name
      FROM boqs b
-     JOIN users u ON b.uploaded_by = u.id
+     LEFT JOIN users u ON b.uploaded_by = u.id
      WHERE b.project_id = $1`,
     [projectId]
   );
   return result.rows[0];
+}
+
+export async function checkExistingBOQ(projectId: string) {
+  const result = await pool.query(
+    "SELECT id, file_name FROM boqs WHERE project_id = $1",
+    [projectId]
+  );
+  return result.rows[0] || null;
+}
+
+export async function parseStoredBOQFile(filePath: string, columnMapping: Record<string, string>) {
+  try {
+    const fs = require("fs");
+    const buffer = fs.readFileSync(filePath);
+    const mimetype = filePath.endsWith(".xlsx") || filePath.endsWith(".xls") 
+      ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      : "text/csv";
+    
+    return parseBOQFile(buffer, mimetype, columnMapping);
+  } catch (err) {
+    console.error("Error parsing stored BOQ:", err);
+    return { columns: [], mapping: columnMapping, items: [], preview: [] };
+  }
+}
+
+export async function invalidatePendingInvites(projectId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `UPDATE user_invites 
+       SET expires_at = CURRENT_TIMESTAMP
+       WHERE project_id = $1 AND accepted_at IS NULL`,
+      [projectId]
+    );
+  } finally {
+    client.release();
+  }
 }
 
 export async function deleteBOQ(projectId: string) {
@@ -137,11 +177,24 @@ export async function uploadBOQ(
     throw new Error("User ID is required");
   }
 
-  if (!file?.path) {
+  const resolvedPath = file?.path ||
+    (file?.destination && file?.filename
+      ? path.join(file.destination, file.filename)
+      : "");
+
+  if (!resolvedPath) {
     throw new Error("Uploaded file path is missing");
   }
 
-  const boq = await saveOrUpdateBOQ(projectId, userId, file, columnMapping);
+  const normalizedFile = {
+    ...file,
+    path: resolvedPath,
+  } as Express.Multer.File;
+
+  const boq = await saveOrUpdateBOQ(projectId, userId, normalizedFile, columnMapping);
+  
+  // Invalidate pending invites for this project
+  await invalidatePendingInvites(projectId);
 
   return {
     message: "BOQ uploaded successfully",
@@ -149,7 +202,7 @@ export async function uploadBOQ(
   };
 }
 
-export async function parseBOQFile(buffer: Buffer, mimetype: string) {
+export async function parseBOQFile(buffer: Buffer, mimetype: string, overrideMapping?: Record<string, string>) {
   const detectColumnMapping = (headers: string[]) => {
     const mapping: Record<string, string> = {};
     
@@ -161,12 +214,18 @@ export async function parseBOQFile(buffer: Buffer, mimetype: string) {
         mapping.qty = header;
       } else if (/uom|unit|measure/i.test(normalized) && !mapping.uom) {
         mapping.uom = header;
-      } else if (/rate|price|cost/i.test(normalized) && !mapping.rate) {
-        mapping.rate = header;
       }
     }
     
     return mapping;
+  };
+
+  // Use override mapping if provided, otherwise auto-detect
+  const useMapping = (headers: string[]) => {
+    if (overrideMapping && Object.keys(overrideMapping).length > 0) {
+      return overrideMapping;
+    }
+    return detectColumnMapping(headers);
   };
 
   const normalizeRow = (row: Record<string, any>, mapping: Record<string, string>) => {
@@ -174,7 +233,6 @@ export async function parseBOQFile(buffer: Buffer, mimetype: string) {
       item: mapping.item ? String(row[mapping.item] ?? "").trim() : "",
       qty: mapping.qty ? String(row[mapping.qty] ?? "").trim() : "",
       uom: mapping.uom ? String(row[mapping.uom] ?? "").trim() : "",
-      rate: mapping.rate ? String(row[mapping.rate] ?? "").trim() : "",
     };
   };
 
@@ -193,7 +251,7 @@ export async function parseBOQFile(buffer: Buffer, mimetype: string) {
     if (rows.length === 0) return { columns: [], mapping: {}, items: [], preview: [] };
     
     const columns = Object.keys(rows[0]);
-    const mapping = detectColumnMapping(columns);
+    const mapping = useMapping(columns);
     const items = rows
       .map(row => normalizeRow(row, mapping))
       .filter(r => r.item || r.qty || r.uom);
@@ -211,7 +269,7 @@ export async function parseBOQFile(buffer: Buffer, mimetype: string) {
   if (lines.length < 2) return { columns: [], mapping: {}, items: [], preview: [] };
 
   const headers = lines[0].split(",").map(h => h.trim());
-  const mapping = detectColumnMapping(headers);
+  const mapping = useMapping(headers);
   
   const rows = lines.slice(1).map(line => {
     const cols = line.split(",");
