@@ -3,13 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 
 interface ProjectRow {
-  id: string;
+  id: string; // UUID
   name: string;
   description?: string | null;
   site_address?: string | null;
   tentative_start_date?: string | null;
   duration_months?: number | null;
   created_at: string;
+  boq_id?: string | null; // UUID
 }
 
 export default function ProjectsList() {
@@ -74,6 +75,7 @@ export default function ProjectsList() {
                 <th style={pageStyles.th}>Start</th>
                 <th style={pageStyles.th}>Duration (mo)</th>
                 <th style={pageStyles.th}>Created</th>
+                <th style={pageStyles.th}>BOQ</th>
               </tr>
             </thead>
             <tbody>
@@ -84,6 +86,20 @@ export default function ProjectsList() {
                   <td style={pageStyles.td}>{p.tentative_start_date ? new Date(p.tentative_start_date).toLocaleDateString() : "-"}</td>
                   <td style={pageStyles.td}>{p.duration_months ?? "-"}</td>
                   <td style={pageStyles.td}>{new Date(p.created_at).toLocaleDateString()}</td>
+                  <td style={pageStyles.td}>
+                    {p.boq_id ? (
+                      <a
+                        href={`http://localhost:4000/api/boq/${p.id}/download`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#0f766e', textDecoration: 'underline' }}
+                      >
+                        Download BOQ
+                      </a>
+                    ) : (
+                      <span style={{ color: '#aaa' }}>No BOQ</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
