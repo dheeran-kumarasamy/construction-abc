@@ -1,4 +1,7 @@
-// Parse BOQ file for preview (ignore rate)
+import { Request, Response } from "express";
+import * as service from "./boq.service";
+import path from "path";
+
 export async function parseBOQ(req: Request, res: Response) {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -8,9 +11,24 @@ export async function parseBOQ(req: Request, res: Response) {
     res.status(400).json({ error: err.message });
   }
 }
-import { Request, Response } from "express";
-import * as service from "./boq.service";
-import path from "path";
+
+export async function checkBOQ(req: Request, res: Response) {
+  try {
+    let { projectId } = req.params;
+    if (Array.isArray(projectId)) {
+      projectId = projectId[0];
+    }
+
+    if (!projectId) {
+      return res.status(400).json({ error: "Project ID is required" });
+    }
+
+    const boq = await service.checkExistingBOQ(projectId);
+    res.json({ existing: !!boq, boq });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+}
 
 export async function uploadBOQ(req: Request, res: Response) {
   try {
@@ -34,7 +52,6 @@ export async function uploadBOQ(req: Request, res: Response) {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
-    // Validate file type (PDF, Excel, CSV)
     const allowedTypes = [
       "application/pdf",
       "application/vnd.ms-excel",
@@ -55,19 +72,16 @@ export async function uploadBOQ(req: Request, res: Response) {
       });
     }
 
-    console.log("Params:", req.params);
-    console.log("File:", req.file);
-    console.log("Body:", req.body);
-
-    // Parse column mapping from request body if provided
-    let columnMapping;
-    if (req.body.columnMapping) {
+    let columnMapping: Record<string, string> | undefined;
+    const rawMapping = req.body.columnMapping ?? req.body.mapping;
+    if (rawMapping) {
       try {
-        columnMapping = typeof req.body.columnMapping === 'string' 
-          ? JSON.parse(req.body.columnMapping) 
-          : req.body.columnMapping;
-      } catch (err) {
-        return res.status(400).json({ error: "Invalid column mapping format" });
+        const parsed = typeof rawMapping === "string" ? JSON.parse(rawMapping) : rawMapping;
+        if (parsed && typeof parsed === "object") {
+          columnMapping = parsed as Record<string, string>;
+        }
+      } catch {
+        columnMapping = undefined;
       }
     }
 
@@ -90,7 +104,24 @@ export async function getBOQ(req: Request, res: Response) {
       return res.status(404).json({ error: "BOQ not found" });
     }
 
-    res.json(result);
+    let items: any[] = [];
+    try {
+      if (result.file_path && result.column_mapping) {
+        const mapping = typeof result.column_mapping === 'string' 
+          ? JSON.parse(result.column_mapping) 
+          : result.column_mapping;
+        const parsed = await service.parseStoredBOQFile(result.file_path, mapping);
+        items = parsed.items || [];
+      }
+    } catch (parseErr) {
+      console.error("Error parsing BOQ file:", parseErr);
+      items = [];
+    }
+
+    res.json({
+      ...result,
+      items,
+    });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

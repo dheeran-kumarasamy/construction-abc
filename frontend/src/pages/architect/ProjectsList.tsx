@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
+import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 
 interface ProjectRow {
   id: string; // UUID
@@ -61,6 +62,7 @@ export default function ProjectsList() {
       <div style={{ ...pageStyles.card, width: "min(980px, 100%)" }}>
         <div style={pageStyles.header}>
           <h2 style={pageStyles.title}>Projects</h2>
+          <ConstructionIllustration type="building" size={80} />
           <button style={pageStyles.primaryBtn} onClick={() => navigate("/architect/create")}>
             New Project
           </button>

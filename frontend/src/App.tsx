@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 
 // Existing pages (kept for compatibility)
 import CreateProject from "./pages/architect/CreateProject";
@@ -21,8 +21,9 @@ import ComparisonScreen from "./pages/architect/ComparisonScreen";
 
 // Auth
 import LoginPage from "./pages/Login";
-import { RequireAuth } from "./auth/AuthContext";
+import { RequireAuth, useAuth } from "./auth/AuthContext";
 import { AuthProvider } from "./auth/AuthContext";
+import { pageStyles } from "./layouts/pageStyles";
 
 // --- Client View ---
 function ClientView() {
@@ -34,11 +35,65 @@ function ClientView() {
   );
 }
 
+function DashboardButton() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  if (!user || location.pathname === "/login") {
+    return null;
+  }
+
+  const dashboardPath = `/${user.role}`;
+
+  if (location.pathname === dashboardPath) {
+    return (
+      <button
+        type="button"
+        style={{
+          ...pageStyles.secondaryBtn,
+          position: "fixed",
+          top: 16,
+          right: 16,
+          zIndex: 1000,
+          height: "40px",
+        }}
+        onClick={() => {
+          logout();
+          localStorage.removeItem("token");
+          localStorage.removeItem("role");
+          navigate("/login");
+        }}
+      >
+        Logout
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      style={{
+        ...pageStyles.primaryBtn,
+        position: "fixed",
+        top: 16,
+        right: 16,
+        zIndex: 1000,
+        height: "40px",
+      }}
+      onClick={() => navigate(dashboardPath)}
+    >
+      Go to {user.role.charAt(0).toUpperCase() + user.role.slice(1)} Dashboard
+    </button>
+  );
+}
+
 // --- Main App ---
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <DashboardButton />
         <Routes>
           {/* Public */}
           <Route path="/" element={<Navigate to="/login" />} />

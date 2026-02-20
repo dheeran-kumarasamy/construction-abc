@@ -13,6 +13,7 @@ app.use(cors());
 app.use(express.json());
 app.use("/auth", authRoutes);
 app.use("/projects", authenticate, projectRoutes);
+app.use("/api/projects", authenticate, projectRoutes);
 app.use("/projects", authenticate, boqRoutes);
 app.use("/", authenticate, estimateRoutes);
 app.use("/", authenticate, comparisonRoutes);
