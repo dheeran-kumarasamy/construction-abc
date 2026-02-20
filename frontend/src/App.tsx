@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 // Existing pages (kept for compatibility)
 import CreateProject from "./pages/architect/CreateProject";
@@ -24,33 +24,6 @@ import LoginPage from "./pages/Login";
 import { RequireAuth } from "./auth/AuthContext";
 import { AuthProvider } from "./auth/AuthContext";
 
-// --- Landing Page ---
-function Landing() {
-  const navigate = useNavigate();
-
-  const roles = [
-    { id: "architect", label: "Architect" },
-    { id: "builder", label: "Builder" },
-    { id: "client", label: "Client" },
-  ];
-
-  return (
-    <div style={styles.centered}>
-      <div style={styles.grid}>
-        {roles.map((r) => (
-          <button
-            key={r.id}
-            onClick={() => navigate(`/${r.id}`)}
-            style={styles.card}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // --- Client View ---
 function ClientView() {
   return (
@@ -68,7 +41,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           {/* Public */}
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<Navigate to="/login" />} />
           <Route path="/login" element={<LoginPage />} />
 
           {/* Architect */}

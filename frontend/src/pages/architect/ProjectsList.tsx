@@ -18,13 +18,13 @@ export default function ProjectsList() {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [boqPreview, setBoqPreview] = useState<Record<string, any[]> >({});
 
   useEffect(() => {
     async function load() {
       try {
         setLoading(true);
         setError("");
-
         const token = localStorage.getItem("token");
         const res = await fetch("http://localhost:4000/projects", {
           headers: {
@@ -32,20 +32,27 @@ export default function ProjectsList() {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         });
-
         const data = await res.json();
         if (!res.ok) {
           throw new Error(data.error || "Failed to load projects");
         }
-
         setProjects(data);
+        // Fetch BOQ preview for each project
+        for (const p of data) {
+          if (p.boq_id) {
+            const resBoq = await fetch(`http://localhost:4000/api/boq/${p.id}`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            const boqData = await resBoq.json();
+            setBoqPreview(prev => ({ ...prev, [p.id]: boqData.items || [] }));
+          }
+        }
       } catch (err: any) {
         setError(err.message || "Something went wrong");
       } finally {
         setLoading(false);
       }
     }
-
     load();
   }, []);
 
@@ -88,14 +95,39 @@ export default function ProjectsList() {
                   <td style={pageStyles.td}>{new Date(p.created_at).toLocaleDateString()}</td>
                   <td style={pageStyles.td}>
                     {p.boq_id ? (
-                      <a
-                        href={`http://localhost:4000/api/boq/${p.id}/download`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: '#0f766e', textDecoration: 'underline' }}
-                      >
-                        Download BOQ
-                      </a>
+                      <div>
+                        <a
+                          href={`http://localhost:4000/api/boq/${p.id}/download`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#0f766e', textDecoration: 'underline' }}
+                        >
+                          Download BOQ
+                        </a>
+                        {boqPreview[p.id]?.length > 0 && (
+                          <details style={{ marginTop: 8 }}>
+                            <summary>Preview</summary>
+                            <table style={{ fontSize: 14, marginTop: 8 }}>
+                              <thead>
+                                <tr>
+                                  <th>Item</th>
+                                  <th>Quantity</th>
+                                  <th>UOM</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {boqPreview[p.id].map((row, idx) => (
+                                  <tr key={idx}>
+                                    <td>{row.item}</td>
+                                    <td>{row.qty}</td>
+                                    <td>{row.uom}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </details>
+                        )}
+                      </div>
                     ) : (
                       <span style={{ color: '#aaa' }}>No BOQ</span>
                     )}
