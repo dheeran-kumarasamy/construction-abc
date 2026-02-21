@@ -18,6 +18,7 @@ interface BOQItem {
   uom: string;
   rate: number;
   total: number;
+  category?: string;
 }
 
 interface BasePriceItem {
@@ -27,20 +28,39 @@ interface BasePriceItem {
   category: string;
 }
 
+interface MarginConfig {
+  overallMargin: number;
+  laborUplift: number;
+  machineryUplift: number;
+}
+
 export default function ApplyBasePricing() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [basePricing, setBasePricing] = useState<BasePriceItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [boqItems, setBoqItems] = useState<BOQItem[]>([]);
   const [pricedItems, setPricedItems] = useState<BOQItem[]>([]);
-  const [marginPercent, setMarginPercent] = useState<number>(0);
+  const [marginConfig, setMarginConfig] = useState<MarginConfig>({
+    overallMargin: 10,
+    laborUplift: 5,
+    machineryUplift: 5,
+  });
   const [notes, setNotes] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchProjects();
     fetchBasePricing();
+    loadMarginConfig();
   }, []);
+
+  function loadMarginConfig() {
+    const overallMargin = Number(sessionStorage.getItem("overallMargin") || 10);
+    const laborUplift = Number(sessionStorage.getItem("laborUplift") || 5);
+    const machineryUplift = Number(sessionStorage.getItem("machineryUplift") || 5);
+    
+    setMarginConfig({ overallMargin, laborUplift, machineryUplift });
+  }
 
   useEffect(() => {
     if (selectedProjectId && boqItems.length > 0) {
@@ -169,11 +189,13 @@ export default function ApplyBasePricing() {
 
       const rate = match ? match.rate : 0;
       const total = item.qty * rate;
+      const category = match ? match.category : "Material";
 
       return {
         ...item,
         rate,
         total,
+        category,
       };
     });
 
@@ -213,7 +235,7 @@ export default function ApplyBasePricing() {
           },
           body: JSON.stringify({
             pricedItems,
-            marginPercent,
+            marginConfig,
             notes,
           }),
         }
@@ -236,8 +258,8 @@ export default function ApplyBasePricing() {
       setSelectedProjectId("");
       setBoqItems([]);
       setPricedItems([]);
-      setMarginPercent(0);
       setNotes("");
+      loadMarginConfig();
     } catch (err) {
       console.error("Submit estimate error:", err);
       alert(err instanceof Error ? err.message : "Failed to submit estimate");
@@ -246,9 +268,49 @@ export default function ApplyBasePricing() {
     }
   }
 
-  const subtotal = pricedItems.reduce((sum, item) => sum + item.total, 0);
-  const margin = (subtotal * marginPercent) / 100;
-  const grandTotal = subtotal + margin;
+  // Calculate category-wise totals with uplifts
+  function calculateTotals() {
+    let materialTotal = 0;
+    let laborTotal = 0;
+    let machineryTotal = 0;
+    let otherTotal = 0;
+
+    pricedItems.forEach((item) => {
+      const cat = String(item.category || "Material").toLowerCase();
+      const total = item.total || 0;
+
+      if (cat.includes("labor") || cat.includes("labour")) {
+        laborTotal += total;
+      } else if (cat.includes("mach")) {
+        machineryTotal += total;
+      } else if (cat.includes("other")) {
+        otherTotal += total;
+      } else {
+        materialTotal += total;
+      }
+    });
+
+    // Apply uplifts to labor and machinery
+    const laborWithUplift = laborTotal * (1 + marginConfig.laborUplift / 100);
+    const machineryWithUplift = machineryTotal * (1 + marginConfig.machineryUplift / 100);
+
+    const subtotalWithUplifts = materialTotal + laborWithUplift + machineryWithUplift + otherTotal;
+    const grandTotal = subtotalWithUplifts * (1 + marginConfig.overallMargin / 100);
+
+    return {
+      materialTotal,
+      laborTotal,
+      laborWithUplift,
+      machineryTotal,
+      machineryWithUplift,
+      otherTotal,
+      subtotalWithUplifts,
+      marginAmount: grandTotal - subtotalWithUplifts,
+      grandTotal,
+    };
+  }
+
+  const totals = calculateTotals();
 
   return (
     <div style={pageStyles.page}>
@@ -354,87 +416,119 @@ export default function ApplyBasePricing() {
                 border: "1px solid #ccfbf1",
               }}
             >
+              <h3
+                style={{
+                  margin: "0 0 1rem 0",
+                  color: "#0f766e",
+                  fontWeight: 600,
+                }}
+              >
+                Cost Breakdown (Margins from Margin & Uplift Engine)
+              </h3>
+
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "1rem",
-                  maxWidth: "600px",
-                  marginLeft: "auto",
+                  gridTemplateColumns: "2fr 1fr",
+                  gap: "0.75rem",
+                  marginBottom: "1rem",
+                  fontSize: "0.95rem",
                 }}
               >
-                <div>
-                  <label
-                    style={{
-                      display: "block",
-                      marginBottom: "0.5rem",
-                      color: "#0f766e",
-                      fontWeight: 500,
-                    }}
-                  >
-                    Subtotal:
-                  </label>
-                  <p style={{ fontSize: "1.25rem", fontWeight: 600, color: "#0f766e" }}>
-                    ₹{subtotal.toFixed(2)}
-                  </p>
+                <div style={{ color: "#0d9488" }}>Material:</div>
+                <div style={{ textAlign: "right", fontWeight: 500 }}>
+                  ₹{totals.materialTotal.toFixed(2)}
                 </div>
 
-                <div>
-                  <label
-                    style={{
-                      display: "block",
-                      marginBottom: "0.5rem",
-                      color: "#0f766e",
-                      fontWeight: 500,
-                    }}
-                  >
-                    Margin (%)
-                  </label>
-                  <input
-                    type="number"
-                    value={Number.isFinite(marginPercent) ? marginPercent : 0}
-                    onChange={(e) => setMarginPercent(Number(e.target.value))}
-                    style={pageStyles.input}
-                    placeholder="0"
-                  />
+                <div style={{ color: "#0d9488" }}>
+                  Labor (base):
+                </div>
+                <div style={{ textAlign: "right", fontWeight: 500 }}>
+                  ₹{totals.laborTotal.toFixed(2)}
                 </div>
 
-                <div>
-                  <label
-                    style={{
-                      display: "block",
-                      marginBottom: "0.5rem",
-                      color: "#0f766e",
-                      fontWeight: 500,
-                    }}
-                  >
-                    Margin Amount:
-                  </label>
-                  <p style={{ fontSize: "1.25rem", fontWeight: 600, color: "#0f766e" }}>
-                    ₹{margin.toFixed(2)}
-                  </p>
+                <div style={{ color: "#0d9488", paddingLeft: "1rem" }}>
+                  + Labor Uplift ({marginConfig.laborUplift}%):
+                </div>
+                <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>
+                  ₹{totals.laborWithUplift.toFixed(2)}
                 </div>
 
-                <div>
-                  <label
-                    style={{
-                      display: "block",
-                      marginBottom: "0.5rem",
-                      color: "#0f766e",
-                      fontWeight: 500,
-                    }}
-                  >
-                    Grand Total:
-                  </label>
-                  <p
-                    style={{
-                      fontSize: "1.5rem",
-                      fontWeight: 700,
-                      color: "#0f766e",
-                    }}
-                  >
-                    ₹{grandTotal.toFixed(2)}
-                  </p>
+                <div style={{ color: "#0d9488" }}>
+                  Machinery (base):
+                </div>
+                <div style={{ textAlign: "right", fontWeight: 500 }}>
+                  ₹{totals.machineryTotal.toFixed(2)}
+                </div>
+
+                <div style={{ color: "#0d9488", paddingLeft: "1rem" }}>
+                  + Machinery Uplift ({marginConfig.machineryUplift}%):
+                </div>
+                <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>
+                  ₹{totals.machineryWithUplift.toFixed(2)}
+                </div>
+
+                <div style={{ color: "#0d9488" }}>Other:</div>
+                <div style={{ textAlign: "right", fontWeight: 500 }}>
+                  ₹{totals.otherTotal.toFixed(2)}
+                </div>
+
+                <div
+                  style={{
+                    borderTop: "2px solid #99f6e4",
+                    paddingTop: "0.75rem",
+                    marginTop: "0.5rem",
+                    color: "#0f766e",
+                    fontWeight: 600,
+                  }}
+                >
+                  Subtotal (with uplifts):
+                </div>
+                <div
+                  style={{
+                    borderTop: "2px solid #99f6e4",
+                    paddingTop: "0.75rem",
+                    marginTop: "0.5rem",
+                    textAlign: "right",
+                    fontWeight: 700,
+                    fontSize: "1.1rem",
+                    color: "#0f766e",
+                  }}
+                >
+                  ₹{totals.subtotalWithUplifts.toFixed(2)}
+                </div>
+
+                <div style={{ color: "#0d9488" }}>
+                  + Overall Margin ({marginConfig.overallMargin}%):
+                </div>
+                <div style={{ textAlign: "right", fontWeight: 500 }}>
+                  ₹{totals.marginAmount.toFixed(2)}
+                </div>
+
+                <div
+                  style={{
+                    borderTop: "3px solid #5eead4",
+                    paddingTop: "0.75rem",
+                    marginTop: "0.5rem",
+                    color: "#0f766e",
+                    fontWeight: 700,
+                    fontSize: "1.15rem",
+                  }}
+                >
+                  Grand Total:
+                </div>
+                <div
+                  style={{
+                    borderTop: "3px solid #5eead4",
+                    paddingTop: "0.75rem",
+                    marginTop: "0.5rem",
+                    textAlign: "right",
+                    fontWeight: 700,
+                    fontSize: "1.5rem",
+                    color: "#0f766e",
+                  }}
+                >
+                  ₹{totals.grandTotal.toFixed(2)}
                 </div>
               </div>
 

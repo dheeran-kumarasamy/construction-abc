@@ -7,7 +7,11 @@ export async function fetchComparison(projectId: string) {
        o.name AS builder_name,
        er.id AS revision_id,
        er.revision_number,
-       COALESCE((er.margin_config->>'marginPercent')::numeric, 0) AS margin_percent,
+       COALESCE(
+         (er.margin_config->>'overallMargin')::numeric,
+         (er.margin_config->>'marginPercent')::numeric,
+         0
+       ) AS margin_percent,
        er.grand_total,
        er.submitted_at
      FROM estimates e
