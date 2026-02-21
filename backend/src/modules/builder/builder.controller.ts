@@ -64,7 +64,7 @@ export async function createOrUpdateEstimate(req: Request, res: Response) {
   try {
     const { projectId } = req.params;
     const projectIdStr = Array.isArray(projectId) ? projectId[0] : projectId;
-    const { pricedItems, marginPercent, notes } = req.body;
+    const { pricedItems, marginConfig, notes } = req.body;
 
     const user = (req as any).user;
     const builderOrgId = user?.organizationId;
@@ -79,7 +79,7 @@ export async function createOrUpdateEstimate(req: Request, res: Response) {
       userId,
       builderOrgId,
       pricedItems,
-      marginPercent,
+      marginConfig,
       notes
     );
 
@@ -88,6 +88,25 @@ export async function createOrUpdateEstimate(req: Request, res: Response) {
     console.error("Create estimate error:", error);
     return res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to create estimate",
+    });
+  }
+}
+
+export async function getSubmittedEstimates(req: Request, res: Response) {
+  try {
+    const user = (req as any).user;
+    const builderOrgId = user?.organizationId;
+
+    if (!builderOrgId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const estimates = await service.getSubmittedEstimates(builderOrgId);
+    return res.json(estimates);
+  } catch (error) {
+    console.error("Get submitted estimates error:", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to fetch submitted estimates",
     });
   }
 }

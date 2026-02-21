@@ -9,9 +9,13 @@ interface Project {
 
 interface Estimate {
   builder_name: string;
-  grandTotal: number;
+  grand_total: number | null;
   rank: number;
   revision_id: string;
+}
+
+function getGrandTotal(estimate: Estimate) {
+  return Number(estimate.grand_total ?? 0);
 }
 
 export default function ComparisonDashboard() {
@@ -159,7 +163,7 @@ export default function ComparisonDashboard() {
                       color: e.rank === 1 ? "#16A34A" : "inherit",
                     }}
                   >
-                    ₹{(e.grandTotal || 0).toLocaleString()}
+                    ₹{getGrandTotal(e).toLocaleString()}
                   </td>
                   <td>
                     <button

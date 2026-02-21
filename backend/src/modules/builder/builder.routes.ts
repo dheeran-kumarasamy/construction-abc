@@ -4,6 +4,7 @@ import {
   getProjectBOQItems,
   getBuilderBasePricing,
   createOrUpdateEstimate,
+  getSubmittedEstimates,
 } from "./builder.controller";
 
 const router = Router();
@@ -19,5 +20,8 @@ router.get("/base-pricing", getBuilderBasePricing);
 
 // Create or update estimate with pricing
 router.post("/projects/:projectId/estimate", createOrUpdateEstimate);
+
+// Get submitted estimates for logged-in builder
+router.get("/submitted-estimates", getSubmittedEstimates);
 
 export default router;

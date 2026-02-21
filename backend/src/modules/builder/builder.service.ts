@@ -147,7 +147,11 @@ export async function createOrUpdateEstimate(
   userId: string,
   builderOrgId: string,
   pricedItems: any[],
-  marginPercent: number = 0,
+  marginConfig: {
+    overallMargin: number;
+    laborUplift: number;
+    machineryUplift: number;
+  } = { overallMargin: 10, laborUplift: 5, machineryUplift: 5 },
   notes?: string
 ) {
   await assertBuilderProjectAccess(userId, projectId);
@@ -184,9 +188,33 @@ export async function createOrUpdateEstimate(
       estimateId = newEstimate.rows[0].id;
     }
 
-    // Calculate totals
-    const subtotal = pricedItems.reduce((sum, item) => sum + (item.total || 0), 0);
-    const grandTotal = subtotal * (1 + (marginPercent || 0) / 100);
+    // Calculate totals with category-specific uplifts
+    let materialTotal = 0;
+    let laborTotal = 0;
+    let machineryTotal = 0;
+    let otherTotal = 0;
+
+    pricedItems.forEach((item) => {
+      const category = String(item.category || "Material").toLowerCase();
+      const total = item.total || 0;
+
+      if (category.includes("labor") || category.includes("labour")) {
+        laborTotal += total;
+      } else if (category.includes("mach")) {
+        machineryTotal += total;
+      } else if (category.includes("other")) {
+        otherTotal += total;
+      } else {
+        materialTotal += total;
+      }
+    });
+
+    // Apply uplifts to labor and machinery
+    const laborWithUplift = laborTotal * (1 + (marginConfig.laborUplift || 0) / 100);
+    const machineryWithUplift = machineryTotal * (1 + (marginConfig.machineryUplift || 0) / 100);
+
+    const subtotalWithUplifts = materialTotal + laborWithUplift + machineryWithUplift + otherTotal;
+    const grandTotal = subtotalWithUplifts * (1 + (marginConfig.overallMargin || 0) / 100);
 
     // Get next revision number
     const revResult = await client.query(
@@ -220,7 +248,7 @@ export async function createOrUpdateEstimate(
         revisionNumber,
         boqResult.rows[0]?.id || null,
         JSON.stringify(pricedItems),
-        JSON.stringify({ marginPercent }),
+        JSON.stringify(marginConfig),
         grandTotal,
         notes || null,
       ]
@@ -244,7 +272,7 @@ export async function createOrUpdateEstimate(
     return {
       estimateId,
       revisionNumber,
-      subtotal,
+      subtotalWithUplifts,
       grandTotal,
     };
   } catch (error) {
@@ -253,4 +281,38 @@ export async function createOrUpdateEstimate(
   } finally {
     client.release();
   }
+}
+
+export async function getSubmittedEstimates(builderOrgId: string) {
+  const result = await pool.query(
+    `SELECT
+       e.id AS estimate_id,
+       e.project_id,
+       p.name AS project_name,
+       er.id AS revision_id,
+       er.revision_number,
+       er.grand_total,
+       er.submitted_at,
+       er.notes,
+       COALESCE(
+         (er.margin_config->>'overallMargin')::numeric,
+         (er.margin_config->>'marginPercent')::numeric,
+         0
+       ) AS margin_percent
+     FROM estimates e
+     JOIN projects p ON p.id = e.project_id
+     JOIN LATERAL (
+       SELECT id, revision_number, grand_total, submitted_at, notes, margin_config
+       FROM estimate_revisions
+       WHERE estimate_id = e.id
+       ORDER BY revision_number DESC
+       LIMIT 1
+     ) er ON true
+     WHERE e.builder_org_id = $1
+       AND e.status = 'submitted'
+     ORDER BY er.submitted_at DESC NULLS LAST, e.created_at DESC`,
+    [builderOrgId]
+  );
+
+  return result.rows;
 }
