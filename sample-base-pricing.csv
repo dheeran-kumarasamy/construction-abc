@@ -1,0 +1,11 @@
+Item Name,Rate,UOM,Category
+Cement 50kg bag,400,bag,Material
+Steel TMT bars,55000,ton,Material
+River sand (cubic meter),2500,m3,Material
+20mm aggregate,3200,m3,Material
+Bricks (1000 nos),5500,thousand,Material
+Skilled Mason (per day),800,day,Labor
+Helper (per day),500,day,Labor
+Concrete mixer,1200,day,Machinery
+Scaffolding,450,m2,Other
+Paint primer,280,liter,Material

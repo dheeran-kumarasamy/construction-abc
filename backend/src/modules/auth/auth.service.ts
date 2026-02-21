@@ -95,3 +95,62 @@ export async function createInvite(
 
   return { inviteLink };
 }
+
+export async function listInvites(
+  organizationId: string,
+  filters?: {
+    role?: string;
+    projectId?: string;
+    status?: "open" | "accepted" | "expired";
+  }
+) {
+  const { role, projectId, status } = filters || {};
+
+  const { rows } = await pool.query(
+    `SELECT
+      ui.id,
+      ui.email,
+      ui.role,
+      ui.project_id,
+      ui.token,
+      ui.expires_at,
+      ui.accepted_at,
+      ui.created_at,
+      p.name AS project_name,
+      CASE
+        WHEN ui.accepted_at IS NOT NULL THEN 'accepted'
+        WHEN ui.expires_at <= NOW() THEN 'expired'
+        ELSE 'open'
+      END AS status
+     FROM user_invites ui
+     LEFT JOIN projects p ON p.id = ui.project_id
+     WHERE ui.organization_id = $1
+       AND ($2::text IS NULL OR ui.role = $2)
+       AND ($3::uuid IS NULL OR ui.project_id = $3)
+       AND (
+         $4::text IS NULL
+         OR (
+           CASE
+             WHEN ui.accepted_at IS NOT NULL THEN 'accepted'
+             WHEN ui.expires_at <= NOW() THEN 'expired'
+             ELSE 'open'
+           END
+         ) = $4
+       )
+     ORDER BY ui.created_at DESC`,
+    [organizationId, role || null, projectId || null, status || null]
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    email: row.email,
+    role: row.role,
+    projectId: row.project_id,
+    projectName: row.project_name,
+    status: row.status,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    acceptedAt: row.accepted_at,
+    inviteLink: `http://localhost:5173/accept-invite?token=${row.token}`,
+  }));
+}

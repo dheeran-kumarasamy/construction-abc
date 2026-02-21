@@ -1,0 +1,225 @@
+import { pool } from "../../config/db";
+import XLSX from "xlsx";
+import fs from "fs";
+
+export async function getAvailableProjects(builderOrgId: string) {
+  // Get all projects with BOQs
+  const result = await pool.query(
+    `SELECT 
+       p.id,
+       p.name,
+       p.description,
+       p.created_at,
+       pr.site_address,
+       pr.tentative_start_date,
+       pr.duration_months,
+       b.id as boq_id,
+       b.uploaded_at as boq_uploaded_at,
+       e.id as estimate_id,
+       e.status as estimate_status
+     FROM projects p
+     LEFT JOIN LATERAL (
+       SELECT site_address, tentative_start_date, duration_months
+       FROM project_revisions
+       WHERE project_id = p.id
+       ORDER BY revision_number DESC
+       LIMIT 1
+     ) pr ON true
+     LEFT JOIN boqs b ON p.id = b.project_id
+     LEFT JOIN estimates e ON p.id = e.project_id AND e.builder_org_id = $1
+     WHERE b.id IS NOT NULL
+     ORDER BY p.created_at DESC`,
+    [builderOrgId]
+  );
+
+  return result.rows;
+}
+
+export async function getProjectBOQItems(projectId: string) {
+  // Get BOQ file and parse it
+  const boqResult = await pool.query(
+    `SELECT b.file_path, b.column_mapping
+     FROM boqs b
+     WHERE b.project_id = $1`,
+    [projectId]
+  );
+
+  if (boqResult.rows.length === 0) {
+    return [];
+  }
+
+  const { file_path, column_mapping } = boqResult.rows[0];
+  
+  // Parse the BOQ file
+  try {
+    const workbook = XLSX.readFile(file_path);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+    if (data.length === 0) {
+      return [];
+    }
+
+    const headers = data[0].map((h: any) => String(h).trim());
+    const rows = data.slice(1).filter((row) => row.some((cell) => cell));
+
+    const mapping = column_mapping ? JSON.parse(column_mapping) : {};
+    const itemCol = mapping.item || headers.find((h: string) => /item|description|name/i.test(h)) || headers[0];
+    const qtyCol = mapping.qty || headers.find((h: string) => /qty|quantity/i.test(h)) || headers[1];
+    const uomCol = mapping.uom || headers.find((h: string) => /uom|unit/i.test(h)) || headers[2];
+
+    const itemIdx = headers.indexOf(itemCol);
+    const qtyIdx = headers.indexOf(qtyCol);
+    const uomIdx = headers.indexOf(uomCol);
+
+    const items = rows.map((row, index) => {
+      const item = itemIdx >= 0 ? String(row[itemIdx] || "").trim() : "";
+      const qtyStr = qtyIdx >= 0 ? String(row[qtyIdx] || "0") : "0";
+      const qty = parseFloat(qtyStr.replace(/[^0-9.]/g, "")) || 0;
+      const uom = uomIdx >= 0 ? String(row[uomIdx] || "").trim() : "";
+
+      return {
+        id: index + 1,
+        item,
+        qty,
+        uom,
+        rate: 0,
+        total: 0,
+      };
+    }).filter((item) => item.item && item.qty > 0);
+
+    return items;
+  } catch (error) {
+    console.error("Error parsing BOQ file:", error);
+    return [];
+  }
+}
+
+export async function getBuilderBasePricing(builderOrgId: string) {
+  const result = await pool.query(
+    `SELECT item_name, rate, uom, category
+     FROM base_pricing
+     WHERE builder_org_id = $1
+     ORDER BY item_name`,
+    [builderOrgId]
+  );
+
+  return result.rows.map((row) => ({
+    item: row.item_name,
+    rate: parseFloat(row.rate),
+    uom: row.uom,
+    category: row.category,
+  }));
+}
+
+export async function createOrUpdateEstimate(
+  projectId: string,
+  builderOrgId: string,
+  userId: string,
+  pricedItems: any[],
+  marginPercent: number = 0,
+  notes?: string
+) {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // Check if estimate already exists
+    const existingEstimate = await client.query(
+      `SELECT id FROM estimates WHERE project_id = $1 AND builder_org_id = $2`,
+      [projectId, builderOrgId]
+    );
+
+    let estimateId: string;
+
+    if (existingEstimate.rows.length > 0) {
+      estimateId = existingEstimate.rows[0].id;
+      
+      // Update status back to draft if it was previously submitted
+      await client.query(
+        `UPDATE estimates SET status = 'draft' WHERE id = $1`,
+        [estimateId]
+      );
+    } else {
+      // Create new estimate
+      const newEstimate = await client.query(
+        `INSERT INTO estimates (project_id, builder_org_id, status)
+         VALUES ($1, $2, 'draft')
+         RETURNING id`,
+        [projectId, builderOrgId]
+      );
+      estimateId = newEstimate.rows[0].id;
+    }
+
+    // Calculate totals
+    const subtotal = pricedItems.reduce((sum, item) => sum + (item.total || 0), 0);
+    const grandTotal = subtotal * (1 + (marginPercent || 0) / 100);
+
+    // Get next revision number
+    const revResult = await client.query(
+      `SELECT COALESCE(MAX(revision_number), 0) + 1 AS next_rev
+       FROM estimate_revisions
+       WHERE estimate_id = $1`,
+      [estimateId]
+    );
+    const revisionNumber = revResult.rows[0].next_rev;
+
+    // Get latest BOQ revision
+    const boqResult = await client.query(
+      `SELECT id FROM boq_revisions WHERE project_id = $1 ORDER BY revision_number DESC LIMIT 1`,
+      [projectId]
+    );
+
+    // Create estimate revision
+    await client.query(
+      `INSERT INTO estimate_revisions (
+         estimate_id,
+         revision_number,
+         source,
+         boq_revision_id,
+         pricing_snapshot,
+         margin_config,
+         grand_total,
+         notes
+       ) VALUES ($1, $2, 'builder', $3, $4, $5, $6, $7)`,
+      [
+        estimateId,
+        revisionNumber,
+        boqResult.rows[0]?.id || null,
+        JSON.stringify(pricedItems),
+        JSON.stringify({ marginPercent }),
+        grandTotal,
+        notes || null,
+      ]
+    );
+
+    // Update estimate to submitted status
+    await client.query(
+      `UPDATE estimates SET status = 'submitted' WHERE id = $1`,
+      [estimateId]
+    );
+
+    // Audit log
+    await client.query(
+      `INSERT INTO audit_logs (project_id, user_id, action, metadata)
+       VALUES ($1, $2, 'ESTIMATE_SUBMITTED', $3)`,
+      [projectId, userId, JSON.stringify({ estimateId, revisionNumber })]
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      estimateId,
+      revisionNumber,
+      subtotal,
+      grandTotal,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
