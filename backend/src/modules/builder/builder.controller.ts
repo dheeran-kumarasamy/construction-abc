@@ -4,13 +4,13 @@ import * as service from "./builder.service";
 export async function getAvailableProjects(req: Request, res: Response) {
   try {
     const user = (req as any).user;
-    const builderOrgId = user?.organizationId;
+    const userId = user?.userId;
 
-    if (!builderOrgId) {
+    if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const projects = await service.getAvailableProjects(builderOrgId);
+    const projects = await service.getAvailableProjects(userId);
     return res.json(projects);
   } catch (error) {
     console.error("Get available projects error:", error);
@@ -24,8 +24,14 @@ export async function getProjectBOQItems(req: Request, res: Response) {
   try {
     const { projectId } = req.params;
     const projectIdStr = Array.isArray(projectId) ? projectId[0] : projectId;
+    const user = (req as any).user;
+    const userId = user?.userId;
 
-    const boqItems = await service.getProjectBOQItems(projectIdStr);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const boqItems = await service.getProjectBOQItems(projectIdStr, userId);
     return res.json(boqItems);
   } catch (error) {
     console.error("Get BOQ items error:", error);
@@ -64,14 +70,14 @@ export async function createOrUpdateEstimate(req: Request, res: Response) {
     const builderOrgId = user?.organizationId;
     const userId = user?.userId;
 
-    if (!builderOrgId) {
+    if (!userId || !builderOrgId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
     const result = await service.createOrUpdateEstimate(
       projectIdStr,
-      builderOrgId,
       userId,
+      builderOrgId,
       pricedItems,
       marginPercent,
       notes

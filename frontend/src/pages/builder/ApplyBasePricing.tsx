@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
+import { getBasePricing } from "../../services/basePricingStore";
 
 interface Project {
   id: string;
@@ -30,6 +31,7 @@ export default function ApplyBasePricing() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [basePricing, setBasePricing] = useState<BasePriceItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [boqItems, setBoqItems] = useState<BOQItem[]>([]);
   const [pricedItems, setPricedItems] = useState<BOQItem[]>([]);
   const [marginPercent, setMarginPercent] = useState<number>(0);
   const [notes, setNotes] = useState<string>("");
@@ -39,6 +41,12 @@ export default function ApplyBasePricing() {
     fetchProjects();
     fetchBasePricing();
   }, []);
+
+  useEffect(() => {
+    if (selectedProjectId && boqItems.length > 0) {
+      autoMatchPricing(boqItems, basePricing);
+    }
+  }, [basePricing, boqItems, selectedProjectId]);
 
   async function fetchProjects() {
     try {
@@ -64,12 +72,25 @@ export default function ApplyBasePricing() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!response.ok) throw new Error("Failed to fetch base pricing");
+      const localItems = getBasePricing();
+      let apiItems: BasePriceItem[] = [];
 
-      const data = await response.json();
-      setBasePricing(data);
+      if (response.ok) {
+        apiItems = await response.json();
+      }
+
+      // Merge backend + local items, preferring latest local entry for same item+uom
+      const mergedMap = new Map<string, BasePriceItem>();
+      [...apiItems, ...localItems].forEach((item) => {
+        const key = `${normalizeText(item.item)}|${normalizeText(item.uom)}`;
+        mergedMap.set(key, item);
+      });
+
+      setBasePricing(Array.from(mergedMap.values()));
     } catch (err) {
       console.error("Fetch base pricing error:", err);
+      // Fallback to local base pricing so auto-fill still works
+      setBasePricing(getBasePricing());
     }
   }
 
@@ -77,6 +98,7 @@ export default function ApplyBasePricing() {
     setSelectedProjectId(projectId);
     
     if (!projectId) {
+      setBoqItems([]);
       setPricedItems([]);
       return;
     }
@@ -94,9 +116,10 @@ export default function ApplyBasePricing() {
       if (!response.ok) throw new Error("Failed to fetch BOQ items");
 
       const items = await response.json();
-      
+      setBoqItems(items);
+
       // Auto-match pricing
-      autoMatchPricing(items);
+      autoMatchPricing(items, basePricing);
     } catch (err) {
       console.error("Fetch BOQ error:", err);
       alert(err instanceof Error ? err.message : "Failed to fetch BOQ");
@@ -105,20 +128,42 @@ export default function ApplyBasePricing() {
     }
   }
 
-  function autoMatchPricing(items: BOQItem[]) {
+  function normalizeText(value: string) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function autoMatchPricing(items: BOQItem[], pricingSource: BasePriceItem[] = basePricing) {
     const matched = items.map((item) => {
       // Try to find exact match or partial match in base pricing
-      const itemNameLower = item.item.toLowerCase();
+      const normalizedItemName = normalizeText(item.item);
+      const normalizedItemUom = normalizeText(item.uom);
       
-      let match = basePricing.find(
-        (bp) => bp.item.toLowerCase() === itemNameLower
+      let match = pricingSource.find(
+        (bp) =>
+          normalizeText(bp.item) === normalizedItemName &&
+          (!normalizedItemUom || normalizeText(bp.uom) === normalizedItemUom)
       );
 
       if (!match) {
-        // Try partial match
-        match = basePricing.find((bp) =>
-          itemNameLower.includes(bp.item.toLowerCase()) ||
-          bp.item.toLowerCase().includes(itemNameLower)
+        // Try exact item match ignoring UOM
+        match = pricingSource.find(
+          (bp) => normalizeText(bp.item) === normalizedItemName
+        );
+      }
+
+      if (!match) {
+        // Try partial match on item name
+        match = pricingSource.find((bp) => {
+          const normalizedBaseItem = normalizeText(bp.item);
+          return (
+            normalizedItemName.includes(normalizedBaseItem) ||
+            normalizedBaseItem.includes(normalizedItemName)
+          );
+        }
         );
       }
 
@@ -174,7 +219,10 @@ export default function ApplyBasePricing() {
         }
       );
 
-      if (!response.ok) throw new Error("Failed to submit estimate");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to submit estimate");
+      }
 
       const result = await response.json();
       alert(
@@ -186,6 +234,7 @@ export default function ApplyBasePricing() {
       
       // Clear form
       setSelectedProjectId("");
+      setBoqItems([]);
       setPricedItems([]);
       setMarginPercent(0);
       setNotes("");
@@ -277,7 +326,7 @@ export default function ApplyBasePricing() {
                       <td>
                         <input
                           type="number"
-                          value={item.rate}
+                          value={Number.isFinite(item.rate) ? item.rate : 0}
                           onChange={(e) =>
                             handleRateChange(index, Number(e.target.value))
                           }
@@ -343,7 +392,7 @@ export default function ApplyBasePricing() {
                   </label>
                   <input
                     type="number"
-                    value={marginPercent}
+                    value={Number.isFinite(marginPercent) ? marginPercent : 0}
                     onChange={(e) => setMarginPercent(Number(e.target.value))}
                     style={pageStyles.input}
                     placeholder="0"
@@ -401,7 +450,7 @@ export default function ApplyBasePricing() {
                   Notes (Optional)
                 </label>
                 <textarea
-                  value={notes}
+                  value={notes ?? ""}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Add any notes for the architect..."
                   rows={3}

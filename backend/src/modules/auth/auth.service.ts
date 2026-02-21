@@ -47,19 +47,41 @@ export async function acceptInvite(token: string, password: string) {
 
   const passwordHash = await bcrypt.hash(password, 10);
 
-  const userInsert = await pool.query(
-    `INSERT INTO users (email, password_hash, role, organization_id)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, role, organization_id`,
-    [invite.email, passwordHash, invite.role, invite.organization_id]
+  // Check if user already exists
+  const existingUserResult = await pool.query(
+    `SELECT id, role, organization_id FROM users WHERE email = $1`,
+    [invite.email]
   );
+
+  let userId: string;
+  let user: any;
+
+  if (existingUserResult.rows.length > 0) {
+    // User exists, update their password
+    user = existingUserResult.rows[0];
+    userId = user.id;
+    
+    await pool.query(
+      `UPDATE users SET password_hash = $1 WHERE id = $2`,
+      [passwordHash, userId]
+    );
+  } else {
+    // User doesn't exist, create them
+    const userInsert = await pool.query(
+      `INSERT INTO users (email, password_hash, role, organization_id)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, role, organization_id`,
+      [invite.email, passwordHash, invite.role, invite.organization_id]
+    );
+
+    user = userInsert.rows[0];
+    userId = user.id;
+  }
 
   await pool.query(
-    `UPDATE user_invites SET accepted_at = NOW() WHERE id = $1`,
-    [invite.id]
+    `UPDATE user_invites SET accepted_at = NOW(), user_id = $1 WHERE id = $2`,
+    [userId, invite.id]
   );
-
-  const user = userInsert.rows[0];
 
   const jwtToken = jwt.sign(
     {

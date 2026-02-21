@@ -1,9 +1,10 @@
 import { pool } from "../../config/db";
 import XLSX from "xlsx";
 import fs from "fs";
+import path from "path";
 
-export async function getAvailableProjects(builderOrgId: string) {
-  // Get all projects with BOQs
+export async function getAvailableProjects(userId: string) {
+  // Get projects where this specific builder has accepted an invite
   const result = await pool.query(
     `SELECT 
        p.id,
@@ -26,16 +27,38 @@ export async function getAvailableProjects(builderOrgId: string) {
        LIMIT 1
      ) pr ON true
      LEFT JOIN boqs b ON p.id = b.project_id
-     LEFT JOIN estimates e ON p.id = e.project_id AND e.builder_org_id = $1
+     LEFT JOIN estimates e ON p.id = e.project_id
+     JOIN user_invites ui ON ui.project_id = p.id
      WHERE b.id IS NOT NULL
+       AND ui.user_id = $1
+       AND ui.role = 'builder'
+       AND ui.accepted_at IS NOT NULL
      ORDER BY p.created_at DESC`,
-    [builderOrgId]
+    [userId]
   );
 
   return result.rows;
 }
 
-export async function getProjectBOQItems(projectId: string) {
+async function assertBuilderProjectAccess(userId: string, projectId: string) {
+  const access = await pool.query(
+    `SELECT 1
+     FROM user_invites ui
+     WHERE ui.project_id = $1
+       AND ui.user_id = $2
+       AND ui.accepted_at IS NOT NULL
+     LIMIT 1`,
+    [projectId, userId]
+  );
+
+  if (!access.rows.length) {
+    throw new Error("You are not invited to this project");
+  }
+}
+
+export async function getProjectBOQItems(projectId: string, userId: string) {
+  await assertBuilderProjectAccess(userId, projectId);
+
   // Get BOQ file and parse it
   const boqResult = await pool.query(
     `SELECT b.file_path, b.column_mapping
@@ -50,9 +73,14 @@ export async function getProjectBOQItems(projectId: string) {
 
   const { file_path, column_mapping } = boqResult.rows[0];
   
+  // Resolve the file path to absolute
+  const absolutePath = path.isAbsolute(file_path) 
+    ? file_path 
+    : path.join(process.cwd(), file_path);
+  
   // Parse the BOQ file
   try {
-    const workbook = XLSX.readFile(file_path);
+    const workbook = XLSX.readFile(absolutePath);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const data: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
@@ -64,7 +92,8 @@ export async function getProjectBOQItems(projectId: string) {
     const headers = data[0].map((h: any) => String(h).trim());
     const rows = data.slice(1).filter((row) => row.some((cell) => cell));
 
-    const mapping = column_mapping ? JSON.parse(column_mapping) : {};
+    // column_mapping is already an object from JSONB, don't parse it
+    const mapping = column_mapping || {};
     const itemCol = mapping.item || headers.find((h: string) => /item|description|name/i.test(h)) || headers[0];
     const qtyCol = mapping.qty || headers.find((h: string) => /qty|quantity/i.test(h)) || headers[1];
     const uomCol = mapping.uom || headers.find((h: string) => /uom|unit/i.test(h)) || headers[2];
@@ -90,9 +119,9 @@ export async function getProjectBOQItems(projectId: string) {
     }).filter((item) => item.item && item.qty > 0);
 
     return items;
-  } catch (error) {
-    console.error("Error parsing BOQ file:", error);
-    return [];
+  } catch (error: any) {
+    console.error("Error parsing BOQ file:", error.message);
+    throw error;
   }
 }
 
@@ -115,12 +144,14 @@ export async function getBuilderBasePricing(builderOrgId: string) {
 
 export async function createOrUpdateEstimate(
   projectId: string,
-  builderOrgId: string,
   userId: string,
+  builderOrgId: string,
   pricedItems: any[],
   marginPercent: number = 0,
   notes?: string
 ) {
+  await assertBuilderProjectAccess(userId, projectId);
+
   const client = await pool.connect();
 
   try {
