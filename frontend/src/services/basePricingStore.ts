@@ -4,6 +4,7 @@
 export interface BasePriceItem {
     item: string;
     rate: number;
+    uom: string;
     category: "Material" | "Labor" | "Machinery" | "Other";
   }
   

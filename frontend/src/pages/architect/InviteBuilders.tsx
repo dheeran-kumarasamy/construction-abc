@@ -2,11 +2,14 @@ import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 
 interface Invite {
+  id: string;
   email: string;
   projectId: string;
-  status: "pending" | "sent" | "failed";
+  projectName?: string;
+  status: "open" | "accepted" | "expired" | "pending" | "failed";
   inviteLink?: string;
   error?: string;
+  createdAt?: string;
 }
 
 interface Project {
@@ -19,6 +22,10 @@ export default function InviteBuilders() {
   const [projectId, setProjectId] = useState<string>("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "accepted" | "expired">("all");
+  const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [emailFilter, setEmailFilter] = useState("");
+  const [loadingInvites, setLoadingInvites] = useState(false);
   const token = localStorage.getItem("token") || "";
 
   useEffect(() => {
@@ -38,10 +45,41 @@ export default function InviteBuilders() {
     })();
   }, [token]);
 
+  useEffect(() => {
+    if (!token) return;
+    loadInvites();
+  }, [token]);
+
+  async function loadInvites() {
+    if (!token) return;
+
+    setLoadingInvites(true);
+    try {
+      const res = await fetch("http://localhost:4000/auth/invites?role=builder", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) throw new Error("Failed to load invites");
+      const data = await res.json();
+      setInvites(data);
+    } catch (err) {
+      console.error("Load invites error:", err);
+    } finally {
+      setLoadingInvites(false);
+    }
+  }
+
   async function sendInvite() {
     if (!email.trim() || !projectId) return;
 
-    const newInvite: Invite = { email, projectId, status: "pending" };
+    const newInvite: Invite = {
+      id: `tmp-${Date.now()}`,
+      email,
+      projectId,
+      projectName: projects.find((p) => p.id === projectId)?.name,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
     setInvites((prev) => [...prev, newInvite]);
 
     try {
@@ -63,11 +101,12 @@ export default function InviteBuilders() {
       setInvites((prev) =>
         prev.map((inv, idx) =>
           idx === prev.length - 1
-            ? { ...inv, status: "sent", inviteLink: body.inviteLink }
+            ? { ...inv, status: "open", inviteLink: body.inviteLink }
             : inv
         )
       );
       setEmail("");
+      await loadInvites();
     } catch (err: any) {
       setInvites((prev) =>
         prev.map((inv, idx) =>
@@ -78,6 +117,17 @@ export default function InviteBuilders() {
       );
     }
   }
+
+  const filteredInvites = invites.filter((inv) => {
+    const matchesStatus = statusFilter === "all" ? true : inv.status === statusFilter;
+    const matchesProject =
+      projectFilter === "all" ? true : inv.projectId === projectFilter;
+    const matchesEmail = emailFilter.trim()
+      ? inv.email.toLowerCase().includes(emailFilter.toLowerCase())
+      : true;
+
+    return matchesStatus && matchesProject && matchesEmail;
+  });
 
   return (
     <div style={pageStyles.page}>
@@ -117,6 +167,41 @@ export default function InviteBuilders() {
           </button>
         </div>
 
+        <div style={{ ...pageStyles.formRow, marginTop: "1rem" }}>
+          <select
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as "all" | "open" | "accepted" | "expired")
+            }
+            style={pageStyles.select}
+          >
+            <option value="all">All Statuses</option>
+            <option value="open">Open</option>
+            <option value="accepted">Accepted</option>
+            <option value="expired">Expired</option>
+          </select>
+
+          <select
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+            style={pageStyles.select}
+          >
+            <option value="all">All Projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+
+          <input
+            placeholder="Filter by email"
+            value={emailFilter}
+            onChange={(e) => setEmailFilter(e.target.value)}
+            style={pageStyles.input}
+          />
+        </div>
+
         <table style={pageStyles.table}>
           <thead>
             <tr>
@@ -127,26 +212,34 @@ export default function InviteBuilders() {
             </tr>
           </thead>
           <tbody>
-            {invites.length === 0 ? (
+            {loadingInvites ? (
               <tr>
                 <td colSpan={4} style={pageStyles.empty}>
-                  No invites yet
+                  Loading invites...
+                </td>
+              </tr>
+            ) : filteredInvites.length === 0 ? (
+              <tr>
+                <td colSpan={4} style={pageStyles.empty}>
+                  No invites found
                 </td>
               </tr>
             ) : (
-              invites.map((inv, idx) => (
+              filteredInvites.map((inv, idx) => (
                 <tr
-                  key={idx}
+                  key={inv.id || idx}
                   style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}
                 >
                   <td style={pageStyles.td}>{inv.email}</td>
                   <td style={pageStyles.td}>
-                    {projects.find((p) => p.id === inv.projectId)?.name || "-"}
+                    {inv.projectName ||
+                      projects.find((p) => p.id === inv.projectId)?.name ||
+                      "-"}
                   </td>
                   <td style={pageStyles.td}>
                     <span
                       style={
-                        inv.status === "sent"
+                        inv.status === "accepted" || inv.status === "open"
                           ? pageStyles.statusSent
                           : inv.status === "failed"
                           ? pageStyles.statusFailed

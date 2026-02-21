@@ -50,3 +50,34 @@ export async function inviteUser(req: Request, res: Response) {
     res.status(400).json({ error: err.message });
   }
 }
+
+export async function getInvites(req: Request, res: Response) {
+  try {
+    const orgId = (req as any).user?.organizationId || null;
+
+    if (!orgId) {
+      return res.status(403).json({ error: "Missing organization context" });
+    }
+
+    const roleRaw = req.query.role;
+    const projectIdRaw = req.query.projectId;
+    const statusRaw = req.query.status;
+
+    const role = typeof roleRaw === "string" ? roleRaw : undefined;
+    const projectId = typeof projectIdRaw === "string" ? projectIdRaw : undefined;
+    const status = typeof statusRaw === "string" ? statusRaw : undefined;
+
+    const result = await service.listInvites(orgId, {
+      role: role || undefined,
+      projectId: projectId || undefined,
+      status:
+        status === "open" || status === "accepted" || status === "expired"
+          ? status
+          : undefined,
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+}

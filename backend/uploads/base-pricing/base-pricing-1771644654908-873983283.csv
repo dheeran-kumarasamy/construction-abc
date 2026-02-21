@@ -1,0 +1,63 @@
+Item Name,Rate (INR),UOM,Category
+Cement,"₹420",Per 50kg Bag,Material
+Sand,"₹3,200",Per Cubic Yard,Material
+Gravel / Crushed Stone,"₹4,100",Per Cubic Yard,Material
+Reinforcement Bar / Rebar,"₹68,000",Per Ton,Material
+Structural Steel,"₹1,09,000",Per Ton,Material
+Bricks,"₹7,000",Per 1000 Units,Material
+Concrete Blocks,"₹45",Per Unit,Material
+Lumber / Timber,"₹1,500",Per Cubic Ft,Material
+Plywood,"₹1,800",Per 8x4 Sheet,Material
+Drywall / Gypsum Board,"₹900",Per Sheet,Material
+Roofing Shingles,"₹8,200",Per Square (100 sq ft),Material
+Metal Roofing Sheets,"₹320",Per Sq Ft,Material
+PVC Pipes,"₹165",Per Linear Ft,Material
+Copper Pipes,"₹590",Per Linear Ft,Material
+Electrical Wire,"₹68",Per Linear Ft,Material
+Insulation,"₹110",Per Sq Ft,Material
+Glass / Window Pane,"₹1,100",Per Sq Ft,Material
+Paint – Interior,"₹280",Per Litre,Material
+Paint – Exterior,"₹350",Per Litre,Material
+Ceramic Tiles,"₹60",Per Sq Ft,Material
+Marble Flooring,"₹450",Per Sq Ft,Material
+Granite Countertop,"₹1,200",Per Sq Ft,Material
+Adhesive / Mortar,"₹820",Per Bag,Material
+Waterproofing Compound,"₹500",Per Litre,Material
+Mason / Bricklayer,"₹900",Per Day,Labor
+Carpenter,"₹1,100",Per Day,Labor
+Electrician,"₹1,200",Per Day,Labor
+Plumber,"₹1,150",Per Day,Labor
+Painter,"₹850",Per Day,Labor
+Steel Fixer,"₹1,000",Per Day,Labor
+Tiler,"₹950",Per Day,Labor
+General Laborer,"₹600",Per Day,Labor
+Site Supervisor,"₹1,800",Per Day,Labor
+Civil Engineer,"₹3,000",Per Day,Labor
+Architect,"₹1,500",Per Hour,Labor
+Project Manager,"₹75,000",Per Month,Labor
+Welder,"₹1,300",Per Day,Labor
+Excavator Operator,"₹1,800",Per Day,Labor
+Concrete Mixer Operator,"₹1,100",Per Day,Labor
+Backhoe / Excavator,"₹12,000",Per Day,Machinery
+Bulldozer,"₹18,000",Per Day,Machinery
+Concrete Mixer Truck,"₹9,000",Per Day,Machinery
+Concrete Pump,"₹10,500",Per Day,Machinery
+Tower Crane,"₹2,50,000",Per Month,Machinery
+Mobile Crane,"₹22,000",Per Day,Machinery
+Compactor / Roller,"₹8,500",Per Day,Machinery
+Dump Truck,"₹9,500",Per Day,Machinery
+Scaffolding,"₹15,000",Per Floor Per Month,Machinery
+Generator,"₹3,500",Per Day,Machinery
+Welding Machine,"₹1,800",Per Day,Machinery
+Drilling Rig,"₹35,000",Per Day,Machinery
+Site Survey & Layout,"₹25,000",Per Site,Other
+Soil Testing & Report,"₹15,000",Per Report,Other
+Structural Drawing,"₹35,000",Per Floor,Other
+Building Permit & Approval,"₹20,000",Per Application,Other
+Environmental Clearance,"₹18,000",Per Application,Other
+Site Security,"₹25,000",Per Month,Other
+Site Cleanup & Waste Disposal,"₹3,500",Per Load,Other
+Temporary Site Office Setup,"₹55,000",Lump Sum,Other
+Safety Equipment & PPE,"₹1,200",Per Worker Per Month,Other
+Insurance,"1.50%","% of Project Cost",Other
+Contingency Reserve,"5.00%","% of Project Cost",Other

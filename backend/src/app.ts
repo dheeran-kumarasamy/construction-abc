@@ -6,6 +6,8 @@ import boqRoutes from "./modules/boq/boq.routes";
 import estimateRoutes from "./modules/estimates/estimate.routes";
 import { authenticate } from "./modules/auth/auth.middleware";
 import comparisonRoutes from "./modules/comparison/comparison.routes";
+import basePricingRoutes from "./modules/base-pricing/base-pricing.routes";
+import builderRoutes from "./modules/builder/builder.routes";
 
 export const app = express();
 
@@ -19,6 +21,8 @@ app.use("/", authenticate, estimateRoutes);
 app.use("/", authenticate, comparisonRoutes);
 
 app.use("/api/boq", boqRoutes);
+app.use("/api/base-pricing", authenticate, basePricingRoutes);
+app.use("/api/builder", authenticate, builderRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
