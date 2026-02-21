@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 
 // Existing pages (kept for compatibility)
 import CreateProject from "./pages/architect/CreateProject";
@@ -18,6 +18,7 @@ import ReceivedEstimates from "./pages/architect/ReceivedEstimates";
 import AuditTrail from "./pages/architect/AuditTrail";
 import ProjectsList from "./pages/architect/ProjectsList";
 import ComparisonScreen from "./pages/architect/ComparisonScreen";
+import AcceptInvite from "./pages/auth/AcceptInvite";
 
 // Auth
 import LoginPage from "./pages/Login";
@@ -88,6 +89,12 @@ function DashboardButton() {
   );
 }
 
+// Wrapper to extract projectId route param and pass to ComparisonScreen
+function ComparisonScreenWithParams() {
+  const { projectId } = useParams();
+  return <ComparisonScreen projectId={projectId || ""} />;
+}
+
 // --- Main App ---
 export default function App() {
   return (
@@ -98,6 +105,7 @@ export default function App() {
           {/* Public */}
           <Route path="/" element={<Navigate to="/login" />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/accept-invite" element={<AcceptInvite />} />
 
           {/* Architect */}
           <Route
@@ -236,7 +244,7 @@ export default function App() {
 
           <Route
             path="/architect/comparison/:projectId"
-            element={<ComparisonScreen projectId="REPLACE_WITH_PARAM" />}
+            element={<ComparisonScreenWithParams />}
           />
 
           {/* Fallback */}

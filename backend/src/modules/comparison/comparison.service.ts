@@ -3,11 +3,24 @@ import { pool } from "../../config/db";
 export async function fetchComparison(projectId: string) {
   const res = await pool.query(
     `SELECT
-       er.*,
-       b.name as builder_name
-     FROM estimate_revisions er
-     JOIN builders b ON er.builder_id = b.id
-     WHERE er.project_id = $1
+       e.builder_org_id,
+       o.name AS builder_name,
+       er.id AS revision_id,
+       er.revision_number,
+       COALESCE((er.margin_config->>'marginPercent')::numeric, 0) AS margin_percent,
+       er.grand_total,
+       er.submitted_at
+     FROM estimates e
+     JOIN organizations o ON o.id = e.builder_org_id
+     JOIN LATERAL (
+       SELECT id, revision_number, margin_config, grand_total, submitted_at
+       FROM estimate_revisions
+       WHERE estimate_id = e.id
+       ORDER BY revision_number DESC
+       LIMIT 1
+     ) er ON true
+     WHERE e.project_id = $1
+       AND e.status = 'submitted'
      ORDER BY er.grand_total ASC`,
     [projectId]
   );

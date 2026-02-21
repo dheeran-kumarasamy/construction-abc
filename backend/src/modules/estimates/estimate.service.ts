@@ -133,9 +133,34 @@ export async function getBuilderEstimate(projectId: string, userId: string | nul
 }
 
 export async function getAllProjectEstimates(projectId: string) {
-  const res = await pool.query(`SELECT * FROM estimates WHERE project_id = $1`, [
-    projectId,
-  ]);
+  const res = await pool.query(
+    `SELECT
+       e.id AS estimate_id,
+       e.project_id,
+       e.builder_org_id,
+       e.status,
+       o.name AS builder_name,
+       er.id AS revision_id,
+       er.revision_number,
+       er.pricing_snapshot,
+       er.margin_config,
+       er.grand_total,
+       er.notes,
+       er.submitted_at
+     FROM estimates e
+     JOIN organizations o ON o.id = e.builder_org_id
+     LEFT JOIN LATERAL (
+       SELECT id, revision_number, pricing_snapshot, margin_config, grand_total, notes, submitted_at
+       FROM estimate_revisions
+       WHERE estimate_id = e.id
+       ORDER BY revision_number DESC
+       LIMIT 1
+     ) er ON true
+     WHERE e.project_id = $1
+       AND e.status = 'submitted'
+     ORDER BY er.submitted_at DESC NULLS LAST, e.created_at DESC`,
+    [projectId]
+  );
 
   return res.rows;
 }
