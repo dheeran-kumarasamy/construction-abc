@@ -5,11 +5,9 @@ function isLocalHost(hostname: string) {
 }
 
 function getHostedApiHost(currentHost: string) {
-  if (currentHost.includes("-frontend.")) {
-    return currentHost.replace("-frontend.", "-backend.");
-  }
-
-  return currentHost;
+  return currentHost
+    .replace("-frontend-", "-backend-")
+    .replace("-frontend.", "-backend.");
 }
 
 export function getApiBaseUrl() {
