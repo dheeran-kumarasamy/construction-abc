@@ -13,6 +13,15 @@ function getHostedApiHost(currentHost: string) {
 }
 
 export function getApiBaseUrl() {
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol || "http:";
+    const hostname = window.location.hostname || "localhost";
+
+    if (protocol === "https:" && !isLocalHost(hostname)) {
+      return `https://${getHostedApiHost(hostname)}`;
+    }
+  }
+
   if (configuredApiUrl) {
     const normalizedConfigured = configuredApiUrl.replace(/\/$/, "");
 
@@ -44,10 +53,6 @@ export function getApiBaseUrl() {
   if (typeof window !== "undefined") {
     const protocol = window.location.protocol || "http:";
     const hostname = window.location.hostname || "localhost";
-
-    if (protocol === "https:" && !isLocalHost(hostname)) {
-      return `https://${getHostedApiHost(hostname)}`;
-    }
 
     return `${protocol}//${hostname}:4000`;
   }
