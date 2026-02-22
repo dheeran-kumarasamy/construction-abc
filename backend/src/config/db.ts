@@ -1,11 +1,15 @@
 import { Pool } from "pg";
-import dotenv from "dotenv";
 
-dotenv.config();
+const databaseUrl = process.env.DATABASE_URL || "postgresql://localhost/construction_db";
+
+console.log("[DB Config] Connecting to:", databaseUrl.replace(/:[^@]*@/, ":***@")); // Log without password
 
 export const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL || "postgresql://localhost/construction_db",
+  connectionString: databaseUrl,
+});
+
+pool.on("error", (err) => {
+  console.error("[DB Pool Error]", err.message);
 });
 
 export async function testDbConnection() {

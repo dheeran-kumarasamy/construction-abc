@@ -5,11 +5,16 @@ export async function login(req: Request, res: Response) {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
     const result = await service.loginUser(email, password);
 
     res.json(result);
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    console.error("Login error:", { email: req.body?.email, error: err.message });
+    res.status(401).json({ error: err.message });
   }
 }
 
