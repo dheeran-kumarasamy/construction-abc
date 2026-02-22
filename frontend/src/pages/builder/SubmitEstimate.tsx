@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { useNavigate } from "react-router-dom";
+import { apiUrl } from "../../services/api";
 
 interface Estimate {
   estimate_id: string;
@@ -27,7 +28,7 @@ export default function SubmitEstimate() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/builder/submitted-estimates", {
+      const response = await fetch(apiUrl("/api/builder/submitted-estimates"), {
         headers: { Authorization: `Bearer ${token}` },
       });
 

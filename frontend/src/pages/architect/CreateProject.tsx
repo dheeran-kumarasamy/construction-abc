@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
+import { apiUrl } from "../../services/api";
 
 export default function CreateProject() {
   const navigate = useNavigate();
@@ -51,7 +52,7 @@ export default function CreateProject() {
 
       const token = localStorage.getItem("token");
 
-      const res = await fetch("http://localhost:4000/projects", {
+      const res = await fetch(apiUrl("/projects"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

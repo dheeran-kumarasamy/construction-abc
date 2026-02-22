@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
+import { apiUrl } from "../../services/api";
 
 interface Invite {
   id: string;
@@ -32,7 +33,7 @@ export default function InviteBuilders() {
     if (!token) return;
     (async () => {
       try {
-        const res = await fetch("http://localhost:4000/projects", {
+        const res = await fetch(apiUrl("/projects"), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error("Failed to load projects");
@@ -55,7 +56,7 @@ export default function InviteBuilders() {
 
     setLoadingInvites(true);
     try {
-      const res = await fetch("http://localhost:4000/auth/invites?role=builder", {
+      const res = await fetch(apiUrl("/auth/invites?role=builder"), {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -83,7 +84,7 @@ export default function InviteBuilders() {
     setInvites((prev) => [...prev, newInvite]);
 
     try {
-      const res = await fetch("http://localhost:4000/auth/invite", {
+      const res = await fetch(apiUrl("/auth/invite"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

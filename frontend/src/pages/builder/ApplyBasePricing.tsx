@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import { getBasePricing } from "../../services/basePricingStore";
+import { apiUrl } from "../../services/api";
 
 interface Project {
   id: string;
@@ -71,7 +72,7 @@ export default function ApplyBasePricing() {
   async function fetchProjects() {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/builder/available-projects", {
+      const response = await fetch(apiUrl("/api/builder/available-projects"), {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -88,7 +89,7 @@ export default function ApplyBasePricing() {
   async function fetchBasePricing() {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/builder/base-pricing", {
+      const response = await fetch(apiUrl("/api/builder/base-pricing"), {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -127,7 +128,7 @@ export default function ApplyBasePricing() {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `http://localhost:4000/api/builder/projects/${projectId}/boq-items`,
+        apiUrl(`/api/builder/projects/${projectId}/boq-items`),
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -226,7 +227,7 @@ export default function ApplyBasePricing() {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `http://localhost:4000/api/builder/projects/${selectedProjectId}/estimate`,
+        apiUrl(`/api/builder/projects/${selectedProjectId}/estimate`),
         {
           method: "POST",
           headers: {

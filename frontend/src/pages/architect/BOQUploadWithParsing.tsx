@@ -3,6 +3,7 @@ import type { ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
+import { apiUrl } from "../../services/api";
 
 interface ProjectRow {
   id: string;
@@ -41,7 +42,7 @@ const BOQUploadWithParsing = () => {
     const loadProjects = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch("http://localhost:4000/api/projects", {
+        const res = await fetch(apiUrl("/api/projects"), {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
 
@@ -59,7 +60,7 @@ const BOQUploadWithParsing = () => {
   const checkExistingBOQ = async (projectId: string) => {
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`http://localhost:4000/api/boq/${projectId}/check`, {
+      const res = await fetch(apiUrl(`/api/boq/${projectId}/check`), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
@@ -107,7 +108,7 @@ const BOQUploadWithParsing = () => {
       const formData = new FormData();
       formData.append("boq", selectedFile);
 
-      const res = await fetch("http://localhost:4000/api/boq/parse", {
+      const res = await fetch(apiUrl("/api/boq/parse"), {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
@@ -148,7 +149,7 @@ const BOQUploadWithParsing = () => {
       formData.append("boq", selectedFile);
       formData.append("columnMapping", JSON.stringify(columnMapping));
 
-      const url = `http://localhost:4000/api/boq/${selectedProject}/upload${override ? "?override=true" : ""}`;
+      const url = apiUrl(`/api/boq/${selectedProject}/upload${override ? "?override=true" : ""}`);
 
       const res = await fetch(url, {
         method: "POST",

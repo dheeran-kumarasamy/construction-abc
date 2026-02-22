@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { pageStyles } from "../layouts/pageStyles";
+import { apiUrl } from "../services/api";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export default function Login() {
     setError("");
 
     try {
-      const res = await fetch("http://localhost:4000/auth/login", {
+      const res = await fetch(apiUrl("/auth/login"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
