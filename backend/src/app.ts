@@ -13,6 +13,11 @@ export const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
 app.use("/auth", authRoutes);
 app.use("/projects", authenticate, projectRoutes);
 app.use("/api/projects", authenticate, projectRoutes);
@@ -23,7 +28,3 @@ app.use("/", authenticate, comparisonRoutes);
 app.use("/api/boq", boqRoutes);
 app.use("/api/base-pricing", authenticate, basePricingRoutes);
 app.use("/api/builder", authenticate, builderRoutes);
-
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
-});

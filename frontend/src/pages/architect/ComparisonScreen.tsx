@@ -14,12 +14,16 @@ export default function ComparisonScreen({ projectId }: { projectId: string }) {
   const [data, setData] = useState<ComparisonRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [awarding, setAwarding] = useState<string | null>(null);
+  const token = localStorage.getItem("token") || "";
 
   useEffect(() => {
     async function fetchComparison() {
       try {
         const res = await fetch(
-          apiUrl(`/projects/${projectId}/comparison`)
+          apiUrl(`/projects/${projectId}/comparison`),
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
         );
         const json = await res.json();
         setData(json);
@@ -31,7 +35,7 @@ export default function ComparisonScreen({ projectId }: { projectId: string }) {
     }
 
     fetchComparison();
-  }, [projectId]);
+  }, [projectId, token]);
 
   async function handleAward(revisionId: string) {
     if (!confirm("Are you sure you want to award this builder?")) return;
@@ -43,7 +47,10 @@ export default function ComparisonScreen({ projectId }: { projectId: string }) {
         apiUrl(`/projects/${projectId}/award`),
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({ estimateRevisionId: revisionId }),
         }
       );
