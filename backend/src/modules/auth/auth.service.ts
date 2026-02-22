@@ -6,11 +6,13 @@ import crypto from "crypto";
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
 export async function loginUser(email: string, password: string) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+
   const { rows } = await pool.query(
     `SELECT u.id, u.password_hash, u.role, u.organization_id
      FROM users u
-     WHERE u.email = $1`,
-    [email]
+     WHERE LOWER(TRIM(u.email)) = $1`,
+    [normalizedEmail]
   );
 
   if (rows.length === 0) throw new Error("Invalid credentials");

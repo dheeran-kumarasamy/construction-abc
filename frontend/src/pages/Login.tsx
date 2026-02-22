@@ -19,12 +19,14 @@ export default function Login() {
     setError("");
 
     try {
+      const normalizedEmail = email.trim().toLowerCase();
+
       const res = await fetch(apiUrl("/auth/login"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       });
 
       const data = await res.json();
@@ -65,6 +67,9 @@ export default function Login() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           required
         />
 
