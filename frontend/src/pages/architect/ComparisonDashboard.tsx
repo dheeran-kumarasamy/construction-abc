@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
+import { apiUrl } from "../../services/api";
 
 interface Project {
   id: string;
@@ -37,7 +38,7 @@ export default function ComparisonDashboard() {
 
   async function fetchProjects() {
     try {
-      const res = await fetch("http://localhost:4000/projects", {
+      const res = await fetch(apiUrl("/projects"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to load projects");
@@ -55,7 +56,7 @@ export default function ComparisonDashboard() {
     if (!selectedProjectId) return;
     try {
       const res = await fetch(
-        `http://localhost:4000/projects/${selectedProjectId}/comparison`,
+        apiUrl(`/projects/${selectedProjectId}/comparison`),
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -74,7 +75,7 @@ export default function ComparisonDashboard() {
 
     try {
       const res = await fetch(
-        `http://localhost:4000/projects/${selectedProjectId}/award`,
+        apiUrl(`/projects/${selectedProjectId}/award`),
         {
           method: "POST",
           headers: {

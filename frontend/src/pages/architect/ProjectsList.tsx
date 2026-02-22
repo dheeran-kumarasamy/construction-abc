@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
+import { apiUrl } from "../../services/api";
 
 interface ProjectRow {
   id: string; // UUID
@@ -27,7 +28,7 @@ export default function ProjectsList() {
         setLoading(true);
         setError("");
         const token = localStorage.getItem("token");
-        const res = await fetch("http://localhost:4000/projects", {
+        const res = await fetch(apiUrl("/projects"), {
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -41,7 +42,7 @@ export default function ProjectsList() {
         // Fetch BOQ preview for each project
         for (const p of data) {
           if (p.boq_id) {
-            const resBoq = await fetch(`http://localhost:4000/api/boq/${p.id}`, {
+            const resBoq = await fetch(apiUrl(`/api/boq/${p.id}`), {
               headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
             const boqData = await resBoq.json();
@@ -99,7 +100,7 @@ export default function ProjectsList() {
                     {p.boq_id ? (
                       <div>
                         <a
-                          href={`http://localhost:4000/api/boq/${p.id}/download`}
+                          href={apiUrl(`/api/boq/${p.id}/download`)}
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{ color: '#0f766e', textDecoration: 'underline' }}

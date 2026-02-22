@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
+import { apiUrl } from "../../services/api";
 
 export default function AcceptInvite() {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ export default function AcceptInvite() {
     setError("");
 
     try {
-      const res = await fetch("http://localhost:4000/auth/accept-invite", {
+      const res = await fetch(apiUrl("/auth/accept-invite"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, password }),

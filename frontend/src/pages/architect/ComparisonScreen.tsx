@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "../../services/api";
 
 interface ComparisonRow {
   builder_org_id: string;
@@ -18,7 +19,7 @@ export default function ComparisonScreen({ projectId }: { projectId: string }) {
     async function fetchComparison() {
       try {
         const res = await fetch(
-          `http://localhost:4000/projects/${projectId}/comparison`
+          apiUrl(`/projects/${projectId}/comparison`)
         );
         const json = await res.json();
         setData(json);
@@ -39,7 +40,7 @@ export default function ComparisonScreen({ projectId }: { projectId: string }) {
       setAwarding(revisionId);
 
       const res = await fetch(
-        `http://localhost:4000/projects/${projectId}/award`,
+        apiUrl(`/projects/${projectId}/award`),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

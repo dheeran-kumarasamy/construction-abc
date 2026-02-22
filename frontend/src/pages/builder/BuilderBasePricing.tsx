@@ -7,6 +7,7 @@ import {
 } from "../../services/basePricingStore";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
+import { apiUrl } from "../../services/api";
 
 interface ColumnMapping {
   item: string;
@@ -67,7 +68,7 @@ export default function BuilderBasePricing() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/base-pricing/parse", {
+      const response = await fetch(apiUrl("/api/base-pricing/parse"), {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -97,7 +98,7 @@ export default function BuilderBasePricing() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:4000/api/base-pricing/upload", {
+      const response = await fetch(apiUrl("/api/base-pricing/upload"), {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,

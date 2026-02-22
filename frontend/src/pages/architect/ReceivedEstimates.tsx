@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
+import { apiUrl } from "../../services/api";
 
 interface Estimate {
   estimate_id: string;
@@ -39,7 +40,7 @@ export default function ReceivedEstimates() {
 
   async function fetchProjects() {
     try {
-      const res = await fetch("http://localhost:4000/projects", {
+      const res = await fetch(apiUrl("/projects"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to load projects");
@@ -57,7 +58,7 @@ export default function ReceivedEstimates() {
     if (!selectedProjectId) return;
     try {
       const res = await fetch(
-        `http://localhost:4000/projects/${selectedProjectId}/estimates`,
+        apiUrl(`/projects/${selectedProjectId}/estimates`),
         {
           headers: { Authorization: `Bearer ${token}` },
         }
