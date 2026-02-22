@@ -1,7 +1,7 @@
 import { app } from "./app";
 import { testDbConnection } from "./config/db";
 
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 4000;
 
 async function startServer() {
   try {
