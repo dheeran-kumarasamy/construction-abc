@@ -8,33 +8,54 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 export async function loginUser(email: string, password: string) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
 
-  const { rows } = await pool.query(
+  if (!normalizedEmail || !password) {
+    throw new Error("Email and password required");
+  }
+
+  try {
+    const { rows } = await pool.query(
     `SELECT u.id, u.password_hash, u.role, u.organization_id
      FROM users u
      WHERE LOWER(TRIM(u.email)) = $1`,
     [normalizedEmail]
   );
 
-  if (rows.length === 0) throw new Error("Invalid credentials");
+  if (rows.length === 0) {
+    console.warn("Login failed: user not found", { email: normalizedEmail });
+    throw new Error("Invalid credentials");
+  }
 
   const user = rows[0];
 
-  if (!user.password_hash) throw new Error("User not activated");
+  if (!user.password_hash) {
+    console.warn("Login failed: user not activated", { email: normalizedEmail });
+    throw new Error("User not activated");
+  }
 
-  const valid = await bcrypt.compare(password, user.password_hash);
-  if (!valid) throw new Error("Invalid credentials");
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) {
+      console.warn("Login failed: invalid password", { email: normalizedEmail });
+      throw new Error("Invalid credentials");
+    }
 
-  const token = jwt.sign(
-    {
-      userId: user.id,
-      role: user.role,
-      organizationId: user.organization_id,
-    },
-    JWT_SECRET,
-    { expiresIn: "7d" }
-  );
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        role: user.role,
+        organizationId: user.organization_id,
+      },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
-  return { token, role: user.role };
+    return { token, role: user.role };
+  } catch (err: any) {
+    if (err.message === "Invalid credentials" || err.message === "User not activated" || err.message === "Email and password required") {
+      throw err;
+    }
+    console.error("[Auth Service] Database error during login:", err.message);
+    throw new Error("Authentication service unavailable");
+  }
 }
 
 export async function acceptInvite(token: string, password: string) {
