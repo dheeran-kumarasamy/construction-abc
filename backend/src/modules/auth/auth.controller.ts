@@ -14,7 +14,15 @@ export async function login(req: Request, res: Response) {
     res.json(result);
   } catch (err: any) {
     console.error("Login error:", { email: req.body?.email, error: err.message });
-    res.status(401).json({ error: err.message });
+    if (err?.message === "Authentication service unavailable") {
+      return res.status(503).json({ error: err.message });
+    }
+
+    if (err?.message === "Invalid credentials" || err?.message === "User not activated") {
+      return res.status(401).json({ error: err.message });
+    }
+
+    return res.status(400).json({ error: err.message || "Login failed" });
   }
 }
 
