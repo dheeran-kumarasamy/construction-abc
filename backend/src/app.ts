@@ -18,6 +18,10 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+app.get(["/favicon.ico", "/favicon.png"], (_req, res) => {
+  res.status(204).end();
+});
+
 app.use("/auth", authRoutes);
 app.use("/projects", authenticate, projectRoutes);
 app.use("/api/projects", authenticate, projectRoutes);
