@@ -18,7 +18,13 @@ const diskStorage = multer.diskStorage({
     if (!projectId) {
       return cb(new Error("projectId is required for BOQ upload"), "");
     }
-    const uploadPath = path.join("uploads", "boq", projectId);
+    
+    // Use /tmp for serverless (Vercel), uploads for local
+    const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
+    const uploadPath = isProduction
+      ? path.join("/tmp", "boq", projectId)
+      : path.join("uploads", "boq", projectId);
+    
     import("fs").then(fs => {
       fs.mkdirSync(uploadPath, { recursive: true });
       cb(null, uploadPath);
