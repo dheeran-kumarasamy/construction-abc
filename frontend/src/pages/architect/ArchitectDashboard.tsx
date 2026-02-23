@@ -30,12 +30,6 @@ export default function ArchitectDashboard() {
             Upload BOQ
           </button>
           <button
-            onClick={() => navigate("/architect/comparison")}
-            style={pageStyles.primaryBtn}
-          >
-            Compare Builder Estimates
-          </button>
-          <button
             onClick={() => navigate("/architect/invite")}
             style={pageStyles.primaryBtn}
           >
@@ -48,16 +42,22 @@ export default function ArchitectDashboard() {
             View Submitted Estimates
           </button>
           <button
-            onClick={() => navigate("/architect/audit")}
-            style={pageStyles.secondaryBtn}
+            onClick={() => navigate("/architect/comparison")}
+            style={pageStyles.primaryBtn}
           >
-            View Audit Trail
+            Compare Builder Estimates
           </button>
           <button
             onClick={() => navigate("/architect/projects")}
             style={pageStyles.secondaryBtn}
           >
             View Projects
+          </button>
+          <button
+            onClick={() => navigate("/architect/audit")}
+            style={pageStyles.secondaryBtn}
+          >
+            View Audit Trail
           </button>
         </div>
       </div>
