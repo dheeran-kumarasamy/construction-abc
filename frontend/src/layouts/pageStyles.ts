@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 export const pageStyles: Record<string, CSSProperties> = {
   page: {
     minHeight: "100vh",
-    padding: "32px",
+    padding: "clamp(12px, 5vw, 32px)",
     backgroundImage:
       "radial-gradient(900px 420px at 15% 10%, rgba(248, 250, 252, 0.48) 0%, rgba(248, 250, 252, 0.4) 45%, rgba(241, 245, 249, 0.38) 100%), url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=3200&q=95')",
     backgroundSize: "cover, cover",
@@ -22,10 +22,11 @@ export const pageStyles: Record<string, CSSProperties> = {
     ["--border" as any]: "#e5e7eb",
     ["--accent" as any]: "#0f766e",
     ["--accentSoft" as any]: "#ccfbf1",
+    overflowX: "hidden",
   },
   card: {
     background: "var(--card)",
-    padding: "32px",
+    padding: "clamp(16px, 4vw, 32px)",
     borderRadius: "16px",
     width: "min(760px, 100%)",
     border: "1px solid var(--border)",
@@ -33,6 +34,7 @@ export const pageStyles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: "24px",
+    boxSizing: "border-box",
   },
   header: {
     display: "flex",
@@ -44,15 +46,16 @@ export const pageStyles: Record<string, CSSProperties> = {
   },
   title: {
     margin: 0,
-    fontSize: "28px",
+    fontSize: "clamp(20px, 5vw, 28px)",
     fontWeight: 600,
     letterSpacing: "-0.5px",
     lineHeight: "1.2",
+    wordBreak: "break-word",
   },
   subtitle: {
     margin: "8px 0 0 0",
     color: "var(--muted)",
-    fontSize: "15px",
+    fontSize: "clamp(13px, 2vw, 15px)",
     lineHeight: "1.5",
   },
   meta: {
@@ -62,6 +65,7 @@ export const pageStyles: Record<string, CSSProperties> = {
     border: "1px solid var(--border)",
     padding: "6px 12px",
     borderRadius: "999px",
+    whiteSpace: "nowrap",
   },
   buttonRow: {
     display: "flex",
@@ -76,7 +80,7 @@ export const pageStyles: Record<string, CSSProperties> = {
   },
   formGrid: {
     display: "grid",
-    gridTemplateColumns: "2fr 1fr 1fr auto",
+    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
     gap: "12px",
   },
   field: {
@@ -90,42 +94,49 @@ export const pageStyles: Record<string, CSSProperties> = {
     color: "var(--ink)",
   },
   input: {
-    minWidth: "220px",
+    minWidth: "0",
+    width: "100%",
     height: "42px",
     padding: "0 14px",
     borderRadius: "10px",
     border: "1px solid var(--border)",
     fontSize: "15px",
     transition: "border-color 0.2s",
+    boxSizing: "border-box",
   },
   inputSm: {
-    width: "120px",
+    width: "clamp(100px, 20vw, 120px)",
     height: "40px",
     padding: "0 12px",
     borderRadius: "10px",
     border: "1px solid var(--border)",
     fontSize: "15px",
+    boxSizing: "border-box",
   },
   select: {
-    minWidth: "220px",
+    minWidth: "0",
+    width: "100%",
     height: "42px",
     borderRadius: "10px",
     border: "1px solid var(--border)",
     padding: "0 12px",
     background: "#ffffff",
     fontSize: "15px",
+    boxSizing: "border-box",
   },
   checkboxRow: {
     display: "flex",
     alignItems: "center",
     gap: "10px",
     fontSize: "15px",
+    flexWrap: "wrap",
   },
   actions: {
     display: "flex",
     justifyContent: "flex-end",
     gap: "12px",
     marginTop: "8px",
+    flexWrap: "wrap",
   },
   primaryBtn: {
     background: "var(--accent)",
@@ -138,6 +149,7 @@ export const pageStyles: Record<string, CSSProperties> = {
     fontWeight: 600,
     fontSize: "15px",
     transition: "transform 0.1s, box-shadow 0.2s",
+    whiteSpace: "nowrap",
   },
   secondaryBtn: {
     background: "transparent",
@@ -148,26 +160,31 @@ export const pageStyles: Record<string, CSSProperties> = {
     borderRadius: "10px",
     cursor: "pointer",
     fontSize: "15px",
+    whiteSpace: "nowrap",
   },
   table: {
     width: "100%",
     borderCollapse: "collapse",
-    fontSize: "15px",
+    fontSize: "clamp(12px, 2vw, 15px)",
+    tableLayout: "auto",
   },
   th: {
     textAlign: "left",
-    padding: "12px 14px",
+    padding: "clamp(8px, 2vw, 12px) clamp(8px, 2vw, 14px)",
     borderBottom: "2px solid var(--border)",
     color: "var(--muted)",
     fontWeight: 600,
-    fontSize: "14px",
+    fontSize: "clamp(11px, 1.5vw, 14px)",
     textTransform: "uppercase",
     letterSpacing: "0.5px",
+    wordBreak: "break-word",
   },
   td: {
-    padding: "14px 14px",
+    padding: "clamp(10px, 2vw, 14px) clamp(8px, 2vw, 14px)",
     borderBottom: "1px solid var(--border)",
     verticalAlign: "middle",
+    wordBreak: "break-word",
+    overflowWrap: "break-word",
   },
   rowEven: {
     background: "#ffffff",
@@ -192,7 +209,7 @@ export const pageStyles: Record<string, CSSProperties> = {
     fontSize: "15px",
   },
   subtext: {
-    fontSize: "15px",
+    fontSize: "clamp(13px, 2vw, 15px)",
     color: "var(--muted)",
     lineHeight: "1.6",
   },
@@ -213,8 +230,8 @@ export const pageStyles: Record<string, CSSProperties> = {
   tileBtn: {
     background: "var(--card)",
     borderRadius: "14px",
-    padding: "28px",
-    fontSize: "18px",
+    padding: "clamp(16px, 4vw, 28px)",
+    fontSize: "clamp(14px, 3vw, 18px)",
     fontWeight: 600,
     border: "1px solid var(--border)",
     cursor: "pointer",
@@ -232,6 +249,7 @@ export const pageStyles: Record<string, CSSProperties> = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: "16px",
+    flexWrap: "wrap",
   },
   controls: {
     display: "flex",
@@ -250,6 +268,7 @@ export const pageStyles: Record<string, CSSProperties> = {
     fontSize: "13px",
     textTransform: "capitalize",
     fontWeight: 500,
+    whiteSpace: "nowrap",
   },
   statusSent: {
     background: "var(--accentSoft)",
@@ -259,6 +278,7 @@ export const pageStyles: Record<string, CSSProperties> = {
     fontSize: "13px",
     textTransform: "capitalize",
     fontWeight: 500,
+    whiteSpace: "nowrap",
   },
   statusFailed: {
     background: "#fee2e2",
@@ -268,5 +288,6 @@ export const pageStyles: Record<string, CSSProperties> = {
     fontSize: "13px",
     textTransform: "capitalize",
     fontWeight: 500,
+    whiteSpace: "nowrap",
   },
 };
