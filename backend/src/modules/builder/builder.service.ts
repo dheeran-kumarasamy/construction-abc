@@ -59,9 +59,9 @@ async function assertBuilderProjectAccess(userId: string, projectId: string) {
 export async function getProjectBOQItems(projectId: string, userId: string) {
   await assertBuilderProjectAccess(userId, projectId);
 
-  // Get BOQ file and parse it
+  // Get BOQ data - prefer parsed_data for serverless compatibility
   const boqResult = await pool.query(
-    `SELECT b.file_path, b.column_mapping
+    `SELECT b.file_path, b.column_mapping, b.parsed_data
      FROM boqs b
      WHERE b.project_id = $1`,
     [projectId]
@@ -71,8 +71,26 @@ export async function getProjectBOQItems(projectId: string, userId: string) {
     return [];
   }
 
-  const { file_path, column_mapping } = boqResult.rows[0];
+  const { file_path, column_mapping, parsed_data } = boqResult.rows[0];
   
+  // If parsed_data exists, use it (for serverless/Vercel)
+  if (parsed_data && Array.isArray(parsed_data)) {
+    return parsed_data.map((item: any, index: number) => {
+      const qtyStr = String(item.qty || "0");
+      const qty = parseFloat(qtyStr.replace(/[^0-9.]/g, "")) || 0;
+      
+      return {
+        id: index + 1,
+        item: String(item.item || "").trim(),
+        qty,
+        uom: String(item.uom || "").trim(),
+        rate: 0,
+        total: 0,
+      };
+    }).filter((item: any) => item.item && item.qty > 0);
+  }
+  
+  // Fallback to file parsing (for local development with old data)
   // Resolve the file path to absolute
   const absolutePath = path.isAbsolute(file_path) 
     ? file_path 
