@@ -7,6 +7,7 @@ import {
 } from "../../services/basePricingStore";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
+import TableWrapper from "../../components/TableWrapper";
 import { apiUrl } from "../../services/api";
 
 interface ColumnMapping {
@@ -317,24 +318,26 @@ export default function BuilderBasePricing() {
                 {previewData.length > 0 && (
                   <>
                     <h3 style={{ ...pageStyles.subtitle, marginTop: "2rem" }}>Preview (First 5 Rows)</h3>
-                    <table style={pageStyles.table}>
-                      <thead>
-                        <tr>
-                          {availableColumns.map((col) => (
-                            <th key={col}>{col}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {previewData.slice(0, 5).map((row, idx) => (
-                          <tr key={idx}>
+                    <TableWrapper>
+                      <table style={pageStyles.table}>
+                        <thead>
+                          <tr>
                             {availableColumns.map((col) => (
-                              <td key={col}>{row[col]}</td>
+                              <th key={col}>{col}</th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {previewData.slice(0, 5).map((row, idx) => (
+                            <tr key={idx}>
+                              {availableColumns.map((col) => (
+                                <td key={col}>{row[col]}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </TableWrapper>
                   </>
                 )}
 
@@ -362,26 +365,28 @@ export default function BuilderBasePricing() {
         {items.length > 0 && (
           <>
             <h3 style={{ ...pageStyles.subtitle, marginTop: "3rem" }}>Current Base Pricing</h3>
-            <table style={pageStyles.table}>
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Rate</th>
-                  <th>UOM</th>
-                  <th>Category</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((it, idx) => (
-                  <tr key={idx}>
-                    <td>{it.item}</td>
-                    <td>{it.rate}</td>
-                    <td>{it.uom}</td>
-                    <td>{it.category}</td>
+            <TableWrapper>
+              <table style={pageStyles.table}>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Rate</th>
+                    <th>UOM</th>
+                    <th>Category</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {items.map((it, idx) => (
+                    <tr key={idx}>
+                      <td>{it.item}</td>
+                      <td>{it.rate}</td>
+                      <td>{it.uom}</td>
+                      <td>{it.category}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableWrapper>
 
             <button onClick={handleClear} style={pageStyles.secondaryBtn}>
               Clear All

@@ -49,6 +49,121 @@ button {
 button:hover {
   border-color: #646cff;
 }
+
+/* Responsive table wrapper */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 10px;
+  border: 1px solid var(--border, #e5e7eb);
+}
+
+.table-wrapper table {
+  min-width: 100%;
+}
+
+/* Media queries for responsive design */
+@media (max-width: 768px) {
+  body {
+    min-width: 320px;
+  }
+
+  .page-container {
+    padding: 16px;
+  }
+
+  .responsive-card {
+    padding: 20px !important;
+  }
+
+  .responsive-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .form-grid-responsive {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Stack buttons on mobile */
+  .button-row {
+    flex-direction: column;
+  }
+
+  .button-row > button {
+    width: 100%;
+  }
+
+  /* Improve input sizing on mobile */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  select,
+  textarea {
+    min-width: unset;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Make tables more readable on mobile */
+  .table-wrapper {
+    border-radius: 8px;
+  }
+
+  table {
+    font-size: 13px !important;
+  }
+
+  table td,
+  table th {
+    padding: 10px 8px !important;
+  }
+
+  /* Improve form inputs */
+  .form-row {
+    flex-direction: column;
+  }
+
+  .form-row input,
+  .form-row select,
+  .form-row textarea {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    min-width: 320px;
+  }
+
+  .page-container {
+    padding: 12px;
+  }
+
+  .responsive-card {
+    padding: 16px !important;
+  }
+
+  h1, h2 {
+    font-size: 1.5em;
+  }
+
+  h3, h4 {
+    font-size: 1.1em;
+  }
+
+  /* Smaller text on very small screens */
+  table {
+    font-size: 12px !important;
+  }
+
+  table td,
+  table th {
+    padding: 8px 6px !important;
+  }
+}
+
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;

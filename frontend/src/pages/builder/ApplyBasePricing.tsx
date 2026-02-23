@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
+import TableWrapper from "../../components/TableWrapper";
 import { getBasePricing } from "../../services/basePricingStore";
 import { apiUrl } from "../../services/api";
 
@@ -367,7 +368,7 @@ export default function ApplyBasePricing() {
             <h3 style={{ ...pageStyles.subtitle, marginTop: "2rem" }}>
               BOQ Items & Pricing
             </h3>
-            <div style={{ overflowX: "auto" }}>
+            <TableWrapper>
               <table style={pageStyles.table}>
                 <thead>
                   <tr>
@@ -405,7 +406,7 @@ export default function ApplyBasePricing() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableWrapper>
 
             {/* Totals Section */}
             <div
