@@ -132,7 +132,22 @@ export default function ProjectsList() {
                         )}
                       </div>
                     ) : (
-                      <span style={{ color: '#aaa' }}>No BOQ</span>
+                      <button
+                        onClick={() => navigate('/architect/boq-upload')}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#0f766e',
+                          textDecoration: 'underline',
+                          cursor: 'pointer',
+                          padding: 0,
+                          font: 'inherit',
+                          fontWeight: 500
+                        }}
+                        title={`Upload BOQ for ${p.name}`}
+                      >
+                        Upload BOQ
+                      </button>
                     )}
                   </td>
                 </tr>
