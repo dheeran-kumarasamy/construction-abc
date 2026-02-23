@@ -13,6 +13,11 @@ export async function saveOrUpdateBOQ(
   try {
     await client.query("BEGIN");
 
+    // Parse the file to extract data for database storage
+    const fs = require("fs");
+    const buffer = fs.readFileSync(file.path);
+    const parsed = await parseBOQFile(buffer, file.mimetype, columnMapping);
+
     // Check if BOQ already exists for this project
     const existingBOQ = await client.query(
       "SELECT * FROM boqs WHERE project_id = $1",
@@ -31,11 +36,11 @@ export async function saveOrUpdateBOQ(
       const result = await client.query(
         `UPDATE boqs 
          SET file_name = $1, file_path = $2, file_type = $3, 
-             file_size = $4, column_mapping = $5, uploaded_at = CURRENT_TIMESTAMP
-         WHERE project_id = $6
+             file_size = $4, column_mapping = $5, parsed_data = $6, uploaded_at = CURRENT_TIMESTAMP
+         WHERE project_id = $7
          RETURNING *`,
         [file.originalname, file.path, file.mimetype, file.size, 
-         columnMapping ? JSON.stringify(columnMapping) : null, projectId]
+         JSON.stringify(parsed.mapping), JSON.stringify(parsed.items), projectId]
       );
 
       await client.query("COMMIT");
@@ -43,11 +48,11 @@ export async function saveOrUpdateBOQ(
     } else {
       // Insert new BOQ
       const result = await client.query(
-        `INSERT INTO boqs (project_id, uploaded_by, file_name, file_path, file_type, file_size, column_mapping)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO boqs (project_id, uploaded_by, file_name, file_path, file_type, file_size, column_mapping, parsed_data)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
         [projectId, userId, file.originalname, file.path, file.mimetype, file.size,
-         columnMapping ? JSON.stringify(columnMapping) : null]
+         JSON.stringify(parsed.mapping), JSON.stringify(parsed.items)]
       );
 
       // Update project with boq_id
