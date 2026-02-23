@@ -42,6 +42,7 @@ export async function inviteUser(req: Request, res: Response) {
   try {
     const { email, role = "builder", projectId } = req.body || {};
     const orgId = (req as any).user?.organizationId || null;
+    const referer = req.headers.referer;
 
     if (!email) {
       return res.status(400).json({ error: "email is required" });
@@ -56,7 +57,7 @@ export async function inviteUser(req: Request, res: Response) {
       return res.status(400).json({ error: "projectId is required for project invites" });
     }
 
-    const result = await service.createInvite(email, role, orgId, projectId);
+    const result = await service.createInvite(email, role, orgId, projectId, referer);
 
     res.json(result);
   } catch (err: any) {
@@ -67,6 +68,7 @@ export async function inviteUser(req: Request, res: Response) {
 export async function getInvites(req: Request, res: Response) {
   try {
     const orgId = (req as any).user?.organizationId || null;
+    const referer = req.headers.referer;
 
     if (!orgId) {
       return res.status(403).json({ error: "Missing organization context" });
@@ -87,6 +89,7 @@ export async function getInvites(req: Request, res: Response) {
         status === "open" || status === "accepted" || status === "expired"
           ? status
           : undefined,
+      referer,
     });
 
     res.json(result);

@@ -4,10 +4,31 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
-const FRONTEND_BASE_URL = (process.env.VITE_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
 
-function buildInviteLink(token: string) {
-  return `${FRONTEND_BASE_URL}/accept-invite?token=${token}`;
+function getFrontendBaseUrl(referer?: string): string {
+  // Try to use the referer header first (most reliable in production)
+  if (referer) {
+    try {
+      const url = new URL(referer);
+      return `${url.protocol}//${url.host}`;
+    } catch (e) {
+      // Fall through to env variables
+    }
+  }
+
+  // Fall back to environment variables
+  const envUrl = process.env.FRONTEND_URL || process.env.VITE_FRONTEND_URL;
+  if (envUrl) {
+    return envUrl.replace(/\/$/, "");
+  }
+
+  // Final fallback for local development
+  return "http://localhost:5173";
+}
+
+function buildInviteLink(token: string, referer?: string): string {
+  const baseUrl = getFrontendBaseUrl(referer);
+  return `${baseUrl}/accept-invite?token=${token}`;
 }
 
 export async function loginUser(email: string, password: string) {
@@ -128,7 +149,8 @@ export async function createInvite(
   email: string,
   role: string,
   organizationId: string,
-  projectId?: string | null
+  projectId?: string | null,
+  referer?: string
 ) {
   const token = crypto.randomBytes(32).toString("hex");
 
@@ -141,7 +163,7 @@ export async function createInvite(
     [email, role, organizationId || null, projectId || null, token, expiresAt]
   );
 
-  const inviteLink = buildInviteLink(token);
+  const inviteLink = buildInviteLink(token, referer);
 
   return { inviteLink };
 }
@@ -152,6 +174,7 @@ export async function listInvites(
     role?: string;
     projectId?: string;
     status?: "open" | "accepted" | "expired";
+    referer?: string;
   }
 ) {
   const { role, projectId, status } = filters || {};
@@ -201,6 +224,6 @@ export async function listInvites(
     createdAt: row.created_at,
     expiresAt: row.expires_at,
     acceptedAt: row.accepted_at,
-    inviteLink: buildInviteLink(row.token),
+    inviteLink: buildInviteLink(row.token, filters?.referer),
   }));
 }
