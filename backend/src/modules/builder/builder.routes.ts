@@ -5,6 +5,7 @@ import {
   getBuilderBasePricing,
   createOrUpdateEstimate,
   getSubmittedEstimates,
+  optimizeEstimateTarget,
 } from "./builder.controller";
 
 const router = Router();
@@ -20,6 +21,9 @@ router.get("/base-pricing", getBuilderBasePricing);
 
 // Create or update estimate with pricing
 router.post("/projects/:projectId/estimate", createOrUpdateEstimate);
+
+// Get optimization suggestions to reach target total
+router.post("/projects/:projectId/optimize-target", optimizeEstimateTarget);
 
 // Get submitted estimates for logged-in builder
 router.get("/submitted-estimates", getSubmittedEstimates);

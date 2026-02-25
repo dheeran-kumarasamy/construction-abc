@@ -3,6 +3,30 @@ import XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
 
+interface OptimizationInputItem {
+  id: number;
+  item: string;
+  qty: number;
+  uom: string;
+  rate: number;
+  total: number;
+  category?: string;
+}
+
+interface OptimizationSuggestion {
+  suggestionId: string;
+  boqItemId: number;
+  type: "brand_swap" | "finish_change" | "spec_variant" | "vendor_switch";
+  reason: string;
+  oldRate: number;
+  newRate: number;
+  rateDelta: number;
+  totalDelta: number;
+  confidence: number;
+  blocked: boolean;
+  blockReason?: string;
+}
+
 export async function getAvailableProjects(userId: string) {
   // Get projects where this specific builder has accepted an invite
   const result = await pool.query(
@@ -158,6 +182,136 @@ export async function getBuilderBasePricing(builderOrgId: string) {
     uom: row.uom,
     category: row.category,
   }));
+}
+
+function isArchitectLockedByText(itemName: string) {
+  const lockedPattern = /as per architect|architect specified|mandatory|must use|required by architect|do not change|non[-\s]?negotiable/i;
+  return lockedPattern.test(itemName);
+}
+
+function isQualityCritical(itemName: string) {
+  const qualityPattern = /structural|steel|rebar|cement|concrete|fire|waterproof|electrical safety|load bearing|grade\s*[a-z0-9]+|fe\s*500|isi|iso/i;
+  return qualityPattern.test(itemName);
+}
+
+function inferSuggestionType(itemName: string): OptimizationSuggestion["type"] {
+  const value = itemName.toLowerCase();
+  if (/paint|finish|coating|texture|polish/.test(value)) {
+    return "finish_change";
+  }
+  if (/brand|cement|steel|tile|sanitary|fixture/.test(value)) {
+    return "brand_swap";
+  }
+  if (/supplier|vendor|transport|freight|delivery/.test(value)) {
+    return "vendor_switch";
+  }
+  return "spec_variant";
+}
+
+function getMaxReductionPct(item: OptimizationInputItem) {
+  const category = String(item.category || "material").toLowerCase();
+  if (category.includes("labor") || category.includes("labour")) {
+    return 0.06;
+  }
+  if (category.includes("mach")) {
+    return 0.08;
+  }
+  if (category.includes("other")) {
+    return 0.05;
+  }
+  return 0.1;
+}
+
+export async function suggestTargetOptimizations(
+  projectId: string,
+  userId: string,
+  targetTotal: number,
+  pricedItems: OptimizationInputItem[]
+) {
+  await assertBuilderProjectAccess(userId, projectId);
+
+  if (!Number.isFinite(targetTotal) || targetTotal <= 0) {
+    throw new Error("Target total must be a positive number");
+  }
+
+  const currentTotal = pricedItems.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const gapToClose = currentTotal - targetTotal;
+
+  const suggestions: OptimizationSuggestion[] = pricedItems
+    .filter((item) => Number(item.qty || 0) > 0 && Number(item.rate || 0) > 0)
+    .map((item) => {
+      const itemName = String(item.item || "");
+      const architectLocked = isArchitectLockedByText(itemName);
+      const qualityCritical = isQualityCritical(itemName);
+
+      if (architectLocked || qualityCritical) {
+        return {
+          suggestionId: `opt-${item.id}`,
+          boqItemId: item.id,
+          type: inferSuggestionType(itemName),
+          reason: "No pricing tweak proposed due to quality/architect guardrails",
+          oldRate: Number(item.rate || 0),
+          newRate: Number(item.rate || 0),
+          rateDelta: 0,
+          totalDelta: 0,
+          confidence: 0.96,
+          blocked: true,
+          blockReason: architectLocked
+            ? "Architect explicit requirement detected"
+            : "Quality-critical item protected by guardrail",
+        };
+      }
+
+      const maxReductionPct = getMaxReductionPct(item);
+      const currentRate = Number(item.rate || 0);
+      const newRate = Number((currentRate * (1 - maxReductionPct)).toFixed(2));
+      const rateDelta = Number((newRate - currentRate).toFixed(2));
+      const totalDelta = Number((rateDelta * Number(item.qty || 0)).toFixed(2));
+
+      return {
+        suggestionId: `opt-${item.id}`,
+        boqItemId: item.id,
+        type: inferSuggestionType(itemName),
+        reason:
+          "Consider equivalent compliant alternative to reduce cost without changing mandatory quality requirements",
+        oldRate: currentRate,
+        newRate,
+        rateDelta,
+        totalDelta,
+        confidence: 0.72,
+        blocked: false,
+      };
+    });
+
+  const actionable = suggestions
+    .filter((s) => !s.blocked && s.totalDelta < 0)
+    .sort((a, b) => a.totalDelta - b.totalDelta);
+
+  const blocked = suggestions.filter((s) => s.blocked);
+
+  const selected: OptimizationSuggestion[] = [];
+  let accumulatedSavings = 0;
+  const neededSavings = Math.max(gapToClose, 0);
+
+  for (const suggestion of actionable) {
+    selected.push(suggestion);
+    accumulatedSavings += Math.abs(suggestion.totalDelta);
+
+    if (neededSavings > 0 && accumulatedSavings >= neededSavings) {
+      break;
+    }
+  }
+
+  const maxSuggestions = 12;
+  const finalSuggestions = [...selected, ...blocked.slice(0, Math.max(0, maxSuggestions - selected.length))].slice(0, maxSuggestions);
+
+  return {
+    currentTotal,
+    targetTotal,
+    gapToClose,
+    potentialSavings: actionable.reduce((sum, s) => sum + Math.abs(s.totalDelta), 0),
+    suggestions: finalSuggestions,
+  };
 }
 
 export async function createOrUpdateEstimate(
