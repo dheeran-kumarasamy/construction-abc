@@ -44,7 +44,7 @@ app.options(/.*/, cors(corsOptions));
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", timestamp: Date.now() });
 });
 
 app.get(["/favicon.ico", "/favicon.png"], (_req, res) => {
