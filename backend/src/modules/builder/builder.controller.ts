@@ -110,3 +110,51 @@ export async function getSubmittedEstimates(req: Request, res: Response) {
     });
   }
 }
+
+export async function optimizeEstimateTarget(req: Request, res: Response) {
+  try {
+    const { projectId } = req.params;
+    const projectIdStr = Array.isArray(projectId) ? projectId[0] : projectId;
+    const { targetTotal, pricedItems } = req.body as {
+      targetTotal?: number;
+      pricedItems?: Array<{
+        id: number;
+        item: string;
+        qty: number;
+        uom: string;
+        rate: number;
+        total: number;
+        category?: string;
+      }>;
+    };
+
+    const user = (req as any).user;
+    const userId = user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (!Number.isFinite(targetTotal) || Number(targetTotal) <= 0) {
+      return res.status(400).json({ error: "targetTotal must be a positive number" });
+    }
+
+    if (!Array.isArray(pricedItems) || pricedItems.length === 0) {
+      return res.status(400).json({ error: "pricedItems are required" });
+    }
+
+    const result = await service.suggestTargetOptimizations(
+      projectIdStr,
+      userId,
+      Number(targetTotal),
+      pricedItems
+    );
+
+    return res.json(result);
+  } catch (error) {
+    console.error("Optimize estimate target error:", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to optimize target",
+    });
+  }
+}

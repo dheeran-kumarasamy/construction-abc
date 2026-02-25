@@ -36,6 +36,21 @@ interface MarginConfig {
   machineryUplift: number;
 }
 
+interface OptimizerSuggestion {
+  suggestionId: string;
+  boqItemId: number;
+  type: "brand_swap" | "finish_change" | "spec_variant" | "vendor_switch";
+  reason: string;
+  oldRate: number;
+  newRate: number;
+  rateDelta: number;
+  totalDelta: number;
+  confidence: number;
+  blocked: boolean;
+  blockReason?: string;
+  decision?: "accepted" | "declined";
+}
+
 export default function ApplyBasePricing() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [basePricing, setBasePricing] = useState<BasePriceItem[]>([]);
@@ -49,6 +64,10 @@ export default function ApplyBasePricing() {
   });
   const [notes, setNotes] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [targetTotal, setTargetTotal] = useState<string>("");
+  const [optimizerLoading, setOptimizerLoading] = useState(false);
+  const [optimizerError, setOptimizerError] = useState("");
+  const [optimizerSuggestions, setOptimizerSuggestions] = useState<OptimizerSuggestion[]>([]);
 
   useEffect(() => {
     fetchProjects();
@@ -118,6 +137,9 @@ export default function ApplyBasePricing() {
 
   async function handleProjectChange(projectId: string) {
     setSelectedProjectId(projectId);
+    setTargetTotal("");
+    setOptimizerError("");
+    setOptimizerSuggestions([]);
     
     if (!projectId) {
       setBoqItems([]);
@@ -209,6 +231,87 @@ export default function ApplyBasePricing() {
     updated[index].rate = newRate;
     updated[index].total = updated[index].qty * newRate;
     setPricedItems(updated);
+  }
+
+  async function handleGenerateSuggestions() {
+    if (!selectedProjectId) {
+      setOptimizerError("Select a project first");
+      return;
+    }
+
+    const parsedTarget = Number(targetTotal);
+    if (!Number.isFinite(parsedTarget) || parsedTarget <= 0) {
+      setOptimizerError("Enter a valid target total");
+      return;
+    }
+
+    setOptimizerLoading(true);
+    setOptimizerError("");
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        apiUrl(`/api/builder/projects/${selectedProjectId}/optimize-target`),
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            targetTotal: parsedTarget,
+            pricedItems,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to generate suggestions");
+      }
+
+      const suggestions = Array.isArray(data.suggestions)
+        ? (data.suggestions as OptimizerSuggestion[])
+        : [];
+      setOptimizerSuggestions(suggestions);
+    } catch (err) {
+      setOptimizerError(err instanceof Error ? err.message : "Failed to generate suggestions");
+    } finally {
+      setOptimizerLoading(false);
+    }
+  }
+
+  function handleSuggestionDecision(
+    suggestionId: string,
+    decision: "accepted" | "declined"
+  ) {
+    const suggestion = optimizerSuggestions.find((s) => s.suggestionId === suggestionId);
+    if (!suggestion || suggestion.blocked) {
+      return;
+    }
+
+    if (decision === "accepted") {
+      setPricedItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== suggestion.boqItemId) {
+            return item;
+          }
+          const newRate = Number(suggestion.newRate || 0);
+          return {
+            ...item,
+            rate: newRate,
+            total: Number((item.qty * newRate).toFixed(2)),
+          };
+        })
+      );
+    }
+
+    setOptimizerSuggestions((prev) =>
+      prev.map((s) =>
+        s.suggestionId === suggestionId
+          ? { ...s, decision }
+          : s
+      )
+    );
   }
 
   async function handleSubmit() {
@@ -313,6 +416,10 @@ export default function ApplyBasePricing() {
   }
 
   const totals = calculateTotals();
+  const parsedTargetTotal = Number(targetTotal || 0);
+  const targetGap = Number.isFinite(parsedTargetTotal) && parsedTargetTotal > 0
+    ? totals.grandTotal - parsedTargetTotal
+    : null;
 
   return (
     <div style={pageStyles.page}>
@@ -364,6 +471,106 @@ export default function ApplyBasePricing() {
 
         {!loading && pricedItems.length > 0 && (
           <>
+            <div
+              style={{
+                marginTop: "1rem",
+                padding: "1rem",
+                border: "1px solid #ccfbf1",
+                backgroundColor: "#f0fdfa",
+                borderRadius: "8px",
+              }}
+            >
+              <h3 style={{ ...pageStyles.subtitle, margin: "0 0 0.75rem 0", color: "#0f766e" }}>
+                Target Price Optimizer (MVP)
+              </h3>
+
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Enter target grand total"
+                  value={targetTotal}
+                  onChange={(e) => setTargetTotal(e.target.value)}
+                  style={{ ...pageStyles.input, width: "280px" }}
+                />
+                <button
+                  onClick={handleGenerateSuggestions}
+                  disabled={optimizerLoading}
+                  style={pageStyles.primaryBtn}
+                >
+                  {optimizerLoading ? "Generating..." : "Get AI Suggestions"}
+                </button>
+              </div>
+
+              {targetGap !== null && (
+                <p style={{ marginTop: "0.75rem", marginBottom: 0, color: "#0f766e", fontWeight: 500 }}>
+                  Current vs Target Gap: ₹{targetGap.toFixed(2)}
+                </p>
+              )}
+
+              {optimizerError && (
+                <p style={{ ...pageStyles.error, marginTop: "0.75rem", marginBottom: 0 }}>
+                  {optimizerError}
+                </p>
+              )}
+
+              {optimizerSuggestions.length > 0 && (
+                <div style={{ marginTop: "1rem", display: "grid", gap: "0.75rem" }}>
+                  {optimizerSuggestions.map((suggestion) => (
+                    <div
+                      key={suggestion.suggestionId}
+                      style={{
+                        border: "1px solid #d1d5db",
+                        borderRadius: "8px",
+                        padding: "0.75rem",
+                        backgroundColor: "#ffffff",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+                        <strong>
+                          Item #{suggestion.boqItemId} • {suggestion.type.replace("_", " ")}
+                        </strong>
+                        <span>
+                          Rate: ₹{suggestion.oldRate.toFixed(2)} → ₹{suggestion.newRate.toFixed(2)}
+                        </span>
+                      </div>
+
+                      <p style={{ margin: "0.5rem 0", color: "#334155" }}>{suggestion.reason}</p>
+
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                        <span style={{ color: "#0f766e", fontWeight: 500 }}>
+                          Total impact: ₹{suggestion.totalDelta.toFixed(2)} • Confidence: {(suggestion.confidence * 100).toFixed(0)}%
+                        </span>
+
+                        {suggestion.blocked ? (
+                          <span style={{ color: "#b91c1c", fontWeight: 600 }}>
+                            Guardrail: {suggestion.blockReason || "Blocked"}
+                          </span>
+                        ) : (
+                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                            <button
+                              onClick={() => handleSuggestionDecision(suggestion.suggestionId, "accepted")}
+                              disabled={suggestion.decision === "accepted"}
+                              style={pageStyles.primaryBtn}
+                            >
+                              {suggestion.decision === "accepted" ? "Accepted" : "Accept"}
+                            </button>
+                            <button
+                              onClick={() => handleSuggestionDecision(suggestion.suggestionId, "declined")}
+                              disabled={suggestion.decision === "declined"}
+                              style={pageStyles.secondaryBtn}
+                            >
+                              {suggestion.decision === "declined" ? "Declined" : "Decline"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* BOQ Items with Pricing */}
             <h3 style={{ ...pageStyles.subtitle, marginTop: "2rem" }}>
               BOQ Items & Pricing

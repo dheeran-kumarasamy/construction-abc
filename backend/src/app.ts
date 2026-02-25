@@ -1,5 +1,5 @@
 import express from "express";
-import cors from "cors";
+import cors, { CorsOptions } from "cors";
 import authRoutes from "./modules/auth/auth.routes";
 import projectRoutes from "./modules/projects/project.routes";
 import boqRoutes from "./modules/boq/boq.routes";
@@ -11,7 +11,36 @@ import builderRoutes from "./modules/builder/builder.routes";
 
 export const app = express();
 
-app.use(cors());
+const configuredOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsOptions: CorsOptions = {
+  origin(origin, callback) {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    const isLocalOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+    const isVercelFrontendPreview = /^https:\/\/.*-frontend-.*\.vercel\.app$/i.test(origin);
+    const isConfiguredOrigin = configuredOrigins.includes(origin);
+
+    if (isLocalOrigin || isVercelFrontendPreview || isConfiguredOrigin) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`Origin not allowed by CORS: ${origin}`));
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
