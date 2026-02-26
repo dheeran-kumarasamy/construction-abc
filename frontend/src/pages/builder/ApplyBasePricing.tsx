@@ -72,6 +72,7 @@ export default function ApplyBasePricing() {
   const [optimizerError, setOptimizerError] = useState("");
   const [optimizerSuggestions, setOptimizerSuggestions] = useState<OptimizerSuggestion[]>([]);
   const [optimizerEngineInfo, setOptimizerEngineInfo] = useState<string>("");
+  const [optimizerBaseRatesByItem, setOptimizerBaseRatesByItem] = useState<Record<number, number>>({});
 
   useEffect(() => {
     fetchProjects();
@@ -145,6 +146,7 @@ export default function ApplyBasePricing() {
     setOptimizerError("");
     setOptimizerSuggestions([]);
     setOptimizerEngineInfo("");
+    setOptimizerBaseRatesByItem({});
     
     if (!projectId) {
       setBoqItems([]);
@@ -279,6 +281,13 @@ export default function ApplyBasePricing() {
       const suggestions = Array.isArray(data.suggestions)
         ? (data.suggestions as OptimizerSuggestion[])
         : [];
+
+      const baseRates = pricedItems.reduce<Record<number, number>>((acc, item) => {
+        acc[item.id] = Number(item.rate || 0);
+        return acc;
+      }, {});
+
+      setOptimizerBaseRatesByItem(baseRates);
       setOptimizerSuggestions(suggestions);
 
       const engine = String(data?.suggestionEngine || "heuristic").toUpperCase();
@@ -327,12 +336,46 @@ export default function ApplyBasePricing() {
           };
         })
       );
+
+      setOptimizerSuggestions((prev) =>
+        prev.map((s) => {
+          if (s.boqItemId !== suggestion.boqItemId) {
+            return s;
+          }
+
+          if (s.suggestionId === suggestionId) {
+            return { ...s, decision: "accepted" };
+          }
+
+          return { ...s, decision: undefined };
+        })
+      );
+      return;
+    }
+
+    if (suggestion.decision === "accepted") {
+      const baseRate = Number(optimizerBaseRatesByItem[suggestion.boqItemId]);
+      if (Number.isFinite(baseRate) && baseRate >= 0) {
+        setPricedItems((prev) =>
+          prev.map((item) => {
+            if (item.id !== suggestion.boqItemId) {
+              return item;
+            }
+
+            return {
+              ...item,
+              rate: baseRate,
+              total: Number((item.qty * baseRate).toFixed(2)),
+            };
+          })
+        );
+      }
     }
 
     setOptimizerSuggestions((prev) =>
       prev.map((s) =>
         s.suggestionId === suggestionId
-          ? { ...s, decision }
+          ? { ...s, decision: "declined" }
           : s
       )
     );
@@ -388,6 +431,11 @@ export default function ApplyBasePricing() {
       setBoqItems([]);
       setPricedItems([]);
       setNotes("");
+      setTargetTotal("");
+      setOptimizerError("");
+      setOptimizerSuggestions([]);
+      setOptimizerEngineInfo("");
+      setOptimizerBaseRatesByItem({});
       loadMarginConfig();
     } catch (err) {
       console.error("Submit estimate error:", err);
@@ -444,6 +492,9 @@ export default function ApplyBasePricing() {
   const targetGap = Number.isFinite(parsedTargetTotal) && parsedTargetTotal > 0
     ? totals.grandTotal - parsedTargetTotal
     : null;
+  const acceptedSuggestions = optimizerSuggestions.filter((s) => s.decision === "accepted" && !s.blocked);
+  const acceptedImpact = acceptedSuggestions.reduce((sum, s) => sum + Number(s.totalDelta || 0), 0);
+  const acceptedCount = acceptedSuggestions.length;
 
   return (
     <div style={pageStyles.page}>
@@ -529,6 +580,20 @@ export default function ApplyBasePricing() {
               {targetGap !== null && (
                 <p style={{ marginTop: "0.75rem", marginBottom: 0, color: "#0f766e", fontWeight: 500 }}>
                   Current vs Target Gap: ₹{targetGap.toFixed(2)}
+                </p>
+              )}
+
+              {targetGap !== null && (
+                <p style={{ marginTop: "0.5rem", marginBottom: 0, color: targetGap <= 0 ? "#15803d" : "#1e293b", fontWeight: 600 }}>
+                  {targetGap <= 0
+                    ? `Target achieved. Current estimate is ₹${Math.abs(targetGap).toFixed(2)} below target.`
+                    : `Need ₹${targetGap.toFixed(2)} more reduction to reach target.`}
+                </p>
+              )}
+
+              {acceptedCount > 0 && (
+                <p style={{ marginTop: "0.5rem", marginBottom: 0, color: "#334155" }}>
+                  Accepted suggestions: {acceptedCount} • Net grand-total impact: ₹{acceptedImpact.toFixed(2)}
                 </p>
               )}
 
