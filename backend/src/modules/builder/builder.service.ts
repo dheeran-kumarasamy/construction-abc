@@ -40,6 +40,10 @@ interface LlmSuggestion {
   alternatives?: string[];
 }
 
+function getConfiguredLlmModel() {
+  return process.env.LLM_MODEL || "gpt-4o-mini";
+}
+
 export async function getAvailableProjects(userId: string) {
   // Get projects where this specific builder has accepted an invite
   const result = await pool.query(
@@ -272,7 +276,7 @@ async function generateLlmSuggestions(
     return [];
   }
 
-  const model = process.env.LLM_MODEL || "gpt-4o-mini";
+  const model = getConfiguredLlmModel();
   const payload = {
     model,
     temperature: 0.2,
@@ -500,11 +504,16 @@ export async function suggestTargetOptimizations(
     ...blockedSuggestions.slice(0, Math.max(0, maxSuggestions - selected.length)),
   ].slice(0, maxSuggestions);
 
+  const llmUsed = finalSuggestions.some((suggestion) => suggestion.source === "llm");
+
   return {
     currentTotal,
     targetTotal,
     gapToClose,
     potentialSavings: actionable.reduce((sum, s) => sum + Math.abs(s.totalDelta), 0),
+    suggestionEngine: llmUsed ? "llm" : "heuristic",
+    llmUsed,
+    llmModel: llmUsed ? getConfiguredLlmModel() : null,
     suggestions: finalSuggestions,
   };
 }

@@ -71,6 +71,7 @@ export default function ApplyBasePricing() {
   const [optimizerLoading, setOptimizerLoading] = useState(false);
   const [optimizerError, setOptimizerError] = useState("");
   const [optimizerSuggestions, setOptimizerSuggestions] = useState<OptimizerSuggestion[]>([]);
+  const [optimizerEngineInfo, setOptimizerEngineInfo] = useState<string>("");
 
   useEffect(() => {
     fetchProjects();
@@ -143,6 +144,7 @@ export default function ApplyBasePricing() {
     setTargetTotal("");
     setOptimizerError("");
     setOptimizerSuggestions([]);
+    setOptimizerEngineInfo("");
     
     if (!projectId) {
       setBoqItems([]);
@@ -250,6 +252,7 @@ export default function ApplyBasePricing() {
 
     setOptimizerLoading(true);
     setOptimizerError("");
+    setOptimizerEngineInfo("");
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
@@ -276,6 +279,11 @@ export default function ApplyBasePricing() {
         ? (data.suggestions as OptimizerSuggestion[])
         : [];
       setOptimizerSuggestions(suggestions);
+
+      const engine = String(data?.suggestionEngine || "heuristic").toUpperCase();
+      const model = data?.llmModel ? ` (${String(data.llmModel)})` : "";
+      const usedLabel = data?.llmUsed ? "LLM used" : "Fallback rules used";
+      setOptimizerEngineInfo(`Engine: ${engine}${model} • ${usedLabel}`);
     } catch (err) {
       setOptimizerError(err instanceof Error ? err.message : "Failed to generate suggestions");
     } finally {
@@ -514,6 +522,12 @@ export default function ApplyBasePricing() {
               {optimizerError && (
                 <p style={{ ...pageStyles.error, marginTop: "0.75rem", marginBottom: 0 }}>
                   {optimizerError}
+                </p>
+              )}
+
+              {optimizerEngineInfo && (
+                <p style={{ marginTop: "0.75rem", marginBottom: 0, color: "#475569", fontSize: "0.9rem" }}>
+                  {optimizerEngineInfo}
                 </p>
               )}
 
