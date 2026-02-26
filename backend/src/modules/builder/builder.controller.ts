@@ -117,6 +117,7 @@ export async function optimizeEstimateTarget(req: Request, res: Response) {
     const projectIdStr = Array.isArray(projectId) ? projectId[0] : projectId;
     const { targetTotal, pricedItems } = req.body as {
       targetTotal?: number;
+      hardFail?: boolean;
       pricedItems?: Array<{
         id: number;
         item: string;
@@ -133,6 +134,7 @@ export async function optimizeEstimateTarget(req: Request, res: Response) {
       };
     };
     const marginConfig = req.body?.marginConfig;
+    const hardFail = req.body?.hardFail;
 
     const user = (req as any).user;
     const userId = user?.userId;
@@ -154,7 +156,8 @@ export async function optimizeEstimateTarget(req: Request, res: Response) {
       userId,
       Number(targetTotal),
       pricedItems,
-      marginConfig
+      marginConfig,
+      Boolean(hardFail)
     );
 
     return res.json(result);

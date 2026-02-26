@@ -533,11 +533,14 @@ export async function suggestTargetOptimizations(
   userId: string,
   targetTotal: number,
   pricedItems: OptimizationInputItem[],
-  marginConfigInput?: Partial<MarginConfig>
+  marginConfigInput?: Partial<MarginConfig>,
+  hardFailInput?: boolean
 ) {
   await assertBuilderProjectAccess(userId, projectId);
 
   const marginConfig = normalizeMarginConfig(marginConfigInput);
+  const hardFail =
+    hardFailInput === true || String(process.env.LLM_HARD_FAIL || "").toLowerCase() === "true";
 
   if (!Number.isFinite(targetTotal) || targetTotal <= 0) {
     throw new Error("Target total must be a positive number");
@@ -589,6 +592,23 @@ export async function suggestTargetOptimizations(
 
   const llmResult = await generateLlmSuggestions(targetTotal, currentTotal, llmCandidates);
   const llmSuggestions = llmResult.suggestions;
+
+  if (hardFail && actionableItems.length > 0) {
+    if (!llmResult.configured) {
+      throw new Error("Hard fail enabled: OPENAI_API_KEY is missing; cannot run LLM optimization");
+    }
+
+    if (!llmResult.attempted) {
+      throw new Error("Hard fail enabled: LLM optimization was not attempted");
+    }
+
+    if (llmSuggestions.length === 0) {
+      throw new Error(
+        `Hard fail enabled: LLM returned no valid optimization suggestions (${llmResult.failureReason || "unknown_error"})`
+      );
+    }
+  }
+
   const llmByItem = new Map<number, LlmSuggestion[]>();
   llmSuggestions.forEach((suggestion) => {
     const existing = llmByItem.get(suggestion.boqItemId) || [];
@@ -630,6 +650,10 @@ export async function suggestTargetOptimizations(
           source: "llm",
         };
       });
+    }
+
+    if (hardFail) {
+      throw new Error(`Hard fail enabled: missing LLM suggestion for BOQ item ${item.id}`);
     }
 
       const maxReductionPct = getMaxReductionPct(item);
@@ -695,6 +719,7 @@ export async function suggestTargetOptimizations(
     llmSuggestionCount: llmSuggestions.length,
     llmFailureReason: llmResult.failureReason || null,
     llmModel: llmResult.model,
+    hardFail,
     marginConfig,
     suggestions: finalSuggestions,
   };
