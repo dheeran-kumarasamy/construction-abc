@@ -40,6 +40,14 @@ interface LlmSuggestion {
   alternatives?: string[];
 }
 
+interface LlmGenerationResult {
+  suggestions: LlmSuggestion[];
+  attempted: boolean;
+  configured: boolean;
+  model: string;
+  failureReason?: string;
+}
+
 function getConfiguredLlmModel() {
   return process.env.LLM_MODEL || "gpt-4o-mini";
 }
@@ -270,13 +278,20 @@ async function generateLlmSuggestions(
   targetTotal: number,
   currentTotal: number,
   candidateItems: OptimizationInputItem[]
-): Promise<LlmSuggestion[]> {
+): Promise<LlmGenerationResult> {
   const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY;
+  const model = getConfiguredLlmModel();
+
   if (!apiKey || candidateItems.length === 0) {
-    return [];
+    return {
+      suggestions: [],
+      attempted: false,
+      configured: Boolean(apiKey),
+      model,
+      failureReason: !apiKey ? "missing_api_key" : "no_actionable_items",
+    };
   }
 
-  const model = getConfiguredLlmModel();
   const payload = {
     model,
     temperature: 0.2,
@@ -325,7 +340,13 @@ async function generateLlmSuggestions(
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
       console.error("LLM suggestion API error:", response.status, errorText);
-      return [];
+      return {
+        suggestions: [],
+        attempted: true,
+        configured: true,
+        model,
+        failureReason: `api_error_${response.status}`,
+      };
     }
 
     const data = (await response.json()) as any;
@@ -333,7 +354,7 @@ async function generateLlmSuggestions(
     const parsed = extractJsonPayload(String(content || ""));
     const suggestions: any[] = Array.isArray(parsed?.suggestions) ? parsed.suggestions : [];
 
-    return suggestions
+    const normalized = suggestions
       .map((s: any) => ({
         boqItemId: Number(s?.boqItemId),
         type: String(s?.type || "spec_variant") as OptimizationSuggestion["type"],
@@ -352,9 +373,23 @@ async function generateLlmSuggestions(
           s.suggestedRate > 0 &&
           ["brand_swap", "finish_change", "spec_variant", "vendor_switch"].includes(s.type)
       );
+
+    return {
+      suggestions: normalized,
+      attempted: true,
+      configured: true,
+      model,
+      failureReason: normalized.length === 0 ? "empty_or_invalid_llm_output" : undefined,
+    };
   } catch (error) {
     console.error("LLM suggestion parse/generation failed:", error);
-    return [];
+    return {
+      suggestions: [],
+      attempted: true,
+      configured: true,
+      model,
+      failureReason: "request_exception",
+    };
   }
 }
 
@@ -414,7 +449,8 @@ export async function suggestTargetOptimizations(
     .sort((a, b) => Number(b.total || 0) - Number(a.total || 0))
     .slice(0, 10);
 
-  const llmSuggestions = await generateLlmSuggestions(targetTotal, currentTotal, llmCandidates);
+  const llmResult = await generateLlmSuggestions(targetTotal, currentTotal, llmCandidates);
+  const llmSuggestions = llmResult.suggestions;
   const llmByItem = new Map<number, LlmSuggestion[]>();
   llmSuggestions.forEach((suggestion) => {
     const existing = llmByItem.get(suggestion.boqItemId) || [];
@@ -513,7 +549,12 @@ export async function suggestTargetOptimizations(
     potentialSavings: actionable.reduce((sum, s) => sum + Math.abs(s.totalDelta), 0),
     suggestionEngine: llmUsed ? "llm" : "heuristic",
     llmUsed,
-    llmModel: llmUsed ? getConfiguredLlmModel() : null,
+    llmAttempted: llmResult.attempted,
+    llmConfigured: llmResult.configured,
+    llmCandidateCount: llmCandidates.length,
+    llmSuggestionCount: llmSuggestions.length,
+    llmFailureReason: llmResult.failureReason || null,
+    llmModel: llmResult.model,
     suggestions: finalSuggestions,
   };
 }

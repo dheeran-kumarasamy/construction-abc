@@ -283,7 +283,19 @@ export default function ApplyBasePricing() {
       const engine = String(data?.suggestionEngine || "heuristic").toUpperCase();
       const model = data?.llmModel ? ` (${String(data.llmModel)})` : "";
       const usedLabel = data?.llmUsed ? "LLM used" : "Fallback rules used";
-      setOptimizerEngineInfo(`Engine: ${engine}${model} • ${usedLabel}`);
+      const diagnostics = [
+        `attempted=${Boolean(data?.llmAttempted)}`,
+        `configured=${Boolean(data?.llmConfigured)}`,
+        `candidates=${Number(data?.llmCandidateCount || 0)}`,
+        `returned=${Number(data?.llmSuggestionCount || 0)}`,
+      ];
+      if (data?.llmFailureReason) {
+        diagnostics.push(`reason=${String(data.llmFailureReason)}`);
+      }
+
+      setOptimizerEngineInfo(
+        `Engine: ${engine}${model} • ${usedLabel} • ${diagnostics.join(" • ")}`
+      );
     } catch (err) {
       setOptimizerError(err instanceof Error ? err.message : "Failed to generate suggestions");
     } finally {
