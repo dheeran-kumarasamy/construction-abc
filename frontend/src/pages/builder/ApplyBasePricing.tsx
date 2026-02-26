@@ -48,6 +48,9 @@ interface OptimizerSuggestion {
   confidence: number;
   blocked: boolean;
   blockReason?: string;
+  qualityValidation?: string;
+  alternatives?: string[];
+  source?: "llm" | "heuristic";
   decision?: "accepted" | "declined";
 }
 
@@ -537,9 +540,26 @@ export default function ApplyBasePricing() {
 
                       <p style={{ margin: "0.5rem 0", color: "#334155" }}>{suggestion.reason}</p>
 
+                      {suggestion.qualityValidation && (
+                        <p style={{ margin: "0.25rem 0", color: "#0f766e", fontWeight: 500 }}>
+                          Quality validation: {suggestion.qualityValidation}
+                        </p>
+                      )}
+
+                      {Array.isArray(suggestion.alternatives) && suggestion.alternatives.length > 0 && (
+                        <div style={{ margin: "0.5rem 0" }}>
+                          <p style={{ margin: 0, color: "#334155", fontWeight: 500 }}>Alternative options:</p>
+                          <ul style={{ margin: "0.25rem 0 0 1rem", color: "#475569" }}>
+                            {suggestion.alternatives.map((option, optionIndex) => (
+                              <li key={`${suggestion.suggestionId}-alt-${optionIndex}`}>{option}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                         <span style={{ color: "#0f766e", fontWeight: 500 }}>
-                          Total impact: ₹{suggestion.totalDelta.toFixed(2)} • Confidence: {(suggestion.confidence * 100).toFixed(0)}%
+                          Total impact: ₹{suggestion.totalDelta.toFixed(2)} • Confidence: {(suggestion.confidence * 100).toFixed(0)}% • Source: {(suggestion.source || "heuristic").toUpperCase()}
                         </span>
 
                         {suggestion.blocked ? (
