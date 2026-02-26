@@ -126,7 +126,13 @@ export async function optimizeEstimateTarget(req: Request, res: Response) {
         total: number;
         category?: string;
       }>;
+      marginConfig?: {
+        overallMargin?: number;
+        laborUplift?: number;
+        machineryUplift?: number;
+      };
     };
+    const marginConfig = req.body?.marginConfig;
 
     const user = (req as any).user;
     const userId = user?.userId;
@@ -147,7 +153,8 @@ export async function optimizeEstimateTarget(req: Request, res: Response) {
       projectIdStr,
       userId,
       Number(targetTotal),
-      pricedItems
+      pricedItems,
+      marginConfig
     );
 
     return res.json(result);
