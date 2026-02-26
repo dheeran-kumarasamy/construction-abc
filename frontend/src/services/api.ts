@@ -11,48 +11,24 @@ function getHostedApiHost(currentHost: string) {
 }
 
 export function getApiBaseUrl() {
+  // Priority 1: Use explicit VITE_API_URL if provided
+  if (configuredApiUrl) {
+    return configuredApiUrl.replace(/\/$/, "");
+  }
+
+  // Priority 2: Auto-detect for local development
   if (typeof window !== "undefined") {
     const protocol = window.location.protocol || "http:";
     const hostname = window.location.hostname || "localhost";
 
-    if (protocol === "https:" && !isLocalHost(hostname)) {
+    if (isLocalHost(hostname)) {
+      return `${protocol}//${hostname}:4000`;
+    }
+
+    // Priority 3: Try hostname replacement for Vercel previews
+    if (protocol === "https:") {
       return `https://${getHostedApiHost(hostname)}`;
     }
-  }
-
-  if (configuredApiUrl) {
-    const normalizedConfigured = configuredApiUrl.replace(/\/$/, "");
-
-    if (typeof window !== "undefined") {
-      try {
-        const parsed = new URL(normalizedConfigured);
-        const currentHost = window.location.hostname || "localhost";
-        const isHttpsPage = window.location.protocol === "https:";
-
-        if (isLocalHost(parsed.hostname) && !isLocalHost(currentHost)) {
-          if (isHttpsPage) {
-            return `https://${getHostedApiHost(currentHost)}`;
-          }
-
-          const port = parsed.port || "4000";
-          return `http://${currentHost}:${port}`;
-        }
-
-        if (isHttpsPage && parsed.protocol === "http:") {
-          return `https://${parsed.host}`;
-        }
-      } catch {
-      }
-    }
-
-    return normalizedConfigured;
-  }
-
-  if (typeof window !== "undefined") {
-    const protocol = window.location.protocol || "http:";
-    const hostname = window.location.hostname || "localhost";
-
-    return `${protocol}//${hostname}:4000`;
   }
 
   return "http://localhost:4000";
