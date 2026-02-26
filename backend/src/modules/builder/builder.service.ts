@@ -13,6 +13,12 @@ interface OptimizationInputItem {
   category?: string;
 }
 
+interface MarginConfig {
+  overallMargin: number;
+  laborUplift: number;
+  machineryUplift: number;
+}
+
 interface OptimizationSuggestion {
   suggestionId: string;
   boqItemId: number;
@@ -50,6 +56,68 @@ interface LlmGenerationResult {
 
 function getConfiguredLlmModel() {
   return process.env.LLM_MODEL || "gpt-4o-mini";
+}
+
+function normalizeMarginConfig(input?: Partial<MarginConfig>): MarginConfig {
+  const overallMargin = Number(input?.overallMargin);
+  const laborUplift = Number(input?.laborUplift);
+  const machineryUplift = Number(input?.machineryUplift);
+
+  return {
+    overallMargin: Number.isFinite(overallMargin) ? Math.max(overallMargin, 0) : 10,
+    laborUplift: Number.isFinite(laborUplift) ? Math.max(laborUplift, 0) : 5,
+    machineryUplift: Number.isFinite(machineryUplift) ? Math.max(machineryUplift, 0) : 5,
+  };
+}
+
+function getGrandImpactMultiplier(item: OptimizationInputItem, marginConfig: MarginConfig) {
+  const category = String(item.category || "material").toLowerCase();
+  const marginFactor = 1 + marginConfig.overallMargin / 100;
+
+  if (category.includes("labor") || category.includes("labour")) {
+    return (1 + marginConfig.laborUplift / 100) * marginFactor;
+  }
+
+  if (category.includes("mach")) {
+    return (1 + marginConfig.machineryUplift / 100) * marginFactor;
+  }
+
+  return marginFactor;
+}
+
+function calculateGrandTotal(pricedItems: OptimizationInputItem[], marginConfig: MarginConfig) {
+  let materialTotal = 0;
+  let laborTotal = 0;
+  let machineryTotal = 0;
+  let otherTotal = 0;
+
+  pricedItems.forEach((item) => {
+    const category = String(item.category || "material").toLowerCase();
+    const total = Number(item.total || 0);
+
+    if (category.includes("labor") || category.includes("labour")) {
+      laborTotal += total;
+      return;
+    }
+
+    if (category.includes("mach")) {
+      machineryTotal += total;
+      return;
+    }
+
+    if (category.includes("other")) {
+      otherTotal += total;
+      return;
+    }
+
+    materialTotal += total;
+  });
+
+  const laborWithUplift = laborTotal * (1 + marginConfig.laborUplift / 100);
+  const machineryWithUplift = machineryTotal * (1 + marginConfig.machineryUplift / 100);
+  const subtotalWithUplifts = materialTotal + laborWithUplift + machineryWithUplift + otherTotal;
+
+  return subtotalWithUplifts * (1 + marginConfig.overallMargin / 100);
 }
 
 export async function getAvailableProjects(userId: string) {
@@ -417,15 +485,18 @@ export async function suggestTargetOptimizations(
   projectId: string,
   userId: string,
   targetTotal: number,
-  pricedItems: OptimizationInputItem[]
+  pricedItems: OptimizationInputItem[],
+  marginConfigInput?: Partial<MarginConfig>
 ) {
   await assertBuilderProjectAccess(userId, projectId);
+
+  const marginConfig = normalizeMarginConfig(marginConfigInput);
 
   if (!Number.isFinite(targetTotal) || targetTotal <= 0) {
     throw new Error("Target total must be a positive number");
   }
 
-  const currentTotal = pricedItems.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const currentTotal = calculateGrandTotal(pricedItems, marginConfig);
   const gapToClose = currentTotal - targetTotal;
 
   const validItems = pricedItems.filter((item) => Number(item.qty || 0) > 0 && Number(item.rate || 0) > 0);
@@ -491,7 +562,8 @@ export async function suggestTargetOptimizations(
           Math.min(currentRate, Math.max(minimumAllowedRate, Number(option.suggestedRate || currentRate))).toFixed(2)
         );
         const rateDelta = Number((normalizedNewRate - currentRate).toFixed(2));
-        const totalDelta = Number((rateDelta * Number(item.qty || 0)).toFixed(2));
+        const baseTotalDelta = rateDelta * Number(item.qty || 0);
+        const totalDelta = Number((baseTotalDelta * getGrandImpactMultiplier(item, marginConfig)).toFixed(2));
 
         return {
           suggestionId: `opt-${item.id}-llm-${index + 1}`,
@@ -517,7 +589,8 @@ export async function suggestTargetOptimizations(
       const currentRate = Number(item.rate || 0);
       const newRate = Number((currentRate * (1 - maxReductionPct)).toFixed(2));
       const rateDelta = Number((newRate - currentRate).toFixed(2));
-      const totalDelta = Number((rateDelta * Number(item.qty || 0)).toFixed(2));
+      const baseTotalDelta = rateDelta * Number(item.qty || 0);
+      const totalDelta = Number((baseTotalDelta * getGrandImpactMultiplier(item, marginConfig)).toFixed(2));
 
       return [{
         suggestionId: `opt-${item.id}-heuristic`,
@@ -575,6 +648,7 @@ export async function suggestTargetOptimizations(
     llmSuggestionCount: llmSuggestions.length,
     llmFailureReason: llmResult.failureReason || null,
     llmModel: llmResult.model,
+    marginConfig,
     suggestions: finalSuggestions,
   };
 }

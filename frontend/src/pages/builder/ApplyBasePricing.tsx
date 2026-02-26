@@ -266,6 +266,7 @@ export default function ApplyBasePricing() {
           body: JSON.stringify({
             targetTotal: parsedTarget,
             pricedItems,
+            marginConfig,
           }),
         }
       );
