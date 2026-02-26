@@ -25,6 +25,19 @@ interface OptimizationSuggestion {
   confidence: number;
   blocked: boolean;
   blockReason?: string;
+  qualityValidation?: string;
+  alternatives?: string[];
+  source?: "llm" | "heuristic";
+}
+
+interface LlmSuggestion {
+  boqItemId: number;
+  type: OptimizationSuggestion["type"];
+  suggestedRate: number;
+  reason: string;
+  confidence: number;
+  qualityValidation: string;
+  alternatives?: string[];
 }
 
 export async function getAvailableProjects(userId: string) {
@@ -222,6 +235,125 @@ function getMaxReductionPct(item: OptimizationInputItem) {
   return 0.1;
 }
 
+function extractJsonPayload(raw: string) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1].trim() : trimmed;
+
+  try {
+    return JSON.parse(candidate);
+  } catch {
+  }
+
+  const firstBrace = candidate.indexOf("{");
+  const lastBrace = candidate.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    const sliced = candidate.slice(firstBrace, lastBrace + 1);
+    try {
+      return JSON.parse(sliced);
+    } catch {
+    }
+  }
+
+  return null;
+}
+
+async function generateLlmSuggestions(
+  targetTotal: number,
+  currentTotal: number,
+  candidateItems: OptimizationInputItem[]
+): Promise<LlmSuggestion[]> {
+  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY;
+  if (!apiKey || candidateItems.length === 0) {
+    return [];
+  }
+
+  const model = process.env.LLM_MODEL || "gpt-4o-mini";
+  const payload = {
+    model,
+    temperature: 0.2,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a construction cost optimization assistant. Suggest cost reductions without compromising quality, safety, compliance, or architect-mandated specs. Return strict JSON only.",
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          targetTotal,
+          currentTotal,
+          instructions: [
+            "For each item, suggest up to 2 alternatives.",
+            "Never reduce safety/quality critical specs.",
+            "Provide a short quality validation note.",
+            "Output JSON object with key suggestions.",
+            "Each suggestion object fields: boqItemId, type, suggestedRate, reason, confidence, qualityValidation, alternatives.",
+          ],
+          items: candidateItems.map((item) => ({
+            boqItemId: item.id,
+            item: item.item,
+            qty: item.qty,
+            uom: item.uom,
+            category: item.category || "material",
+            currentRate: item.rate,
+            currentTotal: item.total,
+          })),
+        }),
+      },
+    ],
+  };
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      console.error("LLM suggestion API error:", response.status, errorText);
+      return [];
+    }
+
+    const data = (await response.json()) as any;
+    const content = data?.choices?.[0]?.message?.content;
+    const parsed = extractJsonPayload(String(content || ""));
+    const suggestions: any[] = Array.isArray(parsed?.suggestions) ? parsed.suggestions : [];
+
+    return suggestions
+      .map((s: any) => ({
+        boqItemId: Number(s?.boqItemId),
+        type: String(s?.type || "spec_variant") as OptimizationSuggestion["type"],
+        suggestedRate: Number(s?.suggestedRate),
+        reason: String(s?.reason || "Suggested equivalent option to reduce cost"),
+        confidence: Number(s?.confidence),
+        qualityValidation: String(s?.qualityValidation || "Validated as quality-compliant alternative"),
+        alternatives: Array.isArray(s?.alternatives)
+          ? s.alternatives.map((x: any) => String(x)).slice(0, 3)
+          : [],
+      }))
+      .filter(
+        (s: LlmSuggestion) =>
+          Number.isFinite(s.boqItemId) &&
+          Number.isFinite(s.suggestedRate) &&
+          s.suggestedRate > 0 &&
+          ["brand_swap", "finish_change", "spec_variant", "vendor_switch"].includes(s.type)
+      );
+  } catch (error) {
+    console.error("LLM suggestion parse/generation failed:", error);
+    return [];
+  }
+}
+
 export async function suggestTargetOptimizations(
   projectId: string,
   userId: string,
@@ -237,30 +369,89 @@ export async function suggestTargetOptimizations(
   const currentTotal = pricedItems.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const gapToClose = currentTotal - targetTotal;
 
-  const suggestions: OptimizationSuggestion[] = pricedItems
-    .filter((item) => Number(item.qty || 0) > 0 && Number(item.rate || 0) > 0)
-    .map((item) => {
+  const validItems = pricedItems.filter((item) => Number(item.qty || 0) > 0 && Number(item.rate || 0) > 0);
+
+  const blockedSuggestions: OptimizationSuggestion[] = validItems
+    .filter((item) => {
       const itemName = String(item.item || "");
       const architectLocked = isArchitectLockedByText(itemName);
       const qualityCritical = isQualityCritical(itemName);
+      return architectLocked || qualityCritical;
+    })
+    .map((item) => {
+      const itemName = String(item.item || "");
+      const architectLocked = isArchitectLockedByText(itemName);
 
-      if (architectLocked || qualityCritical) {
+      return {
+        suggestionId: `opt-${item.id}-blocked`,
+        boqItemId: item.id,
+        type: inferSuggestionType(itemName),
+        reason: "No pricing tweak proposed due to quality/architect guardrails",
+        oldRate: Number(item.rate || 0),
+        newRate: Number(item.rate || 0),
+        rateDelta: 0,
+        totalDelta: 0,
+        confidence: 0.96,
+        blocked: true,
+        blockReason: architectLocked
+          ? "Architect explicit requirement detected"
+          : "Quality-critical item protected by guardrail",
+        qualityValidation: "Retained current specification to avoid quality/safety compromise",
+        source: "heuristic",
+      };
+    });
+
+  const actionableItems = validItems.filter((item) => {
+    const itemName = String(item.item || "");
+    return !isArchitectLockedByText(itemName) && !isQualityCritical(itemName);
+  });
+
+  const llmCandidates = actionableItems
+    .sort((a, b) => Number(b.total || 0) - Number(a.total || 0))
+    .slice(0, 10);
+
+  const llmSuggestions = await generateLlmSuggestions(targetTotal, currentTotal, llmCandidates);
+  const llmByItem = new Map<number, LlmSuggestion[]>();
+  llmSuggestions.forEach((suggestion) => {
+    const existing = llmByItem.get(suggestion.boqItemId) || [];
+    existing.push(suggestion);
+    llmByItem.set(suggestion.boqItemId, existing);
+  });
+
+  const actionableSuggestions: OptimizationSuggestion[] = actionableItems.flatMap((item): OptimizationSuggestion[] => {
+    const itemName = String(item.item || "");
+    const llmOptions = llmByItem.get(item.id) || [];
+
+    if (llmOptions.length > 0) {
+      return llmOptions.slice(0, 2).map((option, index) => {
+        const currentRate = Number(item.rate || 0);
+        const maxReductionPct = getMaxReductionPct(item);
+        const minimumAllowedRate = currentRate * (1 - maxReductionPct);
+        const normalizedNewRate = Number(
+          Math.min(currentRate, Math.max(minimumAllowedRate, Number(option.suggestedRate || currentRate))).toFixed(2)
+        );
+        const rateDelta = Number((normalizedNewRate - currentRate).toFixed(2));
+        const totalDelta = Number((rateDelta * Number(item.qty || 0)).toFixed(2));
+
         return {
-          suggestionId: `opt-${item.id}`,
+          suggestionId: `opt-${item.id}-llm-${index + 1}`,
           boqItemId: item.id,
-          type: inferSuggestionType(itemName),
-          reason: "No pricing tweak proposed due to quality/architect guardrails",
-          oldRate: Number(item.rate || 0),
-          newRate: Number(item.rate || 0),
-          rateDelta: 0,
-          totalDelta: 0,
-          confidence: 0.96,
-          blocked: true,
-          blockReason: architectLocked
-            ? "Architect explicit requirement detected"
-            : "Quality-critical item protected by guardrail",
+          type: option.type,
+          reason: option.reason,
+          oldRate: currentRate,
+          newRate: normalizedNewRate,
+          rateDelta,
+          totalDelta,
+          confidence: Number.isFinite(option.confidence)
+            ? Math.max(0.5, Math.min(0.95, Number(option.confidence)))
+            : 0.74,
+          blocked: false,
+          qualityValidation: option.qualityValidation,
+          alternatives: option.alternatives || [],
+          source: "llm",
         };
-      }
+      });
+    }
 
       const maxReductionPct = getMaxReductionPct(item);
       const currentRate = Number(item.rate || 0);
@@ -268,8 +459,8 @@ export async function suggestTargetOptimizations(
       const rateDelta = Number((newRate - currentRate).toFixed(2));
       const totalDelta = Number((rateDelta * Number(item.qty || 0)).toFixed(2));
 
-      return {
-        suggestionId: `opt-${item.id}`,
+      return [{
+        suggestionId: `opt-${item.id}-heuristic`,
         boqItemId: item.id,
         type: inferSuggestionType(itemName),
         reason:
@@ -280,14 +471,15 @@ export async function suggestTargetOptimizations(
         totalDelta,
         confidence: 0.72,
         blocked: false,
-      };
+        qualityValidation: "Rule-based check passed; verify brand/spec compliance before acceptance",
+        alternatives: [],
+        source: "heuristic",
+      }];
     });
 
-  const actionable = suggestions
+  const actionable = actionableSuggestions
     .filter((s) => !s.blocked && s.totalDelta < 0)
     .sort((a, b) => a.totalDelta - b.totalDelta);
-
-  const blocked = suggestions.filter((s) => s.blocked);
 
   const selected: OptimizationSuggestion[] = [];
   let accumulatedSavings = 0;
@@ -303,7 +495,10 @@ export async function suggestTargetOptimizations(
   }
 
   const maxSuggestions = 12;
-  const finalSuggestions = [...selected, ...blocked.slice(0, Math.max(0, maxSuggestions - selected.length))].slice(0, maxSuggestions);
+  const finalSuggestions = [
+    ...selected,
+    ...blockedSuggestions.slice(0, Math.max(0, maxSuggestions - selected.length)),
+  ].slice(0, maxSuggestions);
 
   return {
     currentTotal,
