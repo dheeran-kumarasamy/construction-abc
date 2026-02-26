@@ -2,6 +2,7 @@ import { pool } from "../../config/db";
 import XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
+import OpenAI from "openai";
 
 interface OptimizationInputItem {
   id: number;
@@ -380,65 +381,108 @@ async function generateLlmSuggestions(
     };
   }
 
-  const payload = {
-    model,
-    temperature: 0.2,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a construction cost optimization assistant. Suggest cost reductions without compromising quality, safety, compliance, or architect-mandated specs. Return strict JSON only.",
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          targetTotal,
-          currentTotal,
-          instructions: [
-            "For each item, suggest up to 2 alternatives.",
-            "Never reduce safety/quality critical specs.",
-            "Provide a short quality validation note.",
-            "Output JSON object with key suggestions.",
-            "Each suggestion object fields: boqItemId, type, suggestedRate, reason, confidence, qualityValidation, alternatives.",
-          ],
-          items: candidateItems.map((item) => ({
-            boqItemId: item.id,
-            item: item.item,
-            qty: item.qty,
-            uom: item.uom,
-            category: item.category || "material",
-            currentRate: item.rate,
-            currentTotal: item.total,
-          })),
-        }),
-      },
-    ],
-  };
-
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+    const client = new OpenAI({ apiKey });
+
+    const response = await client.chat.completions.create({
+      model,
+      temperature: 0.15,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "boq_optimization_suggestions",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              suggestions: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    boqItemId: { type: "number" },
+                    type: {
+                      type: "string",
+                      enum: ["brand_swap", "finish_change", "spec_variant", "vendor_switch"],
+                    },
+                    suggestedRate: { type: "number" },
+                    reason: { type: "string" },
+                    confidence: { type: "number" },
+                    qualityValidation: { type: "string" },
+                    alternatives: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                  required: [
+                    "boqItemId",
+                    "type",
+                    "suggestedRate",
+                    "reason",
+                    "confidence",
+                    "qualityValidation",
+                    "alternatives",
+                  ],
+                },
+              },
+            },
+            required: ["suggestions"],
+          },
+        },
       },
-      body: JSON.stringify(payload),
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a construction cost optimization assistant. Suggest lower-cost but compliant alternatives. Never compromise safety, quality, statutory code compliance, or architect-mandated specs. Prefer realistic brand/vendor/finish alternatives with revised rates.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            targetTotal,
+            currentTotal,
+            objective:
+              "Reduce overall estimate toward target by suggesting revised unit rates for specific BOQ items using equivalent alternatives.",
+            pricingGuidelines: [
+              "If current item is a premium brand/spec, suggest equivalent mainstream alternative when quality remains compliant.",
+              "Example style: Tata Steel @80/kg -> JSW Steel @75/kg when grade/spec remains equivalent.",
+              "Do not suggest any rate increase.",
+              "Keep suggestions practical and procurement-friendly.",
+            ],
+            outputRules: [
+              "Return suggestions only for provided boqItemId values.",
+              "Each suggestedRate must be > 0 and <= currentRate.",
+              "Confidence must be between 0 and 1.",
+              "Include short qualityValidation proving no quality compromise.",
+              "Provide 1-3 alternatives as plain text.",
+            ],
+            items: candidateItems.map((item) => ({
+              boqItemId: item.id,
+              item: item.item,
+              qty: item.qty,
+              uom: item.uom,
+              category: item.category || "material",
+              currentRate: item.rate,
+              currentTotal: item.total,
+            })),
+          }),
+        },
+      ],
     });
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      console.error("LLM suggestion API error:", response.status, errorText);
+    const content = response.choices?.[0]?.message?.content;
+    if (!content) {
+      console.error("LLM suggestion API error: empty completion content");
       return {
         suggestions: [],
         attempted: true,
         configured: true,
         model,
-        failureReason: `api_error_${response.status}`,
+        failureReason: "empty_completion_content",
       };
     }
 
-    const data = (await response.json()) as any;
-    const content = data?.choices?.[0]?.message?.content;
     const parsed = extractJsonPayload(String(content || ""));
     const suggestions: any[] = Array.isArray(parsed?.suggestions) ? parsed.suggestions : [];
 
@@ -459,6 +503,9 @@ async function generateLlmSuggestions(
           Number.isFinite(s.boqItemId) &&
           Number.isFinite(s.suggestedRate) &&
           s.suggestedRate > 0 &&
+          Number.isFinite(s.confidence) &&
+          s.confidence >= 0 &&
+          s.confidence <= 1 &&
           ["brand_swap", "finish_change", "spec_variant", "vendor_switch"].includes(s.type)
       );
 
