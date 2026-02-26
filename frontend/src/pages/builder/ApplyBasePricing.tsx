@@ -269,6 +269,7 @@ export default function ApplyBasePricing() {
             targetTotal: parsedTarget,
             pricedItems,
             marginConfig,
+            hardFail: true,
           }),
         }
       );
