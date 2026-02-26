@@ -109,18 +109,38 @@ export async function getProjectBOQItems(projectId: string, userId: string) {
   await assertBuilderProjectAccess(userId, projectId);
 
   // Get BOQ data - prefer parsed_data for serverless compatibility
-  const boqResult = await pool.query(
-    `SELECT b.file_path, b.column_mapping, b.parsed_data
-     FROM boqs b
-     WHERE b.project_id = $1`,
-    [projectId]
-  );
+  // but gracefully support DBs where parsed_data column is not yet migrated.
+  let boqResult;
+  try {
+    boqResult = await pool.query(
+      `SELECT b.file_path, b.column_mapping, b.parsed_data
+       FROM boqs b
+       WHERE b.project_id = $1`,
+      [projectId]
+    );
+  } catch (error: any) {
+    if (error?.code !== "42703") {
+      throw error;
+    }
+
+    boqResult = await pool.query(
+      `SELECT b.file_path, b.column_mapping
+       FROM boqs b
+       WHERE b.project_id = $1`,
+      [projectId]
+    );
+  }
 
   if (boqResult.rows.length === 0) {
     return [];
   }
 
-  const { file_path, column_mapping, parsed_data } = boqResult.rows[0];
+  const row = boqResult.rows[0] as {
+    file_path: string;
+    column_mapping: Record<string, string> | null;
+    parsed_data?: any[];
+  };
+  const { file_path, column_mapping, parsed_data } = row;
   
   // If parsed_data exists, use it (for serverless/Vercel)
   if (parsed_data && Array.isArray(parsed_data)) {
