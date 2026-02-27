@@ -7,6 +7,7 @@ import * as controller from "./boq.controller";
 import { pool } from "../../config/db";
 
 const router = Router();
+const maxUploadSizeBytes = Number(process.env.BOQ_UPLOAD_MAX_BYTES || 4 * 1024 * 1024);
 
 // Configure multer for file upload
 const diskStorage = multer.diskStorage({
@@ -38,19 +39,42 @@ const diskStorage = multer.diskStorage({
 
 const parseUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: maxUploadSizeBytes },
 });
 
 const upload = multer({
   storage: diskStorage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: maxUploadSizeBytes },
 });
+
+function handleMulterSingle(fieldName: string, uploader: multer.Multer) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    uploader.single(fieldName)(req, res, (err: any) => {
+      if (!err) {
+        return next();
+      }
+
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({
+            error: `File is too large. Maximum allowed size is ${Math.floor(maxUploadSizeBytes / (1024 * 1024))}MB`,
+            code: err.code,
+          });
+        }
+
+        return res.status(400).json({ error: err.message, code: err.code });
+      }
+
+      return res.status(400).json({ error: err?.message || "Invalid upload request" });
+    });
+  };
+}
 
 // Parse BOQ file for preview (architect)
 router.post(
   "/parse",
   authenticateToken,
-  parseUpload.single("boq"),
+  handleMulterSingle("boq", parseUpload),
   controller.parseBOQ
 );
 
@@ -86,7 +110,7 @@ router.post(
   "/:projectId/upload",
   authenticateToken,
   checkProjectOwnership,
-  upload.single("boq"),
+  handleMulterSingle("boq", upload),
   controller.uploadBOQ
 );
 
