@@ -88,7 +88,14 @@ export async function uploadBOQ(req: Request, res: Response) {
     const result = await service.uploadBOQ(projectId, userId, req.file, columnMapping);
     res.json(result);
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    const message = String(err?.message || "Upload failed");
+    const isClientError =
+      /required|invalid file type|no file uploaded|unauthorized/i.test(message);
+
+    res.status(isClientError ? 400 : 500).json({
+      error: message,
+      code: err?.code || null,
+    });
   }
 }
 
