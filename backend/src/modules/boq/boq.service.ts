@@ -33,27 +33,87 @@ export async function saveOrUpdateBOQ(
       }
 
       // Update existing BOQ
-      const result = await client.query(
-        `UPDATE boqs 
-         SET file_name = $1, file_path = $2, file_type = $3, 
-             file_size = $4, column_mapping = $5, parsed_data = $6, uploaded_at = CURRENT_TIMESTAMP
-         WHERE project_id = $7
-         RETURNING *`,
-        [file.originalname, file.path, file.mimetype, file.size, 
-         JSON.stringify(parsed.mapping), JSON.stringify(parsed.items), projectId]
-      );
+      let result;
+      try {
+        result = await client.query(
+          `UPDATE boqs 
+           SET file_name = $1, file_path = $2, file_type = $3, 
+               file_size = $4, column_mapping = $5, parsed_data = $6, uploaded_at = CURRENT_TIMESTAMP
+           WHERE project_id = $7
+           RETURNING *`,
+          [
+            file.originalname,
+            file.path,
+            file.mimetype,
+            file.size,
+            JSON.stringify(parsed.mapping),
+            JSON.stringify(parsed.items),
+            projectId,
+          ]
+        );
+      } catch (error: any) {
+        if (error?.code !== "42703") {
+          throw error;
+        }
+
+        result = await client.query(
+          `UPDATE boqs 
+           SET file_name = $1, file_path = $2, file_type = $3, 
+               file_size = $4, column_mapping = $5, uploaded_at = CURRENT_TIMESTAMP
+           WHERE project_id = $6
+           RETURNING *`,
+          [
+            file.originalname,
+            file.path,
+            file.mimetype,
+            file.size,
+            JSON.stringify(parsed.mapping),
+            projectId,
+          ]
+        );
+      }
 
       await client.query("COMMIT");
       return result.rows[0];
     } else {
       // Insert new BOQ
-      const result = await client.query(
-        `INSERT INTO boqs (project_id, uploaded_by, file_name, file_path, file_type, file_size, column_mapping, parsed_data)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING *`,
-        [projectId, userId, file.originalname, file.path, file.mimetype, file.size,
-         JSON.stringify(parsed.mapping), JSON.stringify(parsed.items)]
-      );
+      let result;
+      try {
+        result = await client.query(
+          `INSERT INTO boqs (project_id, uploaded_by, file_name, file_path, file_type, file_size, column_mapping, parsed_data)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           RETURNING *`,
+          [
+            projectId,
+            userId,
+            file.originalname,
+            file.path,
+            file.mimetype,
+            file.size,
+            JSON.stringify(parsed.mapping),
+            JSON.stringify(parsed.items),
+          ]
+        );
+      } catch (error: any) {
+        if (error?.code !== "42703") {
+          throw error;
+        }
+
+        result = await client.query(
+          `INSERT INTO boqs (project_id, uploaded_by, file_name, file_path, file_type, file_size, column_mapping)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING *`,
+          [
+            projectId,
+            userId,
+            file.originalname,
+            file.path,
+            file.mimetype,
+            file.size,
+            JSON.stringify(parsed.mapping),
+          ]
+        );
+      }
 
       // Update project with boq_id
       await client.query(
