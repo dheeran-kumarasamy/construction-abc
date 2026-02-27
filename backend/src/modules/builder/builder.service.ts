@@ -323,6 +323,11 @@ function inferSuggestionType(itemName: string): OptimizationSuggestion["type"] {
 }
 
 function getMaxReductionPct(item: OptimizationInputItem) {
+  const itemName = String(item.item || "");
+  if (isQualityCritical(itemName)) {
+    return 0.04;
+  }
+
   const category = String(item.category || "material").toLowerCase();
   if (category.includes("labor") || category.includes("labour")) {
     return 0.06;
@@ -555,8 +560,7 @@ export async function suggestTargetOptimizations(
     .filter((item) => {
       const itemName = String(item.item || "");
       const architectLocked = isArchitectLockedByText(itemName);
-      const qualityCritical = isQualityCritical(itemName);
-      return architectLocked || qualityCritical;
+      return architectLocked;
     })
     .map((item) => {
       const itemName = String(item.item || "");
@@ -566,7 +570,7 @@ export async function suggestTargetOptimizations(
         suggestionId: `opt-${item.id}-blocked`,
         boqItemId: item.id,
         type: inferSuggestionType(itemName),
-        reason: "No pricing tweak proposed due to quality/architect guardrails",
+        reason: "No pricing tweak proposed due to architect non-negotiable requirement",
         oldRate: Number(item.rate || 0),
         newRate: Number(item.rate || 0),
         rateDelta: 0,
@@ -575,7 +579,7 @@ export async function suggestTargetOptimizations(
         blocked: true,
         blockReason: architectLocked
           ? "Architect explicit requirement detected"
-          : "Quality-critical item protected by guardrail",
+          : "Architect requirement detected",
         qualityValidation: "Retained current specification to avoid quality/safety compromise",
         source: "heuristic",
       };
@@ -583,7 +587,7 @@ export async function suggestTargetOptimizations(
 
   const actionableItems = validItems.filter((item) => {
     const itemName = String(item.item || "");
-    return !isArchitectLockedByText(itemName) && !isQualityCritical(itemName);
+    return !isArchitectLockedByText(itemName);
   });
 
   const llmCandidates = actionableItems
