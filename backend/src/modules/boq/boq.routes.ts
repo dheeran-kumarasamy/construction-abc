@@ -7,7 +7,7 @@ import * as controller from "./boq.controller";
 import { pool } from "../../config/db";
 
 const router = Router();
-const maxUploadSizeBytes = Number(process.env.BOQ_UPLOAD_MAX_BYTES || 4 * 1024 * 1024);
+const maxUploadSizeBytes = Number(process.env.BOQ_UPLOAD_MAX_BYTES || 3 * 1024 * 1024);
 
 // Configure multer for file upload
 const diskStorage = multer.diskStorage({
