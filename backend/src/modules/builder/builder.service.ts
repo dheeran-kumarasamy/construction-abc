@@ -59,6 +59,12 @@ function getConfiguredLlmModel() {
   return process.env.LLM_MODEL || "gpt-4o-mini";
 }
 
+function getConfiguredLlmApiKey() {
+  const raw = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY || "";
+  const value = String(raw).trim().replace(/^['\"]+|['\"]+$/g, "");
+  return value || "";
+}
+
 function normalizeMarginConfig(input?: Partial<MarginConfig>): MarginConfig {
   const overallMargin = Number(input?.overallMargin);
   const laborUplift = Number(input?.laborUplift);
@@ -368,12 +374,36 @@ function extractJsonPayload(raw: string) {
   return null;
 }
 
+function classifyLlmError(error: any) {
+  const status = Number(error?.status);
+  const code = String(error?.code || error?.error?.code || "").toLowerCase();
+  const message = String(error?.message || error?.error?.message || "").toLowerCase();
+
+  if (status === 401 || code.includes("invalid_api_key") || message.includes("api key")) {
+    return "auth_error";
+  }
+  if (status === 403) {
+    return "permission_error";
+  }
+  if (status === 404 || code.includes("model_not_found") || message.includes("model")) {
+    return "model_error";
+  }
+  if (status === 429 || code.includes("rate_limit") || message.includes("rate limit") || message.includes("quota")) {
+    return "rate_limit";
+  }
+  if (status === 400 || code.includes("invalid_request") || message.includes("response_format")) {
+    return "bad_request";
+  }
+
+  return "request_exception";
+}
+
 async function generateLlmSuggestions(
   targetTotal: number,
   currentTotal: number,
   candidateItems: OptimizationInputItem[]
 ): Promise<LlmGenerationResult> {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY;
+  const apiKey = getConfiguredLlmApiKey();
   const model = getConfiguredLlmModel();
 
   if (!apiKey || candidateItems.length === 0) {
@@ -388,95 +418,111 @@ async function generateLlmSuggestions(
 
   try {
     const client = new OpenAI({ apiKey });
+    const messages = [
+      {
+        role: "system" as const,
+        content:
+          "You are a construction cost optimization assistant. Suggest lower-cost but compliant alternatives. Never compromise safety, quality, statutory code compliance, or architect-mandated specs. Prefer realistic brand/vendor/finish alternatives with revised rates.",
+      },
+      {
+        role: "user" as const,
+        content: JSON.stringify({
+          targetTotal,
+          currentTotal,
+          objective:
+            "Reduce overall estimate toward target by suggesting revised unit rates for specific BOQ items using equivalent alternatives.",
+          pricingGuidelines: [
+            "If current item is a premium brand/spec, suggest equivalent mainstream alternative when quality remains compliant.",
+            "Example style: Tata Steel @80/kg -> JSW Steel @75/kg when grade/spec remains equivalent.",
+            "Do not suggest any rate increase.",
+            "Keep suggestions practical and procurement-friendly.",
+          ],
+          outputRules: [
+            "Return suggestions only for provided boqItemId values.",
+            "Each suggestedRate must be > 0 and <= currentRate.",
+            "Confidence must be between 0 and 1.",
+            "Include short qualityValidation proving no quality compromise.",
+            "Provide 1-3 alternatives as plain text.",
+          ],
+          items: candidateItems.map((item) => ({
+            boqItemId: item.id,
+            item: item.item,
+            qty: item.qty,
+            uom: item.uom,
+            category: item.category || "material",
+            currentRate: item.rate,
+            currentTotal: item.total,
+          })),
+        }),
+      },
+    ];
 
-    const response = await client.chat.completions.create({
-      model,
-      temperature: 0.15,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "boq_optimization_suggestions",
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              suggestions: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    boqItemId: { type: "number" },
-                    type: {
-                      type: "string",
-                      enum: ["brand_swap", "finish_change", "spec_variant", "vendor_switch"],
+    let content = "";
+    try {
+      const response = await client.chat.completions.create({
+        model,
+        temperature: 0.15,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "boq_optimization_suggestions",
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                suggestions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      boqItemId: { type: "number" },
+                      type: {
+                        type: "string",
+                        enum: ["brand_swap", "finish_change", "spec_variant", "vendor_switch"],
+                      },
+                      suggestedRate: { type: "number" },
+                      reason: { type: "string" },
+                      confidence: { type: "number" },
+                      qualityValidation: { type: "string" },
+                      alternatives: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
                     },
-                    suggestedRate: { type: "number" },
-                    reason: { type: "string" },
-                    confidence: { type: "number" },
-                    qualityValidation: { type: "string" },
-                    alternatives: {
-                      type: "array",
-                      items: { type: "string" },
-                    },
+                    required: [
+                      "boqItemId",
+                      "type",
+                      "suggestedRate",
+                      "reason",
+                      "confidence",
+                      "qualityValidation",
+                      "alternatives",
+                    ],
                   },
-                  required: [
-                    "boqItemId",
-                    "type",
-                    "suggestedRate",
-                    "reason",
-                    "confidence",
-                    "qualityValidation",
-                    "alternatives",
-                  ],
                 },
               },
+              required: ["suggestions"],
             },
-            required: ["suggestions"],
           },
         },
-      },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a construction cost optimization assistant. Suggest lower-cost but compliant alternatives. Never compromise safety, quality, statutory code compliance, or architect-mandated specs. Prefer realistic brand/vendor/finish alternatives with revised rates.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            targetTotal,
-            currentTotal,
-            objective:
-              "Reduce overall estimate toward target by suggesting revised unit rates for specific BOQ items using equivalent alternatives.",
-            pricingGuidelines: [
-              "If current item is a premium brand/spec, suggest equivalent mainstream alternative when quality remains compliant.",
-              "Example style: Tata Steel @80/kg -> JSW Steel @75/kg when grade/spec remains equivalent.",
-              "Do not suggest any rate increase.",
-              "Keep suggestions practical and procurement-friendly.",
-            ],
-            outputRules: [
-              "Return suggestions only for provided boqItemId values.",
-              "Each suggestedRate must be > 0 and <= currentRate.",
-              "Confidence must be between 0 and 1.",
-              "Include short qualityValidation proving no quality compromise.",
-              "Provide 1-3 alternatives as plain text.",
-            ],
-            items: candidateItems.map((item) => ({
-              boqItemId: item.id,
-              item: item.item,
-              qty: item.qty,
-              uom: item.uom,
-              category: item.category || "material",
-              currentRate: item.rate,
-              currentTotal: item.total,
-            })),
-          }),
-        },
-      ],
-    });
+        messages,
+      });
 
-    const content = response.choices?.[0]?.message?.content;
+      content = String(response.choices?.[0]?.message?.content || "");
+    } catch (schemaError: any) {
+      console.error("LLM json_schema call failed, retrying with json_object:", schemaError?.message || schemaError);
+
+      const fallback = await client.chat.completions.create({
+        model,
+        temperature: 0.15,
+        response_format: { type: "json_object" },
+        messages,
+      });
+
+      content = String(fallback.choices?.[0]?.message?.content || "");
+    }
+
     if (!content) {
       console.error("LLM suggestion API error: empty completion content");
       return {
@@ -528,7 +574,7 @@ async function generateLlmSuggestions(
       attempted: true,
       configured: true,
       model,
-      failureReason: "request_exception",
+      failureReason: classifyLlmError(error),
     };
   }
 }
@@ -607,8 +653,27 @@ export async function suggestTargetOptimizations(
     }
 
     if (llmSuggestions.length === 0) {
+      const reason = llmResult.failureReason || "unknown_error";
+      if (reason === "auth_error") {
+        throw new Error(
+          "Hard fail enabled: OpenAI authentication failed. Verify OPENAI_API_KEY is valid, active, and loaded in backend environment"
+        );
+      }
+
+      if (reason === "model_error") {
+        throw new Error(
+          "Hard fail enabled: Configured LLM model is unavailable for this key. Check LLM_MODEL or key permissions"
+        );
+      }
+
+      if (reason === "rate_limit") {
+        throw new Error(
+          "Hard fail enabled: OpenAI rate limit or quota exceeded. Retry later or increase quota"
+        );
+      }
+
       throw new Error(
-        `Hard fail enabled: LLM returned no valid optimization suggestions (${llmResult.failureReason || "unknown_error"})`
+        `Hard fail enabled: LLM returned no valid optimization suggestions (${reason})`
       );
     }
   }

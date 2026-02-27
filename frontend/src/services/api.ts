@@ -1,4 +1,13 @@
-const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
+function sanitizeApiBaseUrl(value?: string) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  return raw
+    .replace(/^['\"]+|['\"]+$/g, "")
+    .replace(/\/$/, "");
+}
 
 function isLocalHost(hostname: string) {
   return hostname === "localhost" || hostname === "127.0.0.1";
@@ -11,9 +20,11 @@ function getHostedApiHost(currentHost: string) {
 }
 
 export function getApiBaseUrl() {
+  const configuredApiUrl = sanitizeApiBaseUrl(import.meta.env.VITE_API_URL);
+
   // Priority 1: Use explicit VITE_API_URL if provided
   if (configuredApiUrl) {
-    return configuredApiUrl.replace(/\/$/, "");
+    return configuredApiUrl;
   }
 
   // Priority 2: Auto-detect for local development

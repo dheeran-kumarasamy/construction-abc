@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cors, { CorsOptions } from "cors";
 import authRoutes from "./modules/auth/auth.routes";

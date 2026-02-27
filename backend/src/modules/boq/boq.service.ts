@@ -37,8 +37,9 @@ export async function saveOrUpdateBOQ(
         console.error("Error deleting old file:", err);
       }
 
-      // Update existing BOQ
+      // Update existing BOQ (supports multiple schema versions)
       let result;
+      await client.query("SAVEPOINT boq_update_try_parsed_data");
       try {
         result = await client.query(
           `UPDATE boqs 
@@ -56,33 +57,62 @@ export async function saveOrUpdateBOQ(
             projectId,
           ]
         );
-      } catch (error: any) {
-        if (error?.code !== "42703") {
-          throw error;
+        await client.query("RELEASE SAVEPOINT boq_update_try_parsed_data");
+      } catch (errorParsedData: any) {
+        if (errorParsedData?.code !== "42703") {
+          throw errorParsedData;
         }
 
-        result = await client.query(
-          `UPDATE boqs 
-           SET file_name = $1, file_path = $2, file_type = $3, 
-               file_size = $4, column_mapping = $5, uploaded_at = CURRENT_TIMESTAMP
-           WHERE project_id = $6
-           RETURNING *`,
-          [
-            file.originalname,
-            file.path,
-            fileType,
-            file.size,
-            JSON.stringify(parsed.mapping),
-            projectId,
-          ]
-        );
+        await client.query("ROLLBACK TO SAVEPOINT boq_update_try_parsed_data");
+        await client.query("SAVEPOINT boq_update_try_column_mapping");
+
+        try {
+          result = await client.query(
+            `UPDATE boqs 
+             SET file_name = $1, file_path = $2, file_type = $3, 
+                 file_size = $4, column_mapping = $5, uploaded_at = CURRENT_TIMESTAMP
+             WHERE project_id = $6
+             RETURNING *`,
+            [
+              file.originalname,
+              file.path,
+              fileType,
+              file.size,
+              JSON.stringify(parsed.mapping),
+              projectId,
+            ]
+          );
+          await client.query("RELEASE SAVEPOINT boq_update_try_column_mapping");
+        } catch (errorMapping: any) {
+          if (errorMapping?.code !== "42703") {
+            throw errorMapping;
+          }
+
+          await client.query("ROLLBACK TO SAVEPOINT boq_update_try_column_mapping");
+
+          result = await client.query(
+            `UPDATE boqs 
+             SET file_name = $1, file_path = $2, file_type = $3, 
+                 file_size = $4, uploaded_at = CURRENT_TIMESTAMP
+             WHERE project_id = $5
+             RETURNING *`,
+            [
+              file.originalname,
+              file.path,
+              fileType,
+              file.size,
+              projectId,
+            ]
+          );
+        }
       }
 
       await client.query("COMMIT");
       return result.rows[0];
     } else {
-      // Insert new BOQ
+      // Insert new BOQ (supports multiple schema versions)
       let result;
+      await client.query("SAVEPOINT boq_insert_try_parsed_data");
       try {
         result = await client.query(
           `INSERT INTO boqs (project_id, uploaded_by, file_name, file_path, file_type, file_size, column_mapping, parsed_data)
@@ -99,32 +129,68 @@ export async function saveOrUpdateBOQ(
             JSON.stringify(parsed.items),
           ]
         );
+        await client.query("RELEASE SAVEPOINT boq_insert_try_parsed_data");
+      } catch (errorParsedData: any) {
+        if (errorParsedData?.code !== "42703") {
+          throw errorParsedData;
+        }
+
+        await client.query("ROLLBACK TO SAVEPOINT boq_insert_try_parsed_data");
+        await client.query("SAVEPOINT boq_insert_try_column_mapping");
+
+        try {
+          result = await client.query(
+            `INSERT INTO boqs (project_id, uploaded_by, file_name, file_path, file_type, file_size, column_mapping)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             RETURNING *`,
+            [
+              projectId,
+              userId,
+              file.originalname,
+              file.path,
+              fileType,
+              file.size,
+              JSON.stringify(parsed.mapping),
+            ]
+          );
+          await client.query("RELEASE SAVEPOINT boq_insert_try_column_mapping");
+        } catch (errorMapping: any) {
+          if (errorMapping?.code !== "42703") {
+            throw errorMapping;
+          }
+
+          await client.query("ROLLBACK TO SAVEPOINT boq_insert_try_column_mapping");
+
+          result = await client.query(
+            `INSERT INTO boqs (project_id, uploaded_by, file_name, file_path, file_type, file_size)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING *`,
+            [
+              projectId,
+              userId,
+              file.originalname,
+              file.path,
+              fileType,
+              file.size,
+            ]
+          );
+        }
+      }
+
+      // Update project with boq_id
+      await client.query("SAVEPOINT project_boq_reference_update");
+      try {
+        await client.query(
+          "UPDATE projects SET boq_id = $1 WHERE id = $2",
+          [result.rows[0].id, projectId]
+        );
+        await client.query("RELEASE SAVEPOINT project_boq_reference_update");
       } catch (error: any) {
         if (error?.code !== "42703") {
           throw error;
         }
-
-        result = await client.query(
-          `INSERT INTO boqs (project_id, uploaded_by, file_name, file_path, file_type, file_size, column_mapping)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           RETURNING *`,
-          [
-            projectId,
-            userId,
-            file.originalname,
-            file.path,
-            fileType,
-            file.size,
-            JSON.stringify(parsed.mapping),
-          ]
-        );
+        await client.query("ROLLBACK TO SAVEPOINT project_boq_reference_update");
       }
-
-      // Update project with boq_id
-      await client.query(
-        "UPDATE projects SET boq_id = $1 WHERE id = $2",
-        [result.rows[0].id, projectId]
-      );
 
       await client.query("COMMIT");
       return result.rows[0];

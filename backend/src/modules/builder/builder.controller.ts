@@ -163,8 +163,20 @@ export async function optimizeEstimateTarget(req: Request, res: Response) {
     return res.json(result);
   } catch (error) {
     console.error("Optimize estimate target error:", error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to optimize target",
-    });
+    const message = error instanceof Error ? error.message : "Failed to optimize target";
+
+    if (/not invited|do not have access/i.test(message)) {
+      return res.status(403).json({ error: message });
+    }
+
+    if (/hard fail enabled|missing_api_key|no valid optimization suggestions|missing llm suggestion/i.test(message)) {
+      return res.status(422).json({ error: message, code: "LLM_OPTIMIZATION_UNAVAILABLE" });
+    }
+
+    if (/target total|priceditems|required|positive number/i.test(message)) {
+      return res.status(400).json({ error: message });
+    }
+
+    return res.status(500).json({ error: message });
   }
 }
