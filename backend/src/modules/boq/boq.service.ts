@@ -3,6 +3,10 @@ import { unlink } from "fs/promises";
 import XLSX from "xlsx";
 import path from "path";
 
+function getDbSafeFileType(rawMimeType: string) {
+  return String(rawMimeType || "application/octet-stream").slice(0, 50);
+}
+
 export async function saveOrUpdateBOQ(
   projectId: string,
   userId: string,
@@ -12,6 +16,7 @@ export async function saveOrUpdateBOQ(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const fileType = getDbSafeFileType(file.mimetype);
 
     // Parse the file to extract data for database storage
     const fs = require("fs");
@@ -44,7 +49,7 @@ export async function saveOrUpdateBOQ(
           [
             file.originalname,
             file.path,
-            file.mimetype,
+            fileType,
             file.size,
             JSON.stringify(parsed.mapping),
             JSON.stringify(parsed.items),
@@ -65,7 +70,7 @@ export async function saveOrUpdateBOQ(
           [
             file.originalname,
             file.path,
-            file.mimetype,
+            fileType,
             file.size,
             JSON.stringify(parsed.mapping),
             projectId,
@@ -88,7 +93,7 @@ export async function saveOrUpdateBOQ(
             userId,
             file.originalname,
             file.path,
-            file.mimetype,
+            fileType,
             file.size,
             JSON.stringify(parsed.mapping),
             JSON.stringify(parsed.items),
@@ -108,7 +113,7 @@ export async function saveOrUpdateBOQ(
             userId,
             file.originalname,
             file.path,
-            file.mimetype,
+            fileType,
             file.size,
             JSON.stringify(parsed.mapping),
           ]
