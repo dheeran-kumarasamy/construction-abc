@@ -25,7 +25,7 @@ interface ParsedResult {
 
 const BOQUploadWithParsing = () => {
   const navigate = useNavigate();
-  const maxUploadSizeBytes = 4 * 1024 * 1024;
+  const maxUploadSizeBytes = 3 * 1024 * 1024;
 
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [selectedProject, setSelectedProject] = useState("");
@@ -89,12 +89,13 @@ const BOQUploadWithParsing = () => {
     const file = e.target.files?.[0] ?? null;
 
     if (file && file.size > maxUploadSizeBytes) {
+      const selectedSizeMb = (file.size / (1024 * 1024)).toFixed(2);
       setSelectedFile(null);
       setParsedData(null);
       setColumnMapping({});
       setShowMappingConfirmation(false);
       setShowOverrideConfirmation(false);
-      setError("Selected file is larger than 4MB. Please upload a smaller BOQ file.");
+      setError(`Selected file is ${selectedSizeMb}MB. Max allowed is 3MB on current deployment.`);
       return;
     }
 
