@@ -127,6 +127,11 @@ const BOQUploadWithParsing = () => {
         body: formData,
       });
 
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("token");
+        throw new Error("Session expired. Please login again.");
+      }
+
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Parse failed");
 
@@ -169,6 +174,11 @@ const BOQUploadWithParsing = () => {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
+
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("token");
+        throw new Error("Session expired. Please login again.");
+      }
 
       const data = await res.json();
 

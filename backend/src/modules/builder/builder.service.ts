@@ -2,7 +2,6 @@ import { pool } from "../../config/db";
 import XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
-import OpenAI from "openai";
 
 interface OptimizationInputItem {
   id: number;
@@ -23,6 +22,8 @@ interface MarginConfig {
 interface OptimizationSuggestion {
   suggestionId: string;
   boqItemId: number;
+  itemDescription: string;
+  priority: "zero_rate_fill" | "location_pricing" | "target_alignment";
   type: "brand_swap" | "finish_change" | "spec_variant" | "vendor_switch";
   reason: string;
   oldRate: number;
@@ -40,6 +41,7 @@ interface OptimizationSuggestion {
 interface LlmSuggestion {
   boqItemId: number;
   type: OptimizationSuggestion["type"];
+  priority?: OptimizationSuggestion["priority"];
   suggestedRate: number;
   reason: string;
   confidence: number;
@@ -55,8 +57,31 @@ interface LlmGenerationResult {
   failureReason?: string;
 }
 
+interface OptimizationProjectContext {
+  siteAddress?: string;
+  city?: string;
+}
+
 function getConfiguredLlmModel() {
-  return process.env.LLM_MODEL || "gpt-4o-mini";
+  const raw = String(process.env.LLM_MODEL || "").trim();
+  if (!raw) {
+    return "gemini-1.5-flash";
+  }
+
+  if (/^gpt-|^o\d/i.test(raw)) {
+    return "gemini-1.5-flash";
+  }
+
+  return raw;
+}
+
+function getConfiguredLlmApiKey() {
+  const raw =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_AI_API_KEY ||
+    process.env.LLM_API_KEY ||
+    "";
+  return String(raw).trim().replace(/^['"]+|['"]+$/g, "");
 }
 
 function normalizeMarginConfig(input?: Partial<MarginConfig>): MarginConfig {
@@ -119,6 +144,24 @@ function calculateGrandTotal(pricedItems: OptimizationInputItem[], marginConfig:
   const subtotalWithUplifts = materialTotal + laborWithUplift + machineryWithUplift + otherTotal;
 
   return subtotalWithUplifts * (1 + marginConfig.overallMargin / 100);
+}
+
+function inferCity(siteAddress?: string) {
+  const value = String(siteAddress || "").trim();
+  if (!value) {
+    return "";
+  }
+
+  const parts = value
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return "";
+  }
+
+  return parts[Math.max(parts.length - 2, 0)] || parts[parts.length - 1] || "";
 }
 
 export async function getAvailableProjects(userId: string) {
@@ -322,6 +365,27 @@ function inferSuggestionType(itemName: string): OptimizationSuggestion["type"] {
   return "spec_variant";
 }
 
+function inferSuggestionPriority(
+  item: OptimizationInputItem,
+  reason: string,
+  llmPriority?: string
+): OptimizationSuggestion["priority"] {
+  if (llmPriority === "zero_rate_fill" || llmPriority === "location_pricing" || llmPriority === "target_alignment") {
+    return llmPriority;
+  }
+
+  if (Number(item.rate || 0) <= 0) {
+    return "zero_rate_fill";
+  }
+
+  const text = String(reason || "").toLowerCase();
+  if (/city|location|regional|market rate|local market|site location/.test(text)) {
+    return "location_pricing";
+  }
+
+  return "target_alignment";
+}
+
 function getMaxReductionPct(item: OptimizationInputItem) {
   const itemName = String(item.item || "");
   if (isQualityCritical(itemName)) {
@@ -371,119 +435,166 @@ function extractJsonPayload(raw: string) {
 async function generateLlmSuggestions(
   targetTotal: number,
   currentTotal: number,
-  candidateItems: OptimizationInputItem[]
+  candidateItems: OptimizationInputItem[],
+  selectedGuardrails: string[],
+  projectContext?: OptimizationProjectContext,
+  options?: { zeroRateOnly?: boolean }
 ): Promise<LlmGenerationResult> {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY;
-  const model = getConfiguredLlmModel();
+  const apiKey = getConfiguredLlmApiKey();
+  const primaryModel = getConfiguredLlmModel();
+  const modelCandidates = Array.from(
+    new Set([primaryModel, "gemini-1.5-flash", "gemini-1.5-flash-8b"])
+  );
 
   if (!apiKey || candidateItems.length === 0) {
     return {
       suggestions: [],
       attempted: false,
       configured: Boolean(apiKey),
-      model,
+      model: primaryModel,
       failureReason: !apiKey ? "missing_api_key" : "no_actionable_items",
     };
   }
 
   try {
-    const client = new OpenAI({ apiKey });
-
-    const response = await client.chat.completions.create({
-      model,
-      temperature: 0.15,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "boq_optimization_suggestions",
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              suggestions: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    boqItemId: { type: "number" },
-                    type: {
-                      type: "string",
-                      enum: ["brand_swap", "finish_change", "spec_variant", "vendor_switch"],
-                    },
-                    suggestedRate: { type: "number" },
-                    reason: { type: "string" },
-                    confidence: { type: "number" },
-                    qualityValidation: { type: "string" },
-                    alternatives: {
-                      type: "array",
-                      items: { type: "string" },
-                    },
-                  },
-                  required: [
-                    "boqItemId",
-                    "type",
-                    "suggestedRate",
-                    "reason",
-                    "confidence",
-                    "qualityValidation",
-                    "alternatives",
-                  ],
-                },
-              },
-            },
-            required: ["suggestions"],
-          },
-        },
+    const promptPayload = {
+      targetTotal,
+      currentTotal,
+      projectLocation: {
+        city: String(projectContext?.city || "").trim() || inferCity(projectContext?.siteAddress),
+        siteAddress: String(projectContext?.siteAddress || "").trim(),
       },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a construction cost optimization assistant. Suggest lower-cost but compliant alternatives. Never compromise safety, quality, statutory code compliance, or architect-mandated specs. Prefer realistic brand/vendor/finish alternatives with revised rates.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            targetTotal,
-            currentTotal,
-            objective:
-              "Reduce overall estimate toward target by suggesting revised unit rates for specific BOQ items using equivalent alternatives.",
-            pricingGuidelines: [
-              "If current item is a premium brand/spec, suggest equivalent mainstream alternative when quality remains compliant.",
-              "Example style: Tata Steel @80/kg -> JSW Steel @75/kg when grade/spec remains equivalent.",
-              "Do not suggest any rate increase.",
-              "Keep suggestions practical and procurement-friendly.",
-            ],
-            outputRules: [
-              "Return suggestions only for provided boqItemId values.",
-              "Each suggestedRate must be > 0 and <= currentRate.",
-              "Confidence must be between 0 and 1.",
-              "Include short qualityValidation proving no quality compromise.",
-              "Provide 1-3 alternatives as plain text.",
-            ],
-            items: candidateItems.map((item) => ({
-              boqItemId: item.id,
-              item: item.item,
-              qty: item.qty,
-              uom: item.uom,
-              category: item.category || "material",
-              currentRate: item.rate,
-              currentTotal: item.total,
-            })),
-          }),
-        },
+      selectedGuardrails,
+      priorityOrder: [
+        "1) Fill rates for all BOQ items currently at 0 price",
+        "2) Suggest city/location-correct pricing for BOQ items",
+        "3) Suggest revisions to align final estimate with target total",
+        "4) Respect all selected builder guardrails strictly",
       ],
-    });
+      zeroRateOnlyMode: Boolean(options?.zeroRateOnly),
+      requiredZeroRateItemIds: options?.zeroRateOnly
+        ? candidateItems
+            .filter((item) => Number(item.rate || 0) <= 0)
+            .map((item) => item.id)
+        : [],
+      objective:
+        "Reduce overall estimate toward target by suggesting revised unit rates for specific BOQ items using equivalent alternatives.",
+      pricingGuidelines: [
+        "If current item is a premium brand/spec, suggest equivalent mainstream alternative when quality remains compliant.",
+        "Example style: Tata Steel @80/kg -> JSW Steel @75/kg when grade/spec remains equivalent.",
+        "Do not suggest any rate increase.",
+        "Keep suggestions practical and procurement-friendly.",
+      ],
+      outputRules: [
+        "Return strict JSON only with shape: { suggestions: [...] }.",
+        "Return suggestions only for provided boqItemId values.",
+        "For items with currentRate > 0, suggestedRate must be > 0 and <= currentRate unless city-specific correction is clearly justified.",
+        "For items with currentRate = 0, suggestedRate must be > 0 and realistic for the provided city/site context.",
+        "If zeroRateOnlyMode is true, return one suggestion for every requiredZeroRateItemIds entry.",
+        "Confidence must be between 0 and 1.",
+        "Include short qualityValidation proving no quality compromise.",
+        "Provide 1-3 alternatives as plain text.",
+        "Set priority as one of: zero_rate_fill, location_pricing, target_alignment.",
+      ],
+      items: candidateItems.map((item) => ({
+        boqItemId: item.id,
+        item: item.item,
+        qty: item.qty,
+        uom: item.uom,
+        category: item.category || "material",
+        currentRate: item.rate,
+        currentTotal: item.total,
+      })),
+    };
 
-    const content = response.choices?.[0]?.message?.content;
+    let selectedModel = primaryModel;
+    let data: any = null;
+    let lastFailureReason: string | undefined;
+
+    for (const model of modelCandidates) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        model
+      )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          generationConfig: {
+            temperature: 0.15,
+            responseMimeType: "application/json",
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text:
+                    "You are a construction cost optimization assistant. Suggest lower-cost but compliant alternatives. Never compromise safety, quality, statutory code compliance, or architect-mandated specs.",
+                },
+                { text: JSON.stringify(promptPayload) },
+              ],
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => "");
+        const normalized = errorBody.toLowerCase();
+        let failureReason = "request_exception";
+
+        if (response.status === 401 || response.status === 403 || normalized.includes("api key")) {
+          failureReason = "auth_error";
+        } else if (response.status === 404 || normalized.includes("model")) {
+          failureReason = "model_error";
+        } else if (response.status === 429 || normalized.includes("quota") || normalized.includes("rate")) {
+          failureReason = "rate_limit";
+        } else if (response.status === 400) {
+          failureReason = "bad_request";
+        }
+
+        lastFailureReason = failureReason;
+
+        if (failureReason === "model_error") {
+          continue;
+        }
+
+        return {
+          suggestions: [],
+          attempted: true,
+          configured: true,
+          model,
+          failureReason,
+        };
+      }
+
+      selectedModel = model;
+      data = (await response.json()) as any;
+      break;
+    }
+
+    if (!data) {
+      return {
+        suggestions: [],
+        attempted: true,
+        configured: true,
+        model: primaryModel,
+        failureReason: lastFailureReason || "request_exception",
+      };
+    }
+    const content = data?.candidates?.[0]?.content?.parts
+      ?.map((part: any) => String(part?.text || ""))
+      .join("\n");
     if (!content) {
       console.error("LLM suggestion API error: empty completion content");
       return {
         suggestions: [],
         attempted: true,
         configured: true,
-        model,
+        model: selectedModel,
         failureReason: "empty_completion_content",
       };
     }
@@ -495,6 +606,7 @@ async function generateLlmSuggestions(
       .map((s: any) => ({
         boqItemId: Number(s?.boqItemId),
         type: String(s?.type || "spec_variant") as OptimizationSuggestion["type"],
+        priority: String(s?.priority || "") as OptimizationSuggestion["priority"],
         suggestedRate: Number(s?.suggestedRate),
         reason: String(s?.reason || "Suggested equivalent option to reduce cost"),
         confidence: Number(s?.confidence),
@@ -518,7 +630,7 @@ async function generateLlmSuggestions(
       suggestions: normalized,
       attempted: true,
       configured: true,
-      model,
+      model: selectedModel,
       failureReason: normalized.length === 0 ? "empty_or_invalid_llm_output" : undefined,
     };
   } catch (error) {
@@ -527,7 +639,7 @@ async function generateLlmSuggestions(
       suggestions: [],
       attempted: true,
       configured: true,
-      model,
+      model: getConfiguredLlmModel(),
       failureReason: "request_exception",
     };
   }
@@ -539,13 +651,15 @@ export async function suggestTargetOptimizations(
   targetTotal: number,
   pricedItems: OptimizationInputItem[],
   marginConfigInput?: Partial<MarginConfig>,
-  hardFailInput?: boolean
+  hardFailInput?: boolean,
+  selectedGuardrails: string[] = [],
+  projectContext?: OptimizationProjectContext
 ) {
   await assertBuilderProjectAccess(userId, projectId);
 
   const marginConfig = normalizeMarginConfig(marginConfigInput);
-  const hardFail =
-    hardFailInput === true || String(process.env.LLM_HARD_FAIL || "").toLowerCase() === "true";
+  const envHardFail = String(process.env.LLM_HARD_FAIL || "").toLowerCase() === "true";
+  const hardFail = typeof hardFailInput === "boolean" ? hardFailInput : envHardFail;
 
   if (!Number.isFinite(targetTotal) || targetTotal <= 0) {
     throw new Error("Target total must be a positive number");
@@ -569,6 +683,8 @@ export async function suggestTargetOptimizations(
       return {
         suggestionId: `opt-${item.id}-blocked`,
         boqItemId: item.id,
+        itemDescription: itemName,
+        priority: "target_alignment",
         type: inferSuggestionType(itemName),
         reason: "No pricing tweak proposed due to architect non-negotiable requirement",
         oldRate: Number(item.rate || 0),
@@ -591,15 +707,56 @@ export async function suggestTargetOptimizations(
   });
 
   const llmCandidates = actionableItems
-    .sort((a, b) => Number(b.total || 0) - Number(a.total || 0))
-    .slice(0, 10);
+    .sort((a, b) => {
+      const aZero = Number(a.rate || 0) <= 0;
+      const bZero = Number(b.rate || 0) <= 0;
+      if (aZero !== bZero) {
+        return aZero ? -1 : 1;
+      }
+      return Number(b.total || 0) - Number(a.total || 0);
+    })
+    .slice(0, 20);
 
-  const llmResult = await generateLlmSuggestions(targetTotal, currentTotal, llmCandidates);
-  const llmSuggestions = llmResult.suggestions;
+  const llmResult = await generateLlmSuggestions(
+    targetTotal,
+    currentTotal,
+    llmCandidates,
+    selectedGuardrails,
+    projectContext
+  );
+  let llmSuggestions = llmResult.suggestions;
+
+  const zeroRateItems = actionableItems.filter((item) => Number(item.rate || 0) <= 0);
+  const getMissingZeroRateItems = () => {
+    const covered = new Set(
+      llmSuggestions
+        .filter((suggestion) => Number.isFinite(suggestion.suggestedRate) && suggestion.suggestedRate > 0)
+        .map((suggestion) => suggestion.boqItemId)
+    );
+    return zeroRateItems.filter((item) => !covered.has(item.id));
+  };
+
+  let missingZeroRateItems = getMissingZeroRateItems();
+  if (missingZeroRateItems.length > 0) {
+    const zeroRateRetry = await generateLlmSuggestions(
+      targetTotal,
+      currentTotal,
+      missingZeroRateItems,
+      selectedGuardrails,
+      projectContext,
+      { zeroRateOnly: true }
+    );
+
+    if (zeroRateRetry.suggestions.length > 0) {
+      llmSuggestions = [...llmSuggestions, ...zeroRateRetry.suggestions];
+    }
+
+    missingZeroRateItems = getMissingZeroRateItems();
+  }
 
   if (hardFail && actionableItems.length > 0) {
     if (!llmResult.configured) {
-      throw new Error("Hard fail enabled: OPENAI_API_KEY is missing; cannot run LLM optimization");
+      throw new Error("Hard fail enabled: GEMINI_API_KEY / GOOGLE_AI_API_KEY is missing; cannot run LLM optimization");
     }
 
     if (!llmResult.attempted) {
@@ -609,6 +766,14 @@ export async function suggestTargetOptimizations(
     if (llmSuggestions.length === 0) {
       throw new Error(
         `Hard fail enabled: LLM returned no valid optimization suggestions (${llmResult.failureReason || "unknown_error"})`
+      );
+    }
+
+    if (missingZeroRateItems.length > 0) {
+      throw new Error(
+        `Hard fail enabled: LLM did not return prescribed rates for zero-priced BOQ items (${missingZeroRateItems
+          .map((item) => item.id)
+          .join(",")})`
       );
     }
   }
@@ -628,10 +793,12 @@ export async function suggestTargetOptimizations(
       return llmOptions.slice(0, 2).map((option, index) => {
         const currentRate = Number(item.rate || 0);
         const maxReductionPct = getMaxReductionPct(item);
-        const minimumAllowedRate = currentRate * (1 - maxReductionPct);
-        const normalizedNewRate = Number(
-          Math.min(currentRate, Math.max(minimumAllowedRate, Number(option.suggestedRate || currentRate))).toFixed(2)
-        );
+        const suggestedRate = Number(option.suggestedRate || currentRate);
+        const normalizedNewRate = currentRate > 0
+          ? Number(
+              Math.min(currentRate, Math.max(currentRate * (1 - maxReductionPct), suggestedRate)).toFixed(2)
+            )
+          : Number(Math.max(0, suggestedRate).toFixed(2));
         const rateDelta = Number((normalizedNewRate - currentRate).toFixed(2));
         const baseTotalDelta = rateDelta * Number(item.qty || 0);
         const totalDelta = Number((baseTotalDelta * getGrandImpactMultiplier(item, marginConfig)).toFixed(2));
@@ -639,6 +806,8 @@ export async function suggestTargetOptimizations(
         return {
           suggestionId: `opt-${item.id}-llm-${index + 1}`,
           boqItemId: item.id,
+          itemDescription: itemName,
+          priority: inferSuggestionPriority(item, option.reason, option.priority),
           type: option.type,
           reason: option.reason,
           oldRate: currentRate,
@@ -660,6 +829,27 @@ export async function suggestTargetOptimizations(
       throw new Error(`Hard fail enabled: missing LLM suggestion for BOQ item ${item.id}`);
     }
 
+    if (Number(item.rate || 0) <= 0) {
+      return [{
+        suggestionId: `opt-${item.id}-missing-rate`,
+        boqItemId: item.id,
+        itemDescription: itemName,
+        priority: "zero_rate_fill",
+        type: inferSuggestionType(itemName),
+        reason: "No LLM rate available for this zero-priced BOQ item. Please provide local market/base rate manually.",
+        oldRate: 0,
+        newRate: 0,
+        rateDelta: 0,
+        totalDelta: 0,
+        confidence: 0.6,
+        blocked: true,
+        blockReason: "LLM did not return a valid rate for this item",
+        qualityValidation: "Manual validation required before submission",
+        alternatives: [],
+        source: "heuristic",
+      }];
+    }
+
       const maxReductionPct = getMaxReductionPct(item);
       const currentRate = Number(item.rate || 0);
       const newRate = Number((currentRate * (1 - maxReductionPct)).toFixed(2));
@@ -670,6 +860,8 @@ export async function suggestTargetOptimizations(
       return [{
         suggestionId: `opt-${item.id}-heuristic`,
         boqItemId: item.id,
+        itemDescription: itemName,
+        priority: inferSuggestionPriority(item, "location and target alignment heuristic"),
         type: inferSuggestionType(itemName),
         reason:
           "Consider equivalent compliant alternative to reduce cost without changing mandatory quality requirements",
@@ -686,10 +878,23 @@ export async function suggestTargetOptimizations(
     });
 
   const actionable = actionableSuggestions
-    .filter((s) => !s.blocked && s.totalDelta < 0)
+    .filter((s) => !s.blocked && s.totalDelta < 0 && s.oldRate > 0)
     .sort((a, b) => a.totalDelta - b.totalDelta);
 
+  const zeroRateFillSuggestions = actionableSuggestions
+    .filter((s) => !s.blocked && s.oldRate <= 0 && s.newRate > 0)
+    .sort((a, b) => b.confidence - a.confidence);
+
   const selected: OptimizationSuggestion[] = [];
+  const zeroFilled = new Set<number>();
+  zeroRateFillSuggestions.forEach((suggestion) => {
+    if (zeroFilled.has(suggestion.boqItemId)) {
+      return;
+    }
+    selected.push(suggestion);
+    zeroFilled.add(suggestion.boqItemId);
+  });
+
   let accumulatedSavings = 0;
   const neededSavings = Math.max(gapToClose, 0);
 

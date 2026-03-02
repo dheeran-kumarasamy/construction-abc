@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import TableWrapper from "../../components/TableWrapper";
@@ -39,6 +39,8 @@ interface MarginConfig {
 interface OptimizerSuggestion {
   suggestionId: string;
   boqItemId: number;
+  itemDescription: string;
+  priority: "zero_rate_fill" | "location_pricing" | "target_alignment";
   type: "brand_swap" | "finish_change" | "spec_variant" | "vendor_switch";
   reason: string;
   oldRate: number;
@@ -53,6 +55,29 @@ interface OptimizerSuggestion {
   source?: "llm" | "heuristic";
   decision?: "accepted" | "declined";
 }
+
+const STANDARD_GUARDRAILS = [
+  {
+    id: "no_quality_compromise",
+    label: "Do not compromise quality or safety",
+  },
+  {
+    id: "respect_architect_specs",
+    label: "Do not violate architect-mandated specifications",
+  },
+  {
+    id: "prefer_equivalent_brands",
+    label: "Prefer equivalent compliant brand/vendor alternatives",
+  },
+  {
+    id: "city_realistic_pricing",
+    label: "Use realistic city/location based pricing",
+  },
+  {
+    id: "avoid_unavailable_materials",
+    label: "Avoid unavailable/non-standard materials",
+  },
+] as const;
 
 export default function ApplyBasePricing() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -73,6 +98,40 @@ export default function ApplyBasePricing() {
   const [optimizerSuggestions, setOptimizerSuggestions] = useState<OptimizerSuggestion[]>([]);
   const [optimizerEngineInfo, setOptimizerEngineInfo] = useState<string>("");
   const [optimizerBaseRatesByItem, setOptimizerBaseRatesByItem] = useState<Record<number, number>>({});
+  const suggestionsContainerRef = useRef<HTMLDivElement | null>(null);
+
+  function getPriorityStyle(priority: OptimizerSuggestion["priority"]) {
+    if (priority === "zero_rate_fill") {
+      return { border: "#f59e0b", background: "#fffbeb", text: "#92400e", label: "Priority 1 • Zero-rate fill" };
+    }
+    if (priority === "location_pricing") {
+      return { border: "#3b82f6", background: "#eff6ff", text: "#1e40af", label: "Priority 2 • Location pricing" };
+    }
+    return { border: "#10b981", background: "#ecfdf5", text: "#065f46", label: "Priority 3 • Target alignment" };
+  }
+
+  function getPriorityRank(priority: OptimizerSuggestion["priority"]) {
+    if (priority === "zero_rate_fill") return 0;
+    if (priority === "location_pricing") return 1;
+    return 2;
+  }
+
+  useEffect(() => {
+    if (!optimizerSuggestions.length) {
+      return;
+    }
+
+    const hasZeroRatePriority = optimizerSuggestions.some(
+      (suggestion) => suggestion.priority === "zero_rate_fill"
+    );
+
+    if (hasZeroRatePriority && suggestionsContainerRef.current) {
+      suggestionsContainerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [optimizerSuggestions]);
+  const [selectedGuardrails, setSelectedGuardrails] = useState<string[]>(
+    STANDARD_GUARDRAILS.map((item) => item.id)
+  );
 
   useEffect(() => {
     fetchProjects();
@@ -147,6 +206,7 @@ export default function ApplyBasePricing() {
     setOptimizerSuggestions([]);
     setOptimizerEngineInfo("");
     setOptimizerBaseRatesByItem({});
+    setSelectedGuardrails(STANDARD_GUARDRAILS.map((item) => item.id));
     
     if (!projectId) {
       setBoqItems([]);
@@ -252,11 +312,17 @@ export default function ApplyBasePricing() {
       return;
     }
 
+    if (selectedGuardrails.length === 0) {
+      setOptimizerError("Please select at least one guardrail before requesting AI suggestions");
+      return;
+    }
+
     setOptimizerLoading(true);
     setOptimizerError("");
     setOptimizerEngineInfo("");
     try {
       const token = localStorage.getItem("token");
+      const selectedProject = projects.find((project) => project.id === selectedProjectId);
       const response = await fetch(
         apiUrl(`/api/builder/projects/${selectedProjectId}/optimize-target`),
         {
@@ -269,7 +335,11 @@ export default function ApplyBasePricing() {
             targetTotal: parsedTarget,
             pricedItems,
             marginConfig,
-            hardFail: true,
+            hardFail: false,
+            selectedGuardrails,
+            projectContext: {
+              siteAddress: selectedProject?.site_address || "",
+            },
           }),
         }
       );
@@ -379,6 +449,14 @@ export default function ApplyBasePricing() {
           ? { ...s, decision: "declined" }
           : s
       )
+    );
+  }
+
+  function handleGuardrailToggle(guardrailId: string) {
+    setSelectedGuardrails((prev) =>
+      prev.includes(guardrailId)
+        ? prev.filter((id) => id !== guardrailId)
+        : [...prev, guardrailId]
     );
   }
 
@@ -496,6 +574,41 @@ export default function ApplyBasePricing() {
   const acceptedSuggestions = optimizerSuggestions.filter((s) => s.decision === "accepted" && !s.blocked);
   const acceptedImpact = acceptedSuggestions.reduce((sum, s) => sum + Number(s.totalDelta || 0), 0);
   const acceptedCount = acceptedSuggestions.length;
+  const sortedSuggestions = [...optimizerSuggestions].sort((a, b) => {
+    const priorityDiff = getPriorityRank(a.priority) - getPriorityRank(b.priority);
+    if (priorityDiff !== 0) return priorityDiff;
+    return Math.abs(Number(b.totalDelta || 0)) - Math.abs(Number(a.totalDelta || 0));
+  });
+  const zeroRateBoqItemIds = Object.keys(optimizerBaseRatesByItem)
+    .map((key) => Number(key))
+    .filter((id) => Number(optimizerBaseRatesByItem[id]) <= 0);
+  const zeroRateTotal = zeroRateBoqItemIds.length;
+  const zeroRateResolvedCount = zeroRateBoqItemIds.filter((id) => {
+    const item = pricedItems.find((row) => row.id === id);
+    return Number(item?.rate || 0) > 0;
+  }).length;
+  const prioritySectionConfig: Array<{ key: OptimizerSuggestion["priority"]; title: string }> = [
+    { key: "zero_rate_fill", title: "Priority 1 • Zero-rate Fill" },
+    { key: "location_pricing", title: "Priority 2 • Location Pricing" },
+    { key: "target_alignment", title: "Priority 3 • Target Alignment" },
+  ];
+  const prioritySections: Array<{
+    key: OptimizerSuggestion["priority"];
+    title: string;
+    suggestions: OptimizerSuggestion[];
+    accepted: number;
+    blocked: number;
+    totalImpact: number;
+  }> = prioritySectionConfig.map((section) => {
+    const suggestions = sortedSuggestions.filter((item) => item.priority === section.key);
+    return {
+      ...section,
+      suggestions,
+      accepted: suggestions.filter((item) => item.decision === "accepted").length,
+      blocked: suggestions.filter((item) => item.blocked).length,
+      totalImpact: suggestions.reduce((sum, item) => sum + Number(item.totalDelta || 0), 0),
+    };
+  });
 
   return (
     <div style={pageStyles.page}>
@@ -560,6 +673,35 @@ export default function ApplyBasePricing() {
                 Target Price Optimizer (MVP)
               </h3>
 
+              <div
+                style={{
+                  marginBottom: "0.9rem",
+                  padding: "0.75rem",
+                  border: "1px solid #99f6e4",
+                  borderRadius: "8px",
+                  backgroundColor: "#ffffff",
+                }}
+              >
+                <p style={{ margin: "0 0 0.5rem 0", color: "#0f766e", fontWeight: 600 }}>
+                  Guardrails to apply before AI suggestions
+                </p>
+                <div style={{ display: "grid", gap: "0.45rem" }}>
+                  {STANDARD_GUARDRAILS.map((guardrail) => (
+                    <label key={guardrail.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#334155" }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedGuardrails.includes(guardrail.id)}
+                        onChange={() => handleGuardrailToggle(guardrail.id)}
+                      />
+                      <span>{guardrail.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <p style={{ margin: "0.6rem 0 0 0", color: "#475569", fontSize: "0.9rem" }}>
+                  Priority applied: 1) Fill zero-priced BOQ items 2) Adjust by city/location pricing 3) Recommend target-alignment revisions 4) Enforce selected guardrails.
+                </p>
+              </div>
+
               <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
                 <input
                   type="number"
@@ -611,75 +753,159 @@ export default function ApplyBasePricing() {
               )}
 
               {optimizerSuggestions.length > 0 && (
-                <div style={{ marginTop: "1rem", display: "grid", gap: "0.75rem" }}>
-                  {optimizerSuggestions.map((suggestion) => (
+                <div ref={suggestionsContainerRef} style={{ marginTop: "1rem", display: "grid", gap: "1rem" }}>
+                  <div
+                    style={{
+                      border: "1px solid #99f6e4",
+                      borderRadius: "10px",
+                      backgroundColor: "#ffffff",
+                      padding: "0.9rem",
+                    }}
+                  >
+                    <h4 style={{ margin: 0, color: "#0f766e", fontWeight: 700 }}>Optimization Report</h4>
                     <div
-                      key={suggestion.suggestionId}
                       style={{
-                        border: "1px solid #d1d5db",
-                        borderRadius: "8px",
-                        padding: "0.75rem",
-                        backgroundColor: "#ffffff",
+                        marginTop: "0.75rem",
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+                        gap: "0.65rem",
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-                        <strong>
-                          Item #{suggestion.boqItemId} • {suggestion.type.replace("_", " ")}
-                        </strong>
-                        <span>
-                          Rate: ₹{suggestion.oldRate.toFixed(2)} → ₹{suggestion.newRate.toFixed(2)}
-                        </span>
+                      <div style={{ border: "1px solid #ccfbf1", borderRadius: "8px", padding: "0.6rem", backgroundColor: "#f0fdfa" }}>
+                        <div style={{ color: "#0f766e", fontSize: "0.82rem" }}>Total suggestions</div>
+                        <div style={{ color: "#0f172a", fontWeight: 700, fontSize: "1.05rem" }}>{sortedSuggestions.length}</div>
                       </div>
-
-                      <p style={{ margin: "0.5rem 0", color: "#334155" }}>{suggestion.reason}</p>
-
-                      {suggestion.qualityValidation && (
-                        <p style={{ margin: "0.25rem 0", color: "#0f766e", fontWeight: 500 }}>
-                          Quality validation: {suggestion.qualityValidation}
-                        </p>
-                      )}
-
-                      {Array.isArray(suggestion.alternatives) && suggestion.alternatives.length > 0 && (
-                        <div style={{ margin: "0.5rem 0" }}>
-                          <p style={{ margin: 0, color: "#334155", fontWeight: 500 }}>Alternative options:</p>
-                          <ul style={{ margin: "0.25rem 0 0 1rem", color: "#475569" }}>
-                            {suggestion.alternatives.map((option, optionIndex) => (
-                              <li key={`${suggestion.suggestionId}-alt-${optionIndex}`}>{option}</li>
-                            ))}
-                          </ul>
+                      <div style={{ border: "1px solid #ccfbf1", borderRadius: "8px", padding: "0.6rem", backgroundColor: "#f0fdfa" }}>
+                        <div style={{ color: "#0f766e", fontSize: "0.82rem" }}>Accepted actions</div>
+                        <div style={{ color: "#0f172a", fontWeight: 700, fontSize: "1.05rem" }}>{acceptedCount}</div>
+                      </div>
+                      <div style={{ border: "1px solid #ccfbf1", borderRadius: "8px", padding: "0.6rem", backgroundColor: "#f0fdfa" }}>
+                        <div style={{ color: "#0f766e", fontSize: "0.82rem" }}>Net accepted impact</div>
+                        <div style={{ color: "#0f172a", fontWeight: 700, fontSize: "1.05rem" }}>₹{acceptedImpact.toFixed(2)}</div>
+                      </div>
+                      <div style={{ border: "1px solid #ccfbf1", borderRadius: "8px", padding: "0.6rem", backgroundColor: "#f0fdfa" }}>
+                        <div style={{ color: "#0f766e", fontSize: "0.82rem" }}>Remaining gap</div>
+                        <div style={{ color: targetGap !== null && targetGap <= 0 ? "#15803d" : "#0f172a", fontWeight: 700, fontSize: "1.05rem" }}>
+                          {targetGap === null ? "—" : `₹${targetGap.toFixed(2)}`}
                         </div>
-                      )}
-
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-                        <span style={{ color: "#0f766e", fontWeight: 500 }}>
-                          Total impact: ₹{suggestion.totalDelta.toFixed(2)} • Confidence: {(suggestion.confidence * 100).toFixed(0)}% • Source: {(suggestion.source || "heuristic").toUpperCase()}
-                        </span>
-
-                        {suggestion.blocked ? (
-                          <span style={{ color: "#b91c1c", fontWeight: 600 }}>
-                            Guardrail: {suggestion.blockReason || "Blocked"}
-                          </span>
-                        ) : (
-                          <div style={{ display: "flex", gap: "0.5rem" }}>
-                            <button
-                              onClick={() => handleSuggestionDecision(suggestion.suggestionId, "accepted")}
-                              disabled={suggestion.decision === "accepted"}
-                              style={pageStyles.primaryBtn}
-                            >
-                              {suggestion.decision === "accepted" ? "Accepted" : "Accept"}
-                            </button>
-                            <button
-                              onClick={() => handleSuggestionDecision(suggestion.suggestionId, "declined")}
-                              disabled={suggestion.decision === "declined"}
-                              style={pageStyles.secondaryBtn}
-                            >
-                              {suggestion.decision === "declined" ? "Declined" : "Decline"}
-                            </button>
-                          </div>
-                        )}
                       </div>
                     </div>
-                  ))}
+                    {zeroRateTotal > 0 && (
+                      <div
+                        style={{
+                          marginTop: "0.75rem",
+                          border: "1px solid #f59e0b",
+                          backgroundColor: "#fffbeb",
+                          color: "#92400e",
+                          borderRadius: "8px",
+                          padding: "0.65rem 0.75rem",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Zero-rate items resolved: {zeroRateResolvedCount}/{zeroRateTotal}
+                      </div>
+                    )}
+                  </div>
+
+                  {prioritySections.map((section) => {
+                    if (!section.suggestions.length) return null;
+                    const sectionStyle = getPriorityStyle(section.key);
+                    return (
+                      <div
+                        key={section.key}
+                        style={{
+                          border: `1px solid ${sectionStyle.border}`,
+                          borderRadius: "10px",
+                          backgroundColor: sectionStyle.background,
+                          padding: "0.85rem",
+                          display: "grid",
+                          gap: "0.65rem",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                          <strong style={{ color: sectionStyle.text }}>{section.title}</strong>
+                          <span style={{ color: sectionStyle.text, fontWeight: 600 }}>
+                            Items: {section.suggestions.length} • Accepted: {section.accepted} • Blocked: {section.blocked} • Impact: ₹{section.totalImpact.toFixed(2)}
+                          </span>
+                        </div>
+
+                        {section.suggestions.map((suggestion) => (
+                          <div
+                            key={suggestion.suggestionId}
+                            style={{
+                              border: "1px solid rgba(15, 23, 42, 0.12)",
+                              borderRadius: "8px",
+                              backgroundColor: "#ffffff",
+                              padding: "0.7rem",
+                              display: "grid",
+                              gap: "0.5rem",
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                              <strong>
+                                Item #{suggestion.boqItemId} • {suggestion.type.replace("_", " ")}
+                              </strong>
+                              <span style={{ color: "#334155", fontWeight: 600 }}>
+                                Rate: ₹{suggestion.oldRate.toFixed(2)} → ₹{suggestion.newRate.toFixed(2)}
+                              </span>
+                            </div>
+
+                            <p style={{ margin: 0, color: "#0f172a", fontWeight: 600 }}>
+                              {suggestion.itemDescription || "(No item description)"}
+                            </p>
+
+                            <p style={{ margin: 0, color: "#334155" }}>{suggestion.reason}</p>
+
+                            {suggestion.qualityValidation && (
+                              <p style={{ margin: 0, color: "#0f766e", fontWeight: 500 }}>
+                                Quality validation: {suggestion.qualityValidation}
+                              </p>
+                            )}
+
+                            {Array.isArray(suggestion.alternatives) && suggestion.alternatives.length > 0 && (
+                              <div>
+                                <p style={{ margin: 0, color: "#334155", fontWeight: 500 }}>Alternative options:</p>
+                                <ul style={{ margin: "0.25rem 0 0 1rem", color: "#475569" }}>
+                                  {suggestion.alternatives.map((option, optionIndex) => (
+                                    <li key={`${suggestion.suggestionId}-alt-${optionIndex}`}>{option}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                              <span style={{ color: "#0f766e", fontWeight: 500 }}>
+                                Total impact: ₹{suggestion.totalDelta.toFixed(2)} • Confidence: {(suggestion.confidence * 100).toFixed(0)}% • Source: {(suggestion.source || "heuristic").toUpperCase()}
+                              </span>
+
+                              {suggestion.blocked ? (
+                                <span style={{ color: "#b91c1c", fontWeight: 600 }}>
+                                  Guardrail: {suggestion.blockReason || "Blocked"}
+                                </span>
+                              ) : (
+                                <div style={{ display: "flex", gap: "0.5rem" }}>
+                                  <button
+                                    onClick={() => handleSuggestionDecision(suggestion.suggestionId, "accepted")}
+                                    disabled={suggestion.decision === "accepted"}
+                                    style={pageStyles.primaryBtn}
+                                  >
+                                    {suggestion.decision === "accepted" ? "Accepted" : "Accept"}
+                                  </button>
+                                  <button
+                                    onClick={() => handleSuggestionDecision(suggestion.suggestionId, "declined")}
+                                    disabled={suggestion.decision === "declined"}
+                                    style={pageStyles.secondaryBtn}
+                                  >
+                                    {suggestion.decision === "declined" ? "Declined" : "Decline"}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

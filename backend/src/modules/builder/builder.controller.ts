@@ -118,6 +118,11 @@ export async function optimizeEstimateTarget(req: Request, res: Response) {
     const { targetTotal, pricedItems } = req.body as {
       targetTotal?: number;
       hardFail?: boolean;
+      selectedGuardrails?: string[];
+      projectContext?: {
+        siteAddress?: string;
+        city?: string;
+      };
       pricedItems?: Array<{
         id: number;
         item: string;
@@ -135,6 +140,8 @@ export async function optimizeEstimateTarget(req: Request, res: Response) {
     };
     const marginConfig = req.body?.marginConfig;
     const hardFail = req.body?.hardFail;
+    const selectedGuardrails = req.body?.selectedGuardrails;
+    const projectContext = req.body?.projectContext;
 
     const user = (req as any).user;
     const userId = user?.userId;
@@ -157,14 +164,28 @@ export async function optimizeEstimateTarget(req: Request, res: Response) {
       Number(targetTotal),
       pricedItems,
       marginConfig,
-      Boolean(hardFail)
+      Boolean(hardFail),
+      Array.isArray(selectedGuardrails) ? selectedGuardrails : [],
+      projectContext
     );
 
     return res.json(result);
   } catch (error) {
     console.error("Optimize estimate target error:", error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to optimize target",
-    });
+    const message = error instanceof Error ? error.message : "Failed to optimize target";
+
+    if (/not invited|do not have access/i.test(message)) {
+      return res.status(403).json({ error: message, code: "PROJECT_ACCESS_DENIED" });
+    }
+
+    if (/hard fail enabled|missing llm suggestion|no valid optimization suggestions|rate limit|quota|authentication|api key/i.test(message)) {
+      return res.status(422).json({ error: message, code: "LLM_OPTIMIZATION_UNAVAILABLE" });
+    }
+
+    if (/target total|priceditems|required|positive number/i.test(message)) {
+      return res.status(400).json({ error: message, code: "INVALID_OPTIMIZER_INPUT" });
+    }
+
+    return res.status(500).json({ error: message, code: "OPTIMIZER_INTERNAL_ERROR" });
   }
 }
