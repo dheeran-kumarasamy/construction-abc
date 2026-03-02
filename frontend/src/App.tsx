@@ -45,46 +45,25 @@ function DashboardButton() {
     return null;
   }
 
-  const dashboardPath = `/${user.role}`;
-
-  if (location.pathname === dashboardPath) {
-    return (
-      <button
-        type="button"
-        style={{
-          ...pageStyles.secondaryBtn,
-          position: "fixed",
-          top: 16,
-          right: 16,
-          zIndex: 1000,
-          height: "40px",
-        }}
-        onClick={() => {
-          logout();
-          localStorage.removeItem("token");
-          localStorage.removeItem("role");
-          navigate("/login");
-        }}
-      >
-        Logout
-      </button>
-    );
-  }
-
   return (
     <button
       type="button"
       style={{
-        ...pageStyles.primaryBtn,
+        ...pageStyles.secondaryBtn,
         position: "fixed",
         top: 16,
         right: 16,
         zIndex: 1000,
         height: "40px",
       }}
-      onClick={() => navigate(dashboardPath)}
+      onClick={() => {
+        logout();
+        localStorage.removeItem("token");
+        localStorage.removeItem("role");
+        navigate("/login");
+      }}
     >
-      Go to {user.role.charAt(0).toUpperCase() + user.role.slice(1)} Dashboard
+      Logout
     </button>
   );
 }

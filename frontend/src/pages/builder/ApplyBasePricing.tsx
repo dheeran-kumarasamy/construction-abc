@@ -132,6 +132,7 @@ export default function ApplyBasePricing() {
   const [selectedGuardrails, setSelectedGuardrails] = useState<string[]>(
     STANDARD_GUARDRAILS.map((item) => item.id)
   );
+  const isUiLocked = optimizerLoading;
 
   useEffect(() => {
     fetchProjects();
@@ -307,9 +308,21 @@ export default function ApplyBasePricing() {
     }
 
     const parsedTarget = Number(targetTotal);
-    if (!Number.isFinite(parsedTarget) || parsedTarget <= 0) {
+    const hasZeroRateItems = pricedItems.some((item) => Number(item.rate || 0) <= 0);
+    const effectiveTarget =
+      Number.isFinite(parsedTarget) && parsedTarget > 0
+        ? parsedTarget
+        : hasZeroRateItems
+          ? Math.max(Number(totals.grandTotal || 0), 1)
+          : NaN;
+
+    if (!Number.isFinite(effectiveTarget) || effectiveTarget <= 0) {
       setOptimizerError("Enter a valid target total");
       return;
+    }
+
+    if ((!Number.isFinite(parsedTarget) || parsedTarget <= 0) && hasZeroRateItems) {
+      setTargetTotal(effectiveTarget.toFixed(2));
     }
 
     if (selectedGuardrails.length === 0) {
@@ -332,7 +345,7 @@ export default function ApplyBasePricing() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            targetTotal: parsedTarget,
+            targetTotal: effectiveTarget,
             pricedItems,
             marginConfig,
             hardFail: false,
@@ -449,6 +462,74 @@ export default function ApplyBasePricing() {
           ? { ...s, decision: "declined" }
           : s
       )
+    );
+  }
+
+  function handleAcceptAllLlmSuggestions() {
+    const actionableLlmSuggestions = optimizerSuggestions.filter(
+      (suggestion) => suggestion.source === "llm" && !suggestion.blocked
+    );
+
+    if (actionableLlmSuggestions.length === 0) {
+      return;
+    }
+
+    const bestSuggestionByItem = new Map<number, OptimizerSuggestion>();
+    actionableLlmSuggestions.forEach((suggestion) => {
+      const existing = bestSuggestionByItem.get(suggestion.boqItemId);
+      if (!existing) {
+        bestSuggestionByItem.set(suggestion.boqItemId, suggestion);
+        return;
+      }
+
+      const existingPriorityRank = getPriorityRank(existing.priority);
+      const nextPriorityRank = getPriorityRank(suggestion.priority);
+
+      if (
+        nextPriorityRank < existingPriorityRank ||
+        (nextPriorityRank === existingPriorityRank && suggestion.confidence > existing.confidence)
+      ) {
+        bestSuggestionByItem.set(suggestion.boqItemId, suggestion);
+      }
+    });
+
+    const acceptedIds = new Set(
+      Array.from(bestSuggestionByItem.values()).map((suggestion) => suggestion.suggestionId)
+    );
+    const acceptedItemIds = new Set(Array.from(bestSuggestionByItem.keys()));
+
+    setPricedItems((prev) =>
+      prev.map((item) => {
+        const selected = bestSuggestionByItem.get(item.id);
+        if (!selected) {
+          return item;
+        }
+
+        const newRate = Number(selected.newRate || 0);
+        return {
+          ...item,
+          rate: newRate,
+          total: Number((item.qty * newRate).toFixed(2)),
+        };
+      })
+    );
+
+    setOptimizerSuggestions((prev) =>
+      prev.map((suggestion) => {
+        if (!acceptedItemIds.has(suggestion.boqItemId)) {
+          return suggestion;
+        }
+
+        if (acceptedIds.has(suggestion.suggestionId)) {
+          return { ...suggestion, decision: "accepted" };
+        }
+
+        if (suggestion.source === "llm" && !suggestion.blocked) {
+          return { ...suggestion, decision: undefined };
+        }
+
+        return suggestion;
+      })
     );
   }
 
@@ -574,6 +655,10 @@ export default function ApplyBasePricing() {
   const acceptedSuggestions = optimizerSuggestions.filter((s) => s.decision === "accepted" && !s.blocked);
   const acceptedImpact = acceptedSuggestions.reduce((sum, s) => sum + Number(s.totalDelta || 0), 0);
   const acceptedCount = acceptedSuggestions.length;
+  const zeroRateCount = pricedItems.filter((item) => Number(item.rate || 0) <= 0).length;
+  const actionableLlmSuggestionCount = optimizerSuggestions.filter(
+    (suggestion) => suggestion.source === "llm" && !suggestion.blocked
+  ).length;
   const sortedSuggestions = [...optimizerSuggestions].sort((a, b) => {
     const priorityDiff = getPriorityRank(a.priority) - getPriorityRank(b.priority);
     if (priorityDiff !== 0) return priorityDiff;
@@ -642,6 +727,7 @@ export default function ApplyBasePricing() {
           <select
             value={selectedProjectId}
             onChange={(e) => handleProjectChange(e.target.value)}
+            disabled={isUiLocked}
             style={{ ...pageStyles.select, width: "100%" }}
           >
             <option value="">-- Select a Project --</option>
@@ -691,6 +777,7 @@ export default function ApplyBasePricing() {
                       <input
                         type="checkbox"
                         checked={selectedGuardrails.includes(guardrail.id)}
+                        disabled={isUiLocked}
                         onChange={() => handleGuardrailToggle(guardrail.id)}
                       />
                       <span>{guardrail.label}</span>
@@ -702,18 +789,47 @@ export default function ApplyBasePricing() {
                 </p>
               </div>
 
+              {zeroRateCount > 0 && (
+                <div
+                  style={{
+                    marginBottom: "0.9rem",
+                    padding: "0.75rem",
+                    border: "1px solid #f59e0b",
+                    borderRadius: "8px",
+                    backgroundColor: "#fffbeb",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span style={{ color: "#92400e", fontWeight: 600 }}>
+                    {zeroRateCount} BOQ item(s) still have zero rate. AI can recommend market rates for these items.
+                  </span>
+                  <button
+                    onClick={handleGenerateSuggestions}
+                    disabled={isUiLocked}
+                    style={pageStyles.primaryBtn}
+                  >
+                    {optimizerLoading ? "Generating..." : "Get Zero-rate Recommendations"}
+                  </button>
+                </div>
+              )}
+
               <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
                 <input
                   type="number"
                   min="0"
                   placeholder="Enter target grand total"
                   value={targetTotal}
+                  disabled={isUiLocked}
                   onChange={(e) => setTargetTotal(e.target.value)}
                   style={{ ...pageStyles.input, width: "280px" }}
                 />
                 <button
                   onClick={handleGenerateSuggestions}
-                  disabled={optimizerLoading}
+                  disabled={isUiLocked}
                   style={pageStyles.primaryBtn}
                 >
                   {optimizerLoading ? "Generating..." : "Get AI Suggestions"}
@@ -762,7 +878,18 @@ export default function ApplyBasePricing() {
                       padding: "0.9rem",
                     }}
                   >
-                    <h4 style={{ margin: 0, color: "#0f766e", fontWeight: 700 }}>Optimization Report</h4>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                      <h4 style={{ margin: 0, color: "#0f766e", fontWeight: 700 }}>Optimization Report</h4>
+                      {actionableLlmSuggestionCount > 0 && (
+                        <button
+                          onClick={handleAcceptAllLlmSuggestions}
+                          disabled={isUiLocked}
+                          style={pageStyles.primaryBtn}
+                        >
+                          Accept All LLM Recommendations ({actionableLlmSuggestionCount})
+                        </button>
+                      )}
+                    </div>
                     <div
                       style={{
                         marginTop: "0.75rem",
@@ -886,14 +1013,14 @@ export default function ApplyBasePricing() {
                                 <div style={{ display: "flex", gap: "0.5rem" }}>
                                   <button
                                     onClick={() => handleSuggestionDecision(suggestion.suggestionId, "accepted")}
-                                    disabled={suggestion.decision === "accepted"}
+                                    disabled={isUiLocked || suggestion.decision === "accepted"}
                                     style={pageStyles.primaryBtn}
                                   >
                                     {suggestion.decision === "accepted" ? "Accepted" : "Accept"}
                                   </button>
                                   <button
                                     onClick={() => handleSuggestionDecision(suggestion.suggestionId, "declined")}
-                                    disabled={suggestion.decision === "declined"}
+                                    disabled={isUiLocked || suggestion.decision === "declined"}
                                     style={pageStyles.secondaryBtn}
                                   >
                                     {suggestion.decision === "declined" ? "Declined" : "Decline"}
@@ -937,6 +1064,7 @@ export default function ApplyBasePricing() {
                         <input
                           type="number"
                           value={Number.isFinite(item.rate) ? item.rate : 0}
+                          disabled={isUiLocked}
                           onChange={(e) =>
                             handleRateChange(index, Number(e.target.value))
                           }
@@ -1093,6 +1221,7 @@ export default function ApplyBasePricing() {
                 </label>
                 <textarea
                   value={notes ?? ""}
+                  disabled={isUiLocked}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Add any notes for the architect..."
                   rows={3}
@@ -1109,15 +1238,15 @@ export default function ApplyBasePricing() {
             <div style={{ marginTop: "2rem", textAlign: "center" }}>
               <button
                 onClick={handleSubmit}
-                disabled={loading}
+                disabled={loading || isUiLocked}
                 style={{
                   ...pageStyles.primaryBtn,
                   fontSize: "1.125rem",
                   padding: "0.875rem 2rem",
-                  ...(loading ? { opacity: 0.5, cursor: "not-allowed" } : {}),
+                  ...(loading || isUiLocked ? { opacity: 0.5, cursor: "not-allowed" } : {}),
                 }}
               >
-                {loading ? "Submitting..." : "Submit Estimate to Architect"}
+                {loading ? "Submitting..." : isUiLocked ? "AI Processing..." : "Submit Estimate to Architect"}
               </button>
             </div>
           </>
@@ -1135,6 +1264,37 @@ export default function ApplyBasePricing() {
           </p>
         )}
       </div>
+
+      {isUiLocked && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.35)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              border: "1px solid #99f6e4",
+              borderRadius: "10px",
+              padding: "1rem 1.25rem",
+              minWidth: "280px",
+              textAlign: "center",
+              color: "#0f766e",
+              fontWeight: 600,
+              boxShadow: "0 10px 25px rgba(15, 23, 42, 0.15)",
+            }}
+          >
+            AI is processing recommendations. Please wait...
+          </div>
+        </div>
+      )}
     </div>
   );
 }

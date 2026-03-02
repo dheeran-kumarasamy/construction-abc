@@ -668,7 +668,7 @@ export async function suggestTargetOptimizations(
   const currentTotal = calculateGrandTotal(pricedItems, marginConfig);
   const gapToClose = currentTotal - targetTotal;
 
-  const validItems = pricedItems.filter((item) => Number(item.qty || 0) > 0 && Number(item.rate || 0) > 0);
+  const validItems = pricedItems.filter((item) => Number(item.qty || 0) > 0);
 
   const blockedSuggestions: OptimizationSuggestion[] = validItems
     .filter((item) => {
@@ -907,7 +907,10 @@ export async function suggestTargetOptimizations(
     }
   }
 
-  const maxSuggestions = 12;
+  const minimumSuggestionsNeededForZeroRateCoverage = selected.filter(
+    (suggestion) => suggestion.priority === "zero_rate_fill"
+  ).length;
+  const maxSuggestions = Math.max(12, minimumSuggestionsNeededForZeroRateCoverage);
   const finalSuggestions = [
     ...selected,
     ...blockedSuggestions.slice(0, Math.max(0, maxSuggestions - selected.length)),
