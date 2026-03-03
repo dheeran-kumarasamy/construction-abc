@@ -144,29 +144,35 @@ export default function ComparisonDashboard() {
           <table style={pageStyles.table}>
             <thead>
               <tr>
-                <th>Rank</th>
-                <th>Builder</th>
-                <th>Grand Total</th>
-                <th>Action</th>
+                <th className="num-header" style={pageStyles.th}>Rank</th>
+                <th style={pageStyles.th}>Builder</th>
+                <th className="amount-header" style={pageStyles.th}>Grand Total</th>
+                <th style={pageStyles.th}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {estimates.map((e) => (
+              {estimates.map((e, idx) => (
                 <tr
                   key={e.revision_id}
-                  style={e.rank === 1 ? { backgroundColor: "#f0fdfa" } : {}}
+                  style={
+                    e.rank === 1
+                      ? { ...(idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd), backgroundColor: "#f0fdfa" }
+                      : (idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd)
+                  }
                 >
-                  <td style={{ fontWeight: "bold" }}>#{e.rank}</td>
-                  <td>{e.builder_name}</td>
+                  <td className="num-cell" style={{ ...pageStyles.td, fontWeight: "bold" }}>#{e.rank}</td>
+                  <td style={pageStyles.td}>{e.builder_name}</td>
                   <td
+                    className="amount-cell"
                     style={{
+                      ...pageStyles.td,
                       fontWeight: e.rank === 1 ? "bold" : "normal",
                       color: e.rank === 1 ? "#16A34A" : "inherit",
                     }}
                   >
                     ₹{getGrandTotal(e).toLocaleString()}
                   </td>
-                  <td>
+                  <td style={pageStyles.td}>
                     <button
                       onClick={() => handleAward(e.revision_id)}
                       style={{

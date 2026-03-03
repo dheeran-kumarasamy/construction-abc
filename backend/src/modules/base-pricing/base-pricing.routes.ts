@@ -2,7 +2,11 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { parseBasePricing, uploadBasePricingFile } from "./base-pricing.controller";
+import {
+  getBasePricingTemplate,
+  parseBasePricing,
+  uploadBasePricingFile,
+} from "./base-pricing.controller";
 
 const router = Router();
 
@@ -26,6 +30,9 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+// Get pre-populated starter template based on boq-base calculator rates
+router.get("/template", getBasePricingTemplate);
 
 // Parse base pricing file - returns preview and suggested columns
 router.post("/parse", upload.single("file"), parseBasePricing);

@@ -170,7 +170,7 @@ export const pageStyles: Record<string, CSSProperties> = {
     border: "1px solid var(--border)",
   },
   th: {
-    textAlign: "left",
+    textAlign: "center",
     padding: "clamp(10px, 2vw, 14px) clamp(10px, 2vw, 16px)",
     borderBottom: "2px solid var(--border)",
     borderRight: "1px solid var(--border)",
@@ -186,6 +186,7 @@ export const pageStyles: Record<string, CSSProperties> = {
     padding: "clamp(10px, 2vw, 14px) clamp(10px, 2vw, 16px)",
     borderBottom: "1px solid var(--border)",
     borderRight: "1px solid var(--border)",
+    textAlign: "left",
     verticalAlign: "middle",
     wordBreak: "break-word",
     overflowWrap: "break-word",

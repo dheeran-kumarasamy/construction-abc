@@ -45,46 +45,25 @@ function DashboardButton() {
     return null;
   }
 
-  const dashboardPath = `/${user.role}`;
-
-  if (location.pathname === dashboardPath) {
-    return (
-      <button
-        type="button"
-        style={{
-          ...pageStyles.secondaryBtn,
-          position: "fixed",
-          top: 16,
-          right: 16,
-          zIndex: 1000,
-          height: "40px",
-        }}
-        onClick={() => {
-          logout();
-          localStorage.removeItem("token");
-          localStorage.removeItem("role");
-          navigate("/login");
-        }}
-      >
-        Logout
-      </button>
-    );
-  }
-
   return (
     <button
       type="button"
       style={{
-        ...pageStyles.primaryBtn,
+        ...pageStyles.secondaryBtn,
         position: "fixed",
         top: 16,
         right: 16,
         zIndex: 1000,
         height: "40px",
       }}
-      onClick={() => navigate(dashboardPath)}
+      onClick={() => {
+        logout();
+        localStorage.removeItem("token");
+        localStorage.removeItem("role");
+        navigate("/login");
+      }}
     >
-      Go to {user.role.charAt(0).toUpperCase() + user.role.slice(1)} Dashboard
+      Logout
     </button>
   );
 }
@@ -164,6 +143,78 @@ function ArchitectWorkflowBar() {
   );
 }
 
+function BuilderWorkflowBar() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  if (!user || user.role !== "builder" || !location.pathname.startsWith("/builder")) {
+    return null;
+  }
+
+  const flowSteps = [
+    { label: "Manage Base Pricing", path: "/builder/base-pricing", step: 1 },
+    { label: "Apply Pricing to BOQ", path: "/builder/apply-pricing", step: 2 },
+    { label: "Configure Margins & Uplifts", path: "/builder/margins", step: 3 },
+    { label: "View Submission", path: "/builder/submit", step: 4 },
+  ];
+
+  return (
+    <div
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 900,
+        padding: "12px clamp(12px, 5vw, 32px)",
+        background: "rgba(255, 253, 248, 0.96)",
+        borderBottom: "1px solid #e5e7eb",
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          overflowX: "auto",
+          paddingBottom: 4,
+        }}
+      >
+        {flowSteps.map((step, idx) => {
+          const isActive = location.pathname === step.path;
+          return (
+            <React.Fragment key={step.path}>
+              <button
+                type="button"
+                onClick={() => navigate(step.path)}
+                style={{
+                  ...pageStyles.primaryBtn,
+                  background: isActive ? "#0f766e" : "#115e59",
+                  opacity: isActive ? 1 : 0.9,
+                  height: "38px",
+                  padding: "0 12px",
+                  fontSize: "13px",
+                  borderRadius: "999px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+                aria-current={isActive ? "page" : undefined}
+              >
+                <span style={{ fontWeight: 700 }}>{step.step}.</span>
+                <span>{step.label}</span>
+              </button>
+              {idx < flowSteps.length - 1 && (
+                <span style={{ color: "#0f766e", fontWeight: 700 }}>→</span>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Wrapper to extract projectId route param and pass to ComparisonScreen
 function ComparisonScreenWithParams() {
   const { projectId } = useParams();
@@ -177,6 +228,7 @@ export default function App() {
       <BrowserRouter>
         <DashboardButton />
         <ArchitectWorkflowBar />
+        <BuilderWorkflowBar />
         <Routes>
           {/* Public */}
           <Route path="/" element={<Navigate to="/login" />} />
