@@ -7,12 +7,14 @@ interface Estimate {
   estimate_id: string;
   revision_id?: string | null;
   revision_number?: number | null;
+  revision_count?: number;
   builder_name: string;
   grand_total: number | null;
   submitted_at: string;
-  margin_config?: any;
   pricing_snapshot?: any;
   notes?: string | null;
+  latest_review_status?: "commented" | "changes_requested" | "approved" | null;
+  latest_review_comment?: string | null;
 }
 
 interface Project {
@@ -24,6 +26,10 @@ export default function ReceivedEstimates() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
+  const [historyData, setHistoryData] = useState<any | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewLoading, setReviewLoading] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const token = localStorage.getItem("token") || "";
@@ -72,6 +78,71 @@ export default function ReceivedEstimates() {
     }
   }
 
+  async function fetchEstimateHistory(estimateId: string) {
+    if (!selectedProjectId) return;
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(
+        apiUrl(`/projects/${selectedProjectId}/estimates/${estimateId}/history`),
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) throw new Error("Failed to load estimate history");
+      const data = await res.json();
+      setHistoryData(data);
+    } catch (err) {
+      console.error("Load estimate history error:", err);
+      setHistoryData(null);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function submitReview(status: "commented" | "changes_requested" | "approved") {
+    if (!selectedEstimate || !selectedProjectId) return;
+    if ((status === "commented" || status === "changes_requested") && !reviewComment.trim()) {
+      alert("Please enter a comment");
+      return;
+    }
+
+    setReviewLoading(true);
+    try {
+      const res = await fetch(
+        apiUrl(`/projects/${selectedProjectId}/estimates/${selectedEstimate.estimate_id}/review`),
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status,
+            comment: reviewComment,
+            revisionId: selectedEstimate.revision_id || null,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to submit review");
+
+      setReviewComment("");
+      await fetchEstimates();
+      await fetchEstimateHistory(selectedEstimate.estimate_id);
+      alert(status === "approved" ? "Estimate approved" : "Review feedback sent to builder");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to submit review");
+    } finally {
+      setReviewLoading(false);
+    }
+  }
+
+  function formatReviewStatus(status?: string | null) {
+    if (!status) return "Awaiting review";
+    if (status === "changes_requested") return "Changes requested";
+    if (status === "approved") return "Approved";
+    if (status === "commented") return "Commented";
+    return status;
+  }
+
   function parseJson(value: any) {
     if (!value) return null;
     if (typeof value === "object") return value;
@@ -83,11 +154,6 @@ export default function ReceivedEstimates() {
       }
     }
     return null;
-  }
-
-  function getMarginPercent(estimate: Estimate) {
-    const config = parseJson(estimate.margin_config);
-    return Number(config?.marginPercent ?? 0);
   }
 
   function getPricingItems(estimate: Estimate) {
@@ -157,21 +223,25 @@ export default function ReceivedEstimates() {
           <table style={pageStyles.table}>
             <thead>
               <tr>
-                <th>Builder</th>
-                <th>Grand Total</th>
-                <th>Submitted At</th>
-                <th>Approve</th>
+                <th style={pageStyles.th}>Builder</th>
+                <th className="amount-header" style={pageStyles.th}>Grand Total</th>
+                <th style={pageStyles.th}>Status</th>
+                <th style={pageStyles.th}>Submitted At</th>
+                <th style={pageStyles.th}>Approve</th>
               </tr>
             </thead>
             <tbody>
               {estimates.map((e, index) => (
                 <tr
                   key={e.estimate_id || `${e.builder_name}-${e.submitted_at}-${index}`}
+                  style={index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}
                 >
-                  <td>{e.builder_name}</td>
+                  <td style={pageStyles.td}>{e.builder_name}</td>
 
                   <td
+                    className="amount-cell"
                     style={{
+                      ...pageStyles.td,
                       fontWeight: getGrandTotal(e) === lowest ? "bold" : "normal",
                       color: getGrandTotal(e) === lowest ? "#16A34A" : "inherit",
                     }}
@@ -179,12 +249,18 @@ export default function ReceivedEstimates() {
                     ₹{getGrandTotal(e).toLocaleString()}
                   </td>
 
-                  <td>{new Date(e.submitted_at).toLocaleString()}</td>
+                  <td style={pageStyles.td}>{formatReviewStatus(e.latest_review_status)}</td>
 
-                  <td>
+                  <td style={pageStyles.td}>{new Date(e.submitted_at).toLocaleString()}</td>
+
+                  <td style={pageStyles.td}>
                     <button
                       style={pageStyles.primaryBtn}
-                      onClick={() => setSelectedEstimate(e)}
+                      onClick={() => {
+                        setSelectedEstimate(e);
+                        setReviewComment(e.latest_review_comment || "");
+                        fetchEstimateHistory(e.estimate_id);
+                      }}
                     >
                       Review
                     </button>
@@ -213,13 +289,13 @@ export default function ReceivedEstimates() {
               <strong>Revision:</strong> {selectedEstimate.revision_number || 1}
             </p>
             <p>
+              <strong>Submission Count:</strong> {selectedEstimate.revision_count || selectedEstimate.revision_number || 1}
+            </p>
+            <p>
               <strong>Submitted:</strong>{" "}
               {selectedEstimate.submitted_at
                 ? new Date(selectedEstimate.submitted_at).toLocaleString()
                 : "-"}
-            </p>
-            <p>
-              <strong>Margin:</strong> {getMarginPercent(selectedEstimate)}%
             </p>
             <p>
               <strong>Grand Total:</strong> ₹{getGrandTotal(selectedEstimate).toLocaleString()}
@@ -230,16 +306,52 @@ export default function ReceivedEstimates() {
               </p>
             )}
 
+            <div style={{ marginTop: "1rem", border: "1px solid #99f6e4", borderRadius: "8px", padding: "0.75rem", background: "#ffffff" }}>
+              <p style={{ marginTop: 0 }}>
+                <strong>Review Status:</strong> {formatReviewStatus(selectedEstimate.latest_review_status)}
+              </p>
+              <textarea
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                rows={3}
+                placeholder="Write feedback for builder..."
+                style={{ ...pageStyles.input, width: "100%", resize: "vertical" }}
+              />
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+                <button
+                  style={pageStyles.secondaryBtn}
+                  disabled={reviewLoading}
+                  onClick={() => submitReview("commented")}
+                >
+                  {reviewLoading ? "Saving..." : "Send Comment"}
+                </button>
+                <button
+                  style={pageStyles.primaryBtn}
+                  disabled={reviewLoading}
+                  onClick={() => submitReview("changes_requested")}
+                >
+                  {reviewLoading ? "Saving..." : "Request Changes"}
+                </button>
+                <button
+                  style={pageStyles.primaryBtn}
+                  disabled={reviewLoading}
+                  onClick={() => submitReview("approved")}
+                >
+                  {reviewLoading ? "Saving..." : "Approve"}
+                </button>
+              </div>
+            </div>
+
             <div style={{ overflowX: "auto", marginTop: "1rem" }}>
               <table style={pageStyles.table}>
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>Item</th>
-                    <th>Qty</th>
-                    <th>UOM</th>
-                    <th>Rate</th>
-                    <th>Total</th>
+                    <th style={pageStyles.th}>#</th>
+                    <th style={pageStyles.th}>Item</th>
+                    <th className="num-header" style={pageStyles.th}>Qty</th>
+                    <th style={pageStyles.th}>UOM</th>
+                    <th className="amount-header" style={pageStyles.th}>Rate</th>
+                    <th className="amount-header" style={pageStyles.th}>Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -251,18 +363,77 @@ export default function ReceivedEstimates() {
                     const uom = item.uom ?? item.UOM ?? item.unit ?? "-";
 
                     return (
-                      <tr key={`${name}-${idx}`}>
-                        <td>{idx + 1}</td>
-                        <td>{name}</td>
-                        <td>{qty}</td>
-                        <td>{uom}</td>
-                        <td>₹{rate.toLocaleString()}</td>
-                        <td>₹{total.toLocaleString()}</td>
+                      <tr key={`${name}-${idx}`} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                        <td className="num-cell" style={pageStyles.td}>{idx + 1}</td>
+                        <td style={pageStyles.td}>{name}</td>
+                        <td className="num-cell" style={pageStyles.td}>{qty}</td>
+                        <td style={pageStyles.td}>{uom}</td>
+                        <td className="amount-cell" style={pageStyles.td}>₹{rate.toLocaleString()}</td>
+                        <td className="amount-cell" style={pageStyles.td}>₹{total.toLocaleString()}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            </div>
+
+            <div style={{ marginTop: "1rem" }}>
+              <h4 style={{ marginBottom: "0.5rem" }}>Resubmission History</h4>
+              {historyLoading ? (
+                <p>Loading history...</p>
+              ) : historyData ? (
+                <>
+                  <p style={{ marginTop: 0 }}>Total revisions submitted: {historyData.revisionCount || 0}</p>
+                  <table style={pageStyles.table}>
+                    <thead>
+                      <tr>
+                        <th style={pageStyles.th}>Revision</th>
+                        <th className="amount-header" style={pageStyles.th}>Grand Total</th>
+                        <th style={pageStyles.th}>Submitted At</th>
+                        <th style={pageStyles.th}>Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(historyData.revisions || []).map((revision: any, idx: number) => (
+                        <tr key={revision.revision_id} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                          <td style={pageStyles.td}>Rev {revision.revision_number}</td>
+                          <td className="amount-cell" style={pageStyles.td}>₹{Number(revision.grand_total || 0).toLocaleString()}</td>
+                          <td style={pageStyles.td}>{revision.submitted_at ? new Date(revision.submitted_at).toLocaleString() : "-"}</td>
+                          <td style={pageStyles.td}>{revision.notes || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {(historyData.reviews || []).length > 0 && (
+                    <div style={{ marginTop: "0.75rem" }}>
+                      <h4 style={{ marginBottom: "0.5rem" }}>Review Trail</h4>
+                      <table style={pageStyles.table}>
+                        <thead>
+                          <tr>
+                            <th style={pageStyles.th}>Status</th>
+                            <th style={pageStyles.th}>Comment</th>
+                            <th style={pageStyles.th}>Revision Ref</th>
+                            <th style={pageStyles.th}>At</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {historyData.reviews.map((review: any, idx: number) => (
+                            <tr key={review.id} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                              <td style={pageStyles.td}>{formatReviewStatus(review.status)}</td>
+                              <td style={pageStyles.td}>{review.comment || "-"}</td>
+                              <td style={pageStyles.td}>{review.revision_id || "-"}</td>
+                              <td style={pageStyles.td}>{review.created_at ? new Date(review.created_at).toLocaleString() : "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p>No history available.</p>
+              )}
             </div>
           </div>
         )}

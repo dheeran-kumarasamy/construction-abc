@@ -5,6 +5,7 @@ import {
   getBuilderBasePricing,
   createOrUpdateEstimate,
   getSubmittedEstimates,
+  getSubmittedEstimateHistory,
   optimizeEstimateTarget,
 } from "./builder.controller";
 
@@ -27,5 +28,8 @@ router.post("/projects/:projectId/optimize-target", optimizeEstimateTarget);
 
 // Get submitted estimates for logged-in builder
 router.get("/submitted-estimates", getSubmittedEstimates);
+
+// Get revision + review history for a submitted estimate
+router.get("/submitted-estimates/:estimateId/history", getSubmittedEstimateHistory);
 
 export default router;

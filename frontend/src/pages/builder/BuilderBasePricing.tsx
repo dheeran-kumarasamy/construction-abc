@@ -4,6 +4,7 @@ import {
   getBasePricing,
   addBasePrice,
   clearBasePricing,
+  saveBasePricing,
 } from "../../services/basePricingStore";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
@@ -13,8 +14,31 @@ import { apiUrl } from "../../services/api";
 interface ColumnMapping {
   item: string;
   rate: string;
-  uom: string;
+  uom?: string;
   category: string;
+}
+
+interface ParseDiagnostics {
+  detectedHeaderRow?: number;
+  totalRows?: number;
+  missingItemRows?: number;
+  missingRateRows?: number;
+  zeroOrNegativeRateRows?: number;
+}
+
+interface UploadDiagnostics {
+  totalRows?: number;
+  nonEmptyRows?: number;
+  importedRows?: number;
+  invalidRows?: number;
+  missingItemRows?: number;
+  missingRateRows?: number;
+  zeroOrNegativeRateRows?: number;
+  duplicateMerged?: number;
+}
+
+interface StarterTemplateRow extends BasePriceItem {
+  sourceKey?: string;
 }
 
 export default function BuilderBasePricing() {
@@ -38,10 +62,79 @@ export default function BuilderBasePricing() {
     category: "",
   });
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
+  const [parseDiagnostics, setParseDiagnostics] = useState<ParseDiagnostics | null>(null);
+  const [lastUploadDiagnostics, setLastUploadDiagnostics] = useState<UploadDiagnostics | null>(null);
+  const [templateRows, setTemplateRows] = useState<StarterTemplateRow[]>([]);
+  const [templateCsv, setTemplateCsv] = useState<string>("");
+  const [templateLoading, setTemplateLoading] = useState(false);
 
   useEffect(() => {
     setItems(getBasePricing());
+    loadStarterTemplate();
   }, []);
+
+  async function loadStarterTemplate() {
+    setTemplateLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(apiUrl("/api/base-pricing/template"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) throw new Error("Failed to load starter template");
+
+      const data = await response.json();
+      setTemplateRows(Array.isArray(data.rows) ? data.rows : []);
+      setTemplateCsv(String(data.csv || ""));
+    } catch (err) {
+      console.error("Load starter template error:", err);
+    } finally {
+      setTemplateLoading(false);
+    }
+  }
+
+  function mergeUniqueItems(base: BasePriceItem[], incoming: BasePriceItem[]) {
+    const merged = new Map<string, BasePriceItem>();
+    [...base, ...incoming].forEach((item) => {
+      const key = `${String(item.item || "").trim().toLowerCase()}|${String(item.uom || "").trim().toLowerCase()}`;
+      merged.set(key, {
+        item: String(item.item || "").trim(),
+        rate: Number(item.rate || 0),
+        uom: String(item.uom || "").trim(),
+        category: (item.category || "Material") as BasePriceItem["category"],
+      });
+    });
+    return Array.from(merged.values());
+  }
+
+  function handleLoadStarterTemplate() {
+    if (!templateRows.length) {
+      alert("Starter template is not available yet");
+      return;
+    }
+
+    const merged = mergeUniqueItems(getBasePricing(), templateRows);
+    saveBasePricing(merged);
+    setItems(merged);
+    alert(`Starter template loaded with ${templateRows.length} rows. You can now edit and upload.`);
+  }
+
+  function handleDownloadTemplateCsv() {
+    if (!templateCsv) {
+      alert("Template CSV is not available");
+      return;
+    }
+
+    const blob = new Blob([templateCsv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "builder-base-pricing-starter-template.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }
 
   function handleAdd() {
     if (!form.item || form.rate <= 0) return;
@@ -80,6 +173,7 @@ export default function BuilderBasePricing() {
       const data = await response.json();
       setPreviewData(data.preview || []);
       setAvailableColumns(data.columns || []);
+      setParseDiagnostics(data.diagnostics || null);
 
       // Auto-detect columns
       if (data.suggestedMapping) {
@@ -111,9 +205,12 @@ export default function BuilderBasePricing() {
 
       // Add imported items to local storage
       if (result.items) {
-        result.items.forEach((item: BasePriceItem) => addBasePrice(item));
-        setItems(getBasePricing());
+        const merged = mergeUniqueItems(getBasePricing(), result.items);
+        saveBasePricing(merged);
+        setItems(merged);
       }
+
+      setLastUploadDiagnostics(result.diagnostics || null);
 
       // Reset upload state
       setUploadMode(false);
@@ -121,8 +218,10 @@ export default function BuilderBasePricing() {
       setPreviewData([]);
       setColumnMapping({ item: "", rate: "", uom: "", category: "" });
       setAvailableColumns([]);
+      setParseDiagnostics(null);
 
-      alert(`Successfully imported ${result.count} pricing items`);
+      const mergedCount = Number(result?.diagnostics?.duplicateMerged || 0);
+      alert(`Successfully imported ${result.count} pricing items${mergedCount > 0 ? ` (${mergedCount} duplicate rows merged)` : ""}`);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to upload");
     }
@@ -134,6 +233,7 @@ export default function BuilderBasePricing() {
     setPreviewData([]);
     setColumnMapping({ item: "", rate: "", uom: "", category: "" });
     setAvailableColumns([]);
+    setParseDiagnostics(null);
   }
 
   return (
@@ -143,6 +243,38 @@ export default function BuilderBasePricing() {
           <h2 style={pageStyles.title}>Builder Base Pricing</h2>
           <div style={{ width: "120px", opacity: 0.7 }}>
             <ConstructionIllustration type="tools" />
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginBottom: "1.5rem",
+            padding: "0.9rem",
+            border: "1px solid #99f6e4",
+            borderRadius: "8px",
+            backgroundColor: "#f0fdfa",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "0.75rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <p style={{ margin: 0, color: "#0f766e", fontWeight: 700 }}>
+              Starter Template from BOQ Calculator Rates
+            </p>
+            <p style={{ margin: "0.35rem 0 0 0", color: "#475569", fontSize: "0.9rem" }}>
+              Pre-populated with {templateRows.length} rich rate-card items from boq-base calculator. Load and edit as your starting point.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+            <button onClick={handleLoadStarterTemplate} disabled={templateLoading || templateRows.length === 0} style={pageStyles.primaryBtn}>
+              Load Starter Template
+            </button>
+            <button onClick={handleDownloadTemplateCsv} disabled={templateLoading || !templateCsv} style={pageStyles.secondaryBtn}>
+              Download CSV Template
+            </button>
           </div>
         </div>
 
@@ -227,7 +359,7 @@ export default function BuilderBasePricing() {
                   style={pageStyles.input}
                 />
                 <p style={{ fontSize: "0.875rem", color: "#64748b", marginTop: "0.5rem" }}>
-                  Expected columns: Item Name, Rate, UOM, Category (Material/Labor/Machinery/Other)
+                  Expected columns: Item Name, Rate, UOM (optional), Category (optional). Parser auto-detects header row and normalizes common formats.
                 </p>
               </div>
             ) : (
@@ -317,37 +449,60 @@ export default function BuilderBasePricing() {
 
                 {previewData.length > 0 && (
                   <>
-                    <h3 style={{ ...pageStyles.subtitle, marginTop: "2rem" }}>Preview (First 5 Rows)</h3>
+                    <h3 style={{ ...pageStyles.subtitle, marginTop: "2rem" }}>Preview (First 15 Rows)</h3>
                     <TableWrapper>
                       <table style={pageStyles.table}>
                         <thead>
                           <tr>
                             {availableColumns.map((col) => (
-                              <th key={col}>{col}</th>
+                              <th key={col} style={pageStyles.th}>{col}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {previewData.slice(0, 5).map((row, idx) => (
-                            <tr key={idx}>
+                          {previewData.slice(0, 15).map((row, idx) => (
+                            <tr key={idx} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
                               {availableColumns.map((col) => (
-                                <td key={col}>{row[col]}</td>
+                                <td key={col} style={pageStyles.td}>{row[col]}</td>
                               ))}
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </TableWrapper>
+
+                    {parseDiagnostics && (
+                      <div
+                        style={{
+                          marginTop: "0.85rem",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "8px",
+                          backgroundColor: "#ffffff",
+                          padding: "0.75rem",
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                          gap: "0.5rem",
+                          color: "#334155",
+                          fontSize: "0.9rem",
+                        }}
+                      >
+                        <div>Detected header row: {parseDiagnostics.detectedHeaderRow || "-"}</div>
+                        <div>Total parsed rows: {parseDiagnostics.totalRows || 0}</div>
+                        <div>Missing item rows: {parseDiagnostics.missingItemRows || 0}</div>
+                        <div>Missing rate rows: {parseDiagnostics.missingRateRows || 0}</div>
+                        <div>Zero/negative rate rows: {parseDiagnostics.zeroOrNegativeRateRows || 0}</div>
+                      </div>
+                    )}
                   </>
                 )}
 
                 <div style={{ display: "flex", gap: "1rem", marginTop: "2rem" }}>
                   <button
                     onClick={handleConfirmUpload}
-                    disabled={!columnMapping.item || !columnMapping.rate || !columnMapping.uom}
+                    disabled={!columnMapping.item || !columnMapping.rate}
                     style={{
                       ...pageStyles.primaryBtn,
-                      ...((!columnMapping.item || !columnMapping.rate || !columnMapping.uom) ? { opacity: 0.5, cursor: "not-allowed" } : {}),
+                      ...((!columnMapping.item || !columnMapping.rate) ? { opacity: 0.5, cursor: "not-allowed" } : {}),
                     }}
                   >
                     Confirm & Upload
@@ -361,6 +516,31 @@ export default function BuilderBasePricing() {
           </>
         )}
 
+        {lastUploadDiagnostics && (
+          <div
+            style={{
+              marginTop: "1.2rem",
+              border: "1px solid #cbd5e1",
+              borderRadius: "8px",
+              backgroundColor: "#ffffff",
+              padding: "0.75rem",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "0.5rem",
+              color: "#334155",
+              fontSize: "0.9rem",
+            }}
+          >
+            <div>Rows scanned: {lastUploadDiagnostics.totalRows || 0}</div>
+            <div>Rows imported: {lastUploadDiagnostics.importedRows || 0}</div>
+            <div>Invalid rows skipped: {lastUploadDiagnostics.invalidRows || 0}</div>
+            <div>Missing item rows: {lastUploadDiagnostics.missingItemRows || 0}</div>
+            <div>Missing rate rows: {lastUploadDiagnostics.missingRateRows || 0}</div>
+            <div>Zero/negative rate rows: {lastUploadDiagnostics.zeroOrNegativeRateRows || 0}</div>
+            <div>Duplicates merged: {lastUploadDiagnostics.duplicateMerged || 0}</div>
+          </div>
+        )}
+
         {/* Items Table */}
         {items.length > 0 && (
           <>
@@ -369,19 +549,19 @@ export default function BuilderBasePricing() {
               <table style={pageStyles.table}>
                 <thead>
                   <tr>
-                    <th>Item</th>
-                    <th>Rate</th>
-                    <th>UOM</th>
-                    <th>Category</th>
+                    <th style={pageStyles.th}>Item</th>
+                    <th className="amount-header" style={pageStyles.th}>Rate</th>
+                    <th style={pageStyles.th}>UOM</th>
+                    <th style={pageStyles.th}>Category</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((it, idx) => (
-                    <tr key={idx}>
-                      <td>{it.item}</td>
-                      <td>{it.rate}</td>
-                      <td>{it.uom}</td>
-                      <td>{it.category}</td>
+                    <tr key={idx} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                      <td style={pageStyles.td}>{it.item}</td>
+                      <td className="amount-cell" style={pageStyles.td}>{it.rate}</td>
+                      <td style={pageStyles.td}>{it.uom}</td>
+                      <td style={pageStyles.td}>{it.category}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -25,6 +25,7 @@ interface ParsedResult {
 
 const BOQUploadWithParsing = () => {
   const navigate = useNavigate();
+  const maxUploadSizeBytes = 3 * 1024 * 1024;
 
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [selectedProject, setSelectedProject] = useState("");
@@ -86,6 +87,18 @@ const BOQUploadWithParsing = () => {
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
+
+    if (file && file.size > maxUploadSizeBytes) {
+      const selectedSizeMb = (file.size / (1024 * 1024)).toFixed(2);
+      setSelectedFile(null);
+      setParsedData(null);
+      setColumnMapping({});
+      setShowMappingConfirmation(false);
+      setShowOverrideConfirmation(false);
+      setError(`Selected file is ${selectedSizeMb}MB. Max allowed is 3MB on current deployment.`);
+      return;
+    }
+
     setSelectedFile(file);
     setParsedData(null);
     setColumnMapping({});
@@ -113,6 +126,11 @@ const BOQUploadWithParsing = () => {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
+
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("token");
+        throw new Error("Session expired. Please login again.");
+      }
 
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Parse failed");
@@ -156,6 +174,11 @@ const BOQUploadWithParsing = () => {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
+
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("token");
+        throw new Error("Session expired. Please login again.");
+      }
 
       const data = await res.json();
 
