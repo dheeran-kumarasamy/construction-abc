@@ -156,7 +156,7 @@ function BuilderWorkflowBar() {
     { label: "Manage Base Pricing", path: "/builder/base-pricing", step: 1 },
     { label: "Apply Pricing to BOQ", path: "/builder/apply-pricing", step: 2 },
     { label: "Configure Margins & Uplifts", path: "/builder/margins", step: 3 },
-    { label: "Submit Estimate", path: "/builder/submit", step: 4 },
+    { label: "View Submission", path: "/builder/submit", step: 4 },
   ];
 
   return (

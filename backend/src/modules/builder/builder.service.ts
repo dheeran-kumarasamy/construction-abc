@@ -62,17 +62,48 @@ interface OptimizationProjectContext {
   city?: string;
 }
 
+interface ExpenseRecommendation {
+  head: "labor" | "machinery";
+  suggestedAmount: number;
+  reason: string;
+  confidence: number;
+  source: "llm" | "heuristic";
+}
+
+interface RevisionDiffSummary {
+  changedRateCount: number;
+  newlyPricedCount: number;
+  addedItemCount: number;
+  removedItemCount: number;
+  previousGrandTotal: number;
+  currentGrandTotal: number;
+  grandTotalDelta: number;
+  topChanges: Array<{
+    item: string;
+    previousRate: number;
+    currentRate: number;
+    qty: number;
+    totalDelta: number;
+  }>;
+}
+
 function getConfiguredLlmModel() {
   const raw = String(process.env.LLM_MODEL || "").trim();
   if (!raw) {
-    return "gemini-1.5-flash";
+    return "gemini-3.1-pro-preview";
   }
 
   if (/^gpt-|^o\d/i.test(raw)) {
-    return "gemini-1.5-flash";
+    return "gemini-3.1-pro-preview";
   }
 
-  return raw;
+  const normalized = raw.toLowerCase().replace(/\s+/g, "-");
+
+  if (normalized === "gemini-3.1-pro" || normalized === "gemini-3-pro") {
+    return "gemini-3.1-pro-preview";
+  }
+
+  return normalized;
 }
 
 function getConfiguredLlmApiKey() {
@@ -144,6 +175,37 @@ function calculateGrandTotal(pricedItems: OptimizationInputItem[], marginConfig:
   const subtotalWithUplifts = materialTotal + laborWithUplift + machineryWithUplift + otherTotal;
 
   return subtotalWithUplifts * (1 + marginConfig.overallMargin / 100);
+}
+
+function calculateCategoryTotals(pricedItems: OptimizationInputItem[]) {
+  let materialTotal = 0;
+  let laborTotal = 0;
+  let machineryTotal = 0;
+  let otherTotal = 0;
+
+  pricedItems.forEach((item) => {
+    const category = String(item.category || "material").toLowerCase();
+    const total = Number(item.total || 0);
+
+    if (category.includes("labor") || category.includes("labour")) {
+      laborTotal += total;
+      return;
+    }
+
+    if (category.includes("mach")) {
+      machineryTotal += total;
+      return;
+    }
+
+    if (category.includes("other")) {
+      otherTotal += total;
+      return;
+    }
+
+    materialTotal += total;
+  });
+
+  return { materialTotal, laborTotal, machineryTotal, otherTotal };
 }
 
 function inferCity(siteAddress?: string) {
@@ -432,6 +494,241 @@ function extractJsonPayload(raw: string) {
   return null;
 }
 
+function toNumber(value: any) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeSnapshotItems(items: any[]): OptimizationInputItem[] {
+  if (!Array.isArray(items)) return [];
+  return items.map((item: any, idx: number) => {
+    const qty = toNumber(item?.qty ?? item?.Qty);
+    const rate = toNumber(item?.rate ?? item?.Rate);
+    return {
+      id: toNumber(item?.id) || idx + 1,
+      item: String(item?.item ?? item?.Item ?? item?.description ?? "").trim(),
+      qty,
+      uom: String(item?.uom ?? item?.UOM ?? item?.unit ?? "").trim(),
+      rate,
+      total: toNumber(item?.total ?? qty * rate),
+      category: String(item?.category ?? "material").trim(),
+    };
+  });
+}
+
+function itemKey(item: OptimizationInputItem) {
+  return `${String(item.item || "").trim().toLowerCase()}::${String(item.uom || "").trim().toLowerCase()}`;
+}
+
+function computeRevisionDiffSummary(
+  previousItemsRaw: any[],
+  currentItemsRaw: any[],
+  previousGrandTotal: number,
+  currentGrandTotal: number
+): RevisionDiffSummary {
+  const previousItems = normalizeSnapshotItems(previousItemsRaw);
+  const currentItems = normalizeSnapshotItems(currentItemsRaw);
+
+  const previousByKey = new Map<string, OptimizationInputItem>();
+  previousItems.forEach((item) => previousByKey.set(itemKey(item), item));
+
+  const currentByKey = new Map<string, OptimizationInputItem>();
+  currentItems.forEach((item) => currentByKey.set(itemKey(item), item));
+
+  let changedRateCount = 0;
+  let newlyPricedCount = 0;
+  let addedItemCount = 0;
+  let removedItemCount = 0;
+  const topChanges: RevisionDiffSummary["topChanges"] = [];
+
+  currentItems.forEach((current) => {
+    const key = itemKey(current);
+    const previous = previousByKey.get(key);
+
+    if (!previous) {
+      addedItemCount += 1;
+      if (current.rate > 0) {
+        topChanges.push({
+          item: current.item,
+          previousRate: 0,
+          currentRate: current.rate,
+          qty: current.qty,
+          totalDelta: current.qty * current.rate,
+        });
+      }
+      return;
+    }
+
+    const prevRate = toNumber(previous.rate);
+    const currRate = toNumber(current.rate);
+    if (Math.abs(currRate - prevRate) > 0.0001) {
+      changedRateCount += 1;
+      if (prevRate <= 0 && currRate > 0) {
+        newlyPricedCount += 1;
+      }
+      topChanges.push({
+        item: current.item,
+        previousRate: prevRate,
+        currentRate: currRate,
+        qty: toNumber(current.qty),
+        totalDelta: toNumber(current.qty) * (currRate - prevRate),
+      });
+    }
+  });
+
+  previousItems.forEach((previous) => {
+    if (!currentByKey.has(itemKey(previous))) {
+      removedItemCount += 1;
+    }
+  });
+
+  topChanges.sort((a, b) => Math.abs(b.totalDelta) - Math.abs(a.totalDelta));
+
+  return {
+    changedRateCount,
+    newlyPricedCount,
+    addedItemCount,
+    removedItemCount,
+    previousGrandTotal: toNumber(previousGrandTotal),
+    currentGrandTotal: toNumber(currentGrandTotal),
+    grandTotalDelta: toNumber(currentGrandTotal) - toNumber(previousGrandTotal),
+    topChanges: topChanges.slice(0, 5),
+  };
+}
+
+function buildDeterministicRevisionNote(revisionNumber: number, summary: RevisionDiffSummary) {
+  const delta = summary.grandTotalDelta;
+  const deltaLabel =
+    delta > 0
+      ? `increased by ₹${Math.abs(delta).toFixed(2)}`
+      : delta < 0
+        ? `reduced by ₹${Math.abs(delta).toFixed(2)}`
+        : "kept unchanged";
+
+  const header = `Revision ${revisionNumber}: ${summary.changedRateCount} item rates updated, ${summary.newlyPricedCount} zero-rate items priced; total ${deltaLabel}.`;
+
+  if (!summary.topChanges.length) {
+    return header;
+  }
+
+  const top = summary.topChanges
+    .slice(0, 3)
+    .map((change) => `${change.item} (${change.previousRate.toFixed(2)}→${change.currentRate.toFixed(2)})`)
+    .join("; ");
+
+  return `${header} Major updates: ${top}.`;
+}
+
+async function generateRevisionNoteWithLlm(
+  revisionNumber: number,
+  summary: RevisionDiffSummary,
+  marginConfig: MarginConfig
+) {
+  const apiKey = getConfiguredLlmApiKey();
+  if (!apiKey) return null;
+
+  const primaryModel = getConfiguredLlmModel();
+  const modelCandidates = Array.from(
+    new Set([
+      primaryModel,
+      "gemini-3.1-pro-preview",
+      "gemini-3-flash-preview",
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-8b",
+    ])
+  );
+
+  const promptPayload = {
+    task: "Generate concise builder revision notes",
+    constraints: [
+      "Return plain text only.",
+      "Max 2 short sentences.",
+      "Focus only on what changed vs previous revision.",
+      "Mention if zero-rate items were filled.",
+      "Mention total impact direction (increased/reduced/unchanged).",
+      "Do not mention margin percent explicitly.",
+    ],
+    revisionNumber,
+    marginConfig,
+    diffSummary: summary,
+  };
+
+  for (const model of modelCandidates) {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        model
+      )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          generationConfig: {
+            temperature: 0.15,
+            maxOutputTokens: 140,
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: "You write concise construction estimate revision notes." },
+                { text: JSON.stringify(promptPayload) },
+              ],
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        const lower = body.toLowerCase();
+        if (response.status === 404 || lower.includes("model")) {
+          continue;
+        }
+        return null;
+      }
+
+      const data = await response.json();
+      const text = String(
+        data?.candidates?.[0]?.content?.parts
+          ?.map((part: any) => String(part?.text || ""))
+          .join("\n") || ""
+      ).trim();
+
+      if (text) {
+        return text.replace(/\s+/g, " ").slice(0, 420);
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+async function buildAutoRevisionNotes(
+  revisionNumber: number,
+  previousItemsRaw: any[] | null,
+  currentItemsRaw: any[],
+  previousGrandTotal: number,
+  currentGrandTotal: number,
+  marginConfig: MarginConfig
+) {
+  const previousItems = Array.isArray(previousItemsRaw) ? previousItemsRaw : [];
+
+  if (revisionNumber <= 1 || previousItems.length === 0) {
+    return `Revision ${revisionNumber}: Initial submission prepared with ${Array.isArray(currentItemsRaw) ? currentItemsRaw.length : 0} priced BOQ items. Grand total set to ₹${toNumber(currentGrandTotal).toFixed(2)}.`;
+  }
+
+  const summary = computeRevisionDiffSummary(previousItems, currentItemsRaw, previousGrandTotal, currentGrandTotal);
+  const llmNote = await generateRevisionNoteWithLlm(revisionNumber, summary, marginConfig);
+  if (llmNote) return llmNote;
+
+  return buildDeterministicRevisionNote(revisionNumber, summary);
+}
+
 async function generateLlmSuggestions(
   targetTotal: number,
   currentTotal: number,
@@ -443,7 +740,15 @@ async function generateLlmSuggestions(
   const apiKey = getConfiguredLlmApiKey();
   const primaryModel = getConfiguredLlmModel();
   const modelCandidates = Array.from(
-    new Set([primaryModel, "gemini-1.5-flash", "gemini-1.5-flash-8b"])
+    new Set([
+      primaryModel,
+      "gemini-3.1-pro-preview",
+      "gemini-3-flash-preview",
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-8b",
+    ])
   );
 
   if (!apiKey || candidateItems.length === 0) {
@@ -643,6 +948,150 @@ async function generateLlmSuggestions(
       failureReason: "request_exception",
     };
   }
+}
+
+async function generateExpenseRecommendations(
+  pricedItems: OptimizationInputItem[],
+  projectContext?: OptimizationProjectContext
+): Promise<ExpenseRecommendation[]> {
+  const totals = calculateCategoryTotals(pricedItems);
+  const materialTotal = Number(totals.materialTotal || 0);
+  const fallbackLabor = Math.max(Number((materialTotal * 0.15).toFixed(2)), 0);
+  const fallbackMachinery = Math.max(Number((materialTotal * 0.05).toFixed(2)), 0);
+
+  const fallback: ExpenseRecommendation[] = [
+    {
+      head: "labor",
+      suggestedAmount: fallbackLabor,
+      reason: "Suggested labour provision based on BOQ material and activity mix",
+      confidence: 0.72,
+      source: "heuristic",
+    },
+    {
+      head: "machinery",
+      suggestedAmount: fallbackMachinery,
+      reason: "Suggested machinery/tooling provision based on BOQ execution scope",
+      confidence: 0.68,
+      source: "heuristic",
+    },
+  ];
+
+  const apiKey = getConfiguredLlmApiKey();
+  const primaryModel = getConfiguredLlmModel();
+  if (!apiKey) return fallback;
+
+  const modelCandidates = Array.from(
+    new Set([
+      primaryModel,
+      "gemini-3.1-pro-preview",
+      "gemini-3-flash-preview",
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+    ])
+  );
+
+  const payload = {
+    task: "Suggest labour and machinery expense provisions for BOQ estimate",
+    outputRules: [
+      "Return strict JSON: { recommendations: [{ head: 'labor'|'machinery', suggestedAmount: number, reason: string, confidence: number }] }",
+      "Provide exactly 2 entries: one for labor, one for machinery",
+      "suggestedAmount must be positive",
+      "confidence between 0 and 1",
+    ],
+    projectContext: {
+      city: String(projectContext?.city || "").trim() || inferCity(projectContext?.siteAddress),
+      siteAddress: String(projectContext?.siteAddress || "").trim(),
+    },
+    boqSummary: {
+      itemCount: pricedItems.length,
+      totals,
+      sampleItems: pricedItems.slice(0, 50).map((item) => ({
+        item: item.item,
+        qty: item.qty,
+        uom: item.uom,
+        category: item.category || "material",
+        total: item.total,
+      })),
+    },
+  };
+
+  try {
+    for (const model of modelCandidates) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        model
+      )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: "application/json",
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: "You are a construction costing assistant." },
+                { text: JSON.stringify(payload) },
+              ],
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        if (response.status === 404 || body.toLowerCase().includes("model")) {
+          continue;
+        }
+        return fallback;
+      }
+
+      const data = await response.json();
+      const content = data?.candidates?.[0]?.content?.parts
+        ?.map((part: any) => String(part?.text || ""))
+        .join("\n");
+
+      const parsed = extractJsonPayload(String(content || ""));
+      const recommendations = Array.isArray(parsed?.recommendations)
+        ? parsed.recommendations
+        : [];
+
+      const normalized = recommendations
+        .map((row: any) => ({
+          head: String(row?.head || "").toLowerCase() as "labor" | "machinery",
+          suggestedAmount: Number(row?.suggestedAmount),
+          reason: String(row?.reason || "").trim() || "Recommended from BOQ scope",
+          confidence: Number(row?.confidence),
+          source: "llm" as const,
+        }))
+        .filter(
+          (row: ExpenseRecommendation) =>
+            (row.head === "labor" || row.head === "machinery") &&
+            Number.isFinite(row.suggestedAmount) &&
+            row.suggestedAmount > 0 &&
+            Number.isFinite(row.confidence) &&
+            row.confidence >= 0 &&
+            row.confidence <= 1
+        );
+
+      const byHead = new Map<"labor" | "machinery", ExpenseRecommendation>();
+      normalized.forEach((row: ExpenseRecommendation) => byHead.set(row.head, row));
+
+      const merged: ExpenseRecommendation[] = [
+        byHead.get("labor") || fallback[0],
+        byHead.get("machinery") || fallback[1],
+      ];
+
+      return merged;
+    }
+  } catch (error) {
+    console.error("LLM expense recommendation failed:", error);
+  }
+
+  return fallback;
 }
 
 export async function suggestTargetOptimizations(
@@ -917,6 +1366,7 @@ export async function suggestTargetOptimizations(
   ].slice(0, maxSuggestions);
 
   const llmUsed = finalSuggestions.some((suggestion) => suggestion.source === "llm");
+  const expenseRecommendations = await generateExpenseRecommendations(pricedItems, projectContext);
 
   return {
     currentTotal,
@@ -934,6 +1384,7 @@ export async function suggestTargetOptimizations(
     hardFail,
     marginConfig,
     suggestions: finalSuggestions,
+    expenseRecommendations,
   };
 }
 
@@ -1011,6 +1462,17 @@ export async function createOrUpdateEstimate(
     const subtotalWithUplifts = materialTotal + laborWithUplift + machineryWithUplift + otherTotal;
     const grandTotal = subtotalWithUplifts * (1 + (marginConfig.overallMargin || 0) / 100);
 
+    // Get latest revision snapshot for change tracking
+    const latestRevisionResult = await client.query(
+      `SELECT revision_number, pricing_snapshot, grand_total
+       FROM estimate_revisions
+       WHERE estimate_id = $1
+       ORDER BY revision_number DESC
+       LIMIT 1`,
+      [estimateId]
+    );
+    const latestRevision = latestRevisionResult.rows[0] || null;
+
     // Get next revision number
     const revResult = await client.query(
       `SELECT COALESCE(MAX(revision_number), 0) + 1 AS next_rev
@@ -1019,6 +1481,19 @@ export async function createOrUpdateEstimate(
       [estimateId]
     );
     const revisionNumber = revResult.rows[0].next_rev;
+
+    const normalizedMarginConfig = normalizeMarginConfig(marginConfig);
+    const cleanedNotes = String(notes || "").trim();
+    const finalNotes = cleanedNotes
+      ? cleanedNotes
+      : await buildAutoRevisionNotes(
+          revisionNumber,
+          latestRevision?.pricing_snapshot || null,
+          pricedItems,
+          toNumber(latestRevision?.grand_total),
+          toNumber(grandTotal),
+          normalizedMarginConfig
+        );
 
     // Get latest BOQ revision
     const boqResult = await client.query(
@@ -1045,7 +1520,7 @@ export async function createOrUpdateEstimate(
         JSON.stringify(pricedItems),
         JSON.stringify(marginConfig),
         grandTotal,
-        notes || null,
+        finalNotes || null,
       ]
     );
 
@@ -1086,9 +1561,13 @@ export async function getSubmittedEstimates(builderOrgId: string) {
        p.name AS project_name,
        er.id AS revision_id,
        er.revision_number,
+       rev_stats.revision_count,
        er.grand_total,
        er.submitted_at,
        er.notes,
+       review.action AS latest_review_action,
+       review.metadata AS latest_review_metadata,
+       review.created_at AS latest_review_at,
        COALESCE(
          (er.margin_config->>'overallMargin')::numeric,
          (er.margin_config->>'marginPercent')::numeric,
@@ -1103,11 +1582,105 @@ export async function getSubmittedEstimates(builderOrgId: string) {
        ORDER BY revision_number DESC
        LIMIT 1
      ) er ON true
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS revision_count
+       FROM estimate_revisions rr
+       WHERE rr.estimate_id = e.id
+     ) rev_stats ON true
+     LEFT JOIN LATERAL (
+       SELECT action, metadata, created_at
+       FROM audit_logs al
+       WHERE al.project_id = e.project_id
+         AND al.action IN ('ESTIMATE_REVIEW_COMMENT','ESTIMATE_RESUBMISSION_REQUEST','ESTIMATE_REVIEW_APPROVED')
+         AND (al.metadata->>'estimateId') = e.id::text
+       ORDER BY al.created_at DESC
+       LIMIT 1
+     ) review ON true
      WHERE e.builder_org_id = $1
-       AND e.status = 'submitted'
      ORDER BY er.submitted_at DESC NULLS LAST, e.created_at DESC`,
     [builderOrgId]
   );
 
-  return result.rows;
+  return result.rows.map((row: any) => {
+    const metadata = row.latest_review_metadata || {};
+    let reviewStatus: string | null = null;
+    if (row.latest_review_action === "ESTIMATE_RESUBMISSION_REQUEST") {
+      reviewStatus = "changes_requested";
+    } else if (row.latest_review_action === "ESTIMATE_REVIEW_APPROVED") {
+      reviewStatus = "approved";
+    } else if (row.latest_review_action === "ESTIMATE_REVIEW_COMMENT") {
+      reviewStatus = "commented";
+    }
+
+    return {
+      ...row,
+      latest_review_status: reviewStatus,
+      latest_review_comment: metadata?.comment || null,
+      latest_review_revision_id: metadata?.revisionId || null,
+    };
+  });
+}
+
+export async function getBuilderEstimateHistory(builderOrgId: string, estimateId: string) {
+  const estimateRes = await pool.query(
+    `SELECT e.id AS estimate_id, e.project_id, e.status, p.name AS project_name
+     FROM estimates e
+     JOIN projects p ON p.id = e.project_id
+     WHERE e.id = $1 AND e.builder_org_id = $2
+     LIMIT 1`,
+    [estimateId, builderOrgId]
+  );
+
+  if (!estimateRes.rows.length) {
+    throw new Error("Estimate not found");
+  }
+
+  const estimate = estimateRes.rows[0];
+
+  const revisionsRes = await pool.query(
+    `SELECT
+       id AS revision_id,
+       revision_number,
+       source,
+       pricing_snapshot,
+       margin_config,
+       grand_total,
+       notes,
+       submitted_at
+     FROM estimate_revisions
+     WHERE estimate_id = $1
+     ORDER BY revision_number ASC`,
+    [estimateId]
+  );
+
+  const reviewsRes = await pool.query(
+    `SELECT id, action, metadata, created_at
+     FROM audit_logs
+     WHERE project_id = $1
+       AND action IN ('ESTIMATE_REVIEW_COMMENT','ESTIMATE_RESUBMISSION_REQUEST','ESTIMATE_REVIEW_APPROVED')
+       AND (metadata->>'estimateId') = $2
+     ORDER BY created_at ASC`,
+    [estimate.project_id, estimateId]
+  );
+
+  const reviews = reviewsRes.rows.map((row: any) => ({
+    id: row.id,
+    action: row.action,
+    status:
+      row.action === "ESTIMATE_RESUBMISSION_REQUEST"
+        ? "changes_requested"
+        : row.action === "ESTIMATE_REVIEW_APPROVED"
+          ? "approved"
+          : "commented",
+    comment: row.metadata?.comment || null,
+    revision_id: row.metadata?.revisionId || null,
+    created_at: row.created_at,
+  }));
+
+  return {
+    estimate,
+    revisionCount: revisionsRes.rows.length,
+    revisions: revisionsRes.rows,
+    reviews,
+  };
 }

@@ -56,6 +56,18 @@ interface OptimizerSuggestion {
   decision?: "accepted" | "declined";
 }
 
+interface ExpenseRecommendation {
+  head: "labor" | "machinery";
+  suggestedAmount: number;
+  reason: string;
+  confidence: number;
+  source: "llm" | "heuristic";
+  decision?: "increase" | "decrease" | "base" | "ignored";
+}
+
+const FLOATING_BREAKDOWN_WIDTH = 360;
+const FLOATING_BREAKDOWN_GAP = 32;
+
 const STANDARD_GUARDRAILS = [
   {
     id: "no_quality_compromise",
@@ -96,8 +108,10 @@ export default function ApplyBasePricing() {
   const [optimizerLoading, setOptimizerLoading] = useState(false);
   const [optimizerError, setOptimizerError] = useState("");
   const [optimizerSuggestions, setOptimizerSuggestions] = useState<OptimizerSuggestion[]>([]);
+  const [expenseRecommendations, setExpenseRecommendations] = useState<ExpenseRecommendation[]>([]);
   const [optimizerEngineInfo, setOptimizerEngineInfo] = useState<string>("");
   const [optimizerBaseRatesByItem, setOptimizerBaseRatesByItem] = useState<Record<number, number>>({});
+  const [isLandscapeWide, setIsLandscapeWide] = useState(false);
   const suggestionsContainerRef = useRef<HTMLDivElement | null>(null);
 
   function getPriorityStyle(priority: OptimizerSuggestion["priority"]) {
@@ -138,6 +152,22 @@ export default function ApplyBasePricing() {
     fetchProjects();
     fetchBasePricing();
     loadMarginConfig();
+  }, []);
+
+  useEffect(() => {
+    const computeLayout = () => {
+      if (typeof window === "undefined") {
+        setIsLandscapeWide(false);
+        return;
+      }
+      const wideEnough = window.innerWidth >= 1200;
+      const isLandscape = window.innerWidth > window.innerHeight;
+      setIsLandscapeWide(wideEnough && isLandscape);
+    };
+
+    computeLayout();
+    window.addEventListener("resize", computeLayout);
+    return () => window.removeEventListener("resize", computeLayout);
   }, []);
 
   function loadMarginConfig() {
@@ -205,6 +235,7 @@ export default function ApplyBasePricing() {
     setTargetTotal("");
     setOptimizerError("");
     setOptimizerSuggestions([]);
+    setExpenseRecommendations([]);
     setOptimizerEngineInfo("");
     setOptimizerBaseRatesByItem({});
     setSelectedGuardrails(STANDARD_GUARDRAILS.map((item) => item.id));
@@ -365,6 +396,9 @@ export default function ApplyBasePricing() {
       const suggestions = Array.isArray(data.suggestions)
         ? (data.suggestions as OptimizerSuggestion[])
         : [];
+      const expenses = Array.isArray(data.expenseRecommendations)
+        ? (data.expenseRecommendations as ExpenseRecommendation[])
+        : [];
 
       const baseRates = pricedItems.reduce<Record<number, number>>((acc, item) => {
         acc[item.id] = Number(item.rate || 0);
@@ -373,6 +407,13 @@ export default function ApplyBasePricing() {
 
       setOptimizerBaseRatesByItem(baseRates);
       setOptimizerSuggestions(suggestions);
+      setExpenseRecommendations(
+        expenses.map((item) => ({
+          ...item,
+          head: item.head === "machinery" ? "machinery" : "labor",
+          decision: undefined,
+        }))
+      );
 
       const engine = String(data?.suggestionEngine || "heuristic").toUpperCase();
       const model = data?.llmModel ? ` (${String(data.llmModel)})` : "";
@@ -541,9 +582,87 @@ export default function ApplyBasePricing() {
     );
   }
 
+  function applyExpenseRecommendation(head: "labor" | "machinery", mode: "increase" | "decrease" | "base") {
+    const recommendation = expenseRecommendations.find((item) => item.head === head);
+    if (!recommendation) return;
+
+    const multiplier = mode === "increase" ? 1.1 : mode === "decrease" ? 0.9 : 1;
+    const adjustedAmount = Number((Number(recommendation.suggestedAmount || 0) * multiplier).toFixed(2));
+    if (!Number.isFinite(adjustedAmount) || adjustedAmount <= 0) return;
+
+    const syntheticId = head === "labor" ? 900000001 : 900000002;
+    const lineItem: BOQItem = {
+      id: syntheticId,
+      item: head === "labor" ? "Recommended Labour Expense" : "Recommended Machinery Expense",
+      qty: 1,
+      uom: "LS",
+      rate: adjustedAmount,
+      total: adjustedAmount,
+      category: head === "labor" ? "Labour" : "Machinery",
+    };
+
+    setPricedItems((prev) => {
+      const idx = prev.findIndex((item) => item.id === syntheticId);
+      if (idx >= 0) {
+        const clone = [...prev];
+        clone[idx] = lineItem;
+        return clone;
+      }
+      return [...prev, lineItem];
+    });
+
+    setExpenseRecommendations((prev) =>
+      prev.map((item) => (item.head === head ? { ...item, decision: mode } : item))
+    );
+  }
+
+  function ignoreExpenseRecommendation(head: "labor" | "machinery") {
+    const syntheticId = head === "labor" ? 900000001 : 900000002;
+    const zeroLineItem: BOQItem = {
+      id: syntheticId,
+      item: head === "labor" ? "Recommended Labour Expense" : "Recommended Machinery Expense",
+      qty: 1,
+      uom: "LS",
+      rate: 0,
+      total: 0,
+      category: head === "labor" ? "Labour" : "Machinery",
+    };
+
+    setPricedItems((prev) => {
+      const idx = prev.findIndex((item) => item.id === syntheticId);
+      if (idx >= 0) {
+        const clone = [...prev];
+        clone[idx] = zeroLineItem;
+        return clone;
+      }
+      return [...prev, zeroLineItem];
+    });
+
+    setExpenseRecommendations((prev) =>
+      prev.map((item) => (item.head === head ? { ...item, decision: "ignored" } : item))
+    );
+  }
+
   async function handleSubmit() {
     if (!selectedProjectId) {
       alert("Please select a project");
+      return;
+    }
+
+    const submissionTotals = calculateTotals();
+    const missingExpenseHeads: string[] = [];
+    if (Number(submissionTotals.laborTotal || 0) <= 0) {
+      missingExpenseHeads.push("Labour");
+    }
+    if (Number(submissionTotals.machineryTotal || 0) <= 0) {
+      missingExpenseHeads.push("Machinery");
+    }
+
+    if (missingExpenseHeads.length > 0) {
+      alert(
+        `Please add ${missingExpenseHeads.join(" and ")} expenses before submitting the estimate.\n\n` +
+          "Update BOQ/base-pricing mappings so relevant items are categorized under Labour/Machinery with valid rates."
+      );
       return;
     }
 
@@ -594,6 +713,7 @@ export default function ApplyBasePricing() {
       setTargetTotal("");
       setOptimizerError("");
       setOptimizerSuggestions([]);
+      setExpenseRecommendations([]);
       setOptimizerEngineInfo("");
       setOptimizerBaseRatesByItem({});
       loadMarginConfig();
@@ -695,6 +815,73 @@ export default function ApplyBasePricing() {
     };
   });
 
+  const renderCostBreakdownPanel = (extraStyle: React.CSSProperties = {}) => (
+    <div
+      style={{
+        padding: "1rem",
+        backgroundColor: "#f0fdfa",
+        borderRadius: "10px",
+        border: "1px solid #ccfbf1",
+        ...extraStyle,
+      }}
+    >
+      <h3
+        style={{
+          margin: "0 0 1rem 0",
+          color: "#0f766e",
+          fontWeight: 600,
+        }}
+      >
+        Cost Breakdown (Margins from Margin & Uplift Engine)
+      </h3>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 1fr",
+          gap: "0.75rem",
+          marginBottom: "0.5rem",
+          fontSize: "0.95rem",
+        }}
+      >
+        <div style={{ color: "#0d9488" }}>Material:</div>
+        <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.materialTotal.toFixed(2)}</div>
+
+        <div style={{ color: "#0d9488" }}>Labor (base):</div>
+        <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.laborTotal.toFixed(2)}</div>
+
+        <div style={{ color: "#0d9488", paddingLeft: "1rem" }}>+ Labor Uplift ({marginConfig.laborUplift}%):</div>
+        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>₹{totals.laborWithUplift.toFixed(2)}</div>
+
+        <div style={{ color: "#0d9488" }}>Machinery (base):</div>
+        <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.machineryTotal.toFixed(2)}</div>
+
+        <div style={{ color: "#0d9488", paddingLeft: "1rem" }}>+ Machinery Uplift ({marginConfig.machineryUplift}%):</div>
+        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>₹{totals.machineryWithUplift.toFixed(2)}</div>
+
+        <div style={{ color: "#0d9488" }}>Other:</div>
+        <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.otherTotal.toFixed(2)}</div>
+
+        <div style={{ borderTop: "2px solid #99f6e4", paddingTop: "0.75rem", marginTop: "0.5rem", color: "#0f766e", fontWeight: 600 }}>
+          Subtotal (with uplifts):
+        </div>
+        <div style={{ borderTop: "2px solid #99f6e4", paddingTop: "0.75rem", marginTop: "0.5rem", textAlign: "right", fontWeight: 700, fontSize: "1.1rem", color: "#0f766e" }}>
+          ₹{totals.subtotalWithUplifts.toFixed(2)}
+        </div>
+
+        <div style={{ color: "#0d9488" }}>+ Overall Margin ({marginConfig.overallMargin}%):</div>
+        <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.marginAmount.toFixed(2)}</div>
+
+        <div style={{ borderTop: "3px solid #5eead4", paddingTop: "0.75rem", marginTop: "0.5rem", color: "#0f766e", fontWeight: 700, fontSize: "1.15rem" }}>
+          Grand Total:
+        </div>
+        <div style={{ borderTop: "3px solid #5eead4", paddingTop: "0.75rem", marginTop: "0.5rem", textAlign: "right", fontWeight: 700, fontSize: "1.5rem", color: "#0f766e" }}>
+          ₹{totals.grandTotal.toFixed(2)}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div style={pageStyles.page}>
       <div style={{ ...pageStyles.card, width: "min(1200px, 100%)" }}>
@@ -746,6 +933,13 @@ export default function ApplyBasePricing() {
 
         {!loading && pricedItems.length > 0 && (
           <>
+            <div
+              style={{
+                marginRight: isLandscapeWide
+                  ? `${FLOATING_BREAKDOWN_WIDTH + FLOATING_BREAKDOWN_GAP}px`
+                  : 0,
+              }}
+            >
             <div
               style={{
                 marginTop: "1rem",
@@ -868,7 +1062,7 @@ export default function ApplyBasePricing() {
                 </p>
               )}
 
-              {optimizerSuggestions.length > 0 && (
+              {(optimizerSuggestions.length > 0 || expenseRecommendations.length > 0) && (
                 <div ref={suggestionsContainerRef} style={{ marginTop: "1rem", display: "grid", gap: "1rem" }}>
                   <div
                     style={{
@@ -1033,222 +1227,196 @@ export default function ApplyBasePricing() {
                       </div>
                     );
                   })}
+
+                  {expenseRecommendations.length > 0 && (
+                    <div
+                      style={{
+                        border: "1px solid #6366f1",
+                        borderRadius: "10px",
+                        backgroundColor: "#eef2ff",
+                        padding: "0.85rem",
+                        display: "grid",
+                        gap: "0.75rem",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                        <strong style={{ color: "#3730a3" }}>Labour & Machinery Recommendations</strong>
+                        <span style={{ color: "#312e81", fontWeight: 600 }}>Accepted choices create/update BOQ line items</span>
+                      </div>
+
+                      {expenseRecommendations.map((recommendation) => {
+                        const headLabel = recommendation.head === "labor" ? "Labour" : "Machinery";
+                        const increaseAmount = Number((Number(recommendation.suggestedAmount || 0) * 1.1).toFixed(2));
+                        const decreaseAmount = Number((Number(recommendation.suggestedAmount || 0) * 0.9).toFixed(2));
+
+                        return (
+                          <div
+                            key={recommendation.head}
+                            style={{
+                              border: "1px solid #c7d2fe",
+                              borderRadius: "8px",
+                              backgroundColor: "#ffffff",
+                              padding: "0.75rem",
+                              display: "grid",
+                              gap: "0.45rem",
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", flexWrap: "wrap" }}>
+                              <strong style={{ color: "#1e1b4b" }}>{headLabel}</strong>
+                              <span style={{ color: "#4338ca", fontWeight: 700 }}>
+                                Suggested: ₹{Number(recommendation.suggestedAmount || 0).toFixed(2)}
+                              </span>
+                            </div>
+
+                            <p style={{ margin: 0, color: "#334155" }}>{recommendation.reason}</p>
+                            <p style={{ margin: 0, color: "#6366f1", fontSize: "0.86rem" }}>
+                              Confidence: {(Number(recommendation.confidence || 0) * 100).toFixed(0)}% • Source: {(recommendation.source || "heuristic").toUpperCase()}
+                            </p>
+
+                            <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.35rem", flexWrap: "wrap" }}>
+                              <button
+                                onClick={() => applyExpenseRecommendation(recommendation.head, "increase")}
+                                disabled={isUiLocked}
+                                style={pageStyles.primaryBtn}
+                              >
+                                Increase (₹{increaseAmount.toFixed(2)})
+                              </button>
+                              <button
+                                onClick={() => applyExpenseRecommendation(recommendation.head, "decrease")}
+                                disabled={isUiLocked}
+                                style={pageStyles.secondaryBtn}
+                              >
+                                Decrease (₹{decreaseAmount.toFixed(2)})
+                              </button>
+                              <button
+                                onClick={() => applyExpenseRecommendation(recommendation.head, "base")}
+                                disabled={isUiLocked}
+                                style={pageStyles.secondaryBtn}
+                              >
+                                0% Base (₹{Number(recommendation.suggestedAmount || 0).toFixed(2)})
+                              </button>
+                              <button
+                                onClick={() => ignoreExpenseRecommendation(recommendation.head)}
+                                disabled={isUiLocked}
+                                style={pageStyles.secondaryBtn}
+                              >
+                                Ignore
+                              </button>
+                            </div>
+
+                            {recommendation.decision && (
+                              <p style={{ margin: "0.2rem 0 0", color: "#334155", fontWeight: 600 }}>
+                                Decision: {recommendation.decision === "ignored" ? "Ignored" : recommendation.decision === "increase" ? "Accepted • +10%" : recommendation.decision === "decrease" ? "Accepted • -10%" : "Accepted • 0% Base"}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* BOQ Items with Pricing */}
-            <h3 style={{ ...pageStyles.subtitle, marginTop: "2rem" }}>
-              BOQ Items & Pricing
-            </h3>
-            <TableWrapper>
-              <table style={pageStyles.table}>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Item Description</th>
-                    <th>Quantity</th>
-                    <th>UOM</th>
-                    <th>Rate (₹)</th>
-                    <th>Total (₹)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pricedItems.map((item, index) => (
-                    <tr key={item.id}>
-                      <td>{index + 1}</td>
-                      <td>{item.item}</td>
-                      <td>{item.qty}</td>
-                      <td>{item.uom}</td>
-                      <td>
-                        <input
-                          type="number"
-                          value={Number.isFinite(item.rate) ? item.rate : 0}
-                          disabled={isUiLocked}
-                          onChange={(e) =>
-                            handleRateChange(index, Number(e.target.value))
-                          }
-                          style={{
-                            ...pageStyles.input,
-                            width: "120px",
-                            padding: "0.5rem",
-                          }}
-                        />
-                      </td>
-                      <td>{item.total.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </TableWrapper>
+            <div style={{ marginTop: "2rem" }}>
+                <h3 style={{ ...pageStyles.subtitle, marginTop: 0 }}>
+                  BOQ Items & Pricing
+                </h3>
+                <TableWrapper>
+                  <table style={pageStyles.table}>
+                    <thead>
+                      <tr>
+                        <th style={pageStyles.th}>#</th>
+                        <th style={pageStyles.th}>Item Description</th>
+                        <th className="num-header" style={pageStyles.th}>Quantity</th>
+                        <th style={pageStyles.th}>UOM</th>
+                        <th className="amount-header" style={pageStyles.th}>Rate (₹)</th>
+                        <th className="amount-header" style={pageStyles.th}>Total (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pricedItems.map((item, index) => (
+                        <tr key={item.id} style={index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                          <td className="num-cell" style={pageStyles.td}>{index + 1}</td>
+                          <td style={pageStyles.td}>{item.item}</td>
+                          <td className="num-cell" style={pageStyles.td}>{item.qty}</td>
+                          <td style={pageStyles.td}>{item.uom}</td>
+                          <td className="amount-cell" style={pageStyles.td}>
+                            <input
+                              type="number"
+                              value={Number.isFinite(item.rate) ? item.rate : 0}
+                              disabled={isUiLocked}
+                              onChange={(e) =>
+                                handleRateChange(index, Number(e.target.value))
+                              }
+                              style={{
+                                ...pageStyles.input,
+                                width: "120px",
+                                padding: "0.5rem",
+                              }}
+                            />
+                          </td>
+                          <td className="amount-cell" style={pageStyles.td}>{item.total.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TableWrapper>
 
-            {/* Totals Section */}
-            <div
-              style={{
-                marginTop: "2rem",
-                padding: "1.5rem",
-                backgroundColor: "#f0fdfa",
-                borderRadius: "8px",
-                border: "1px solid #ccfbf1",
-              }}
-            >
-              <h3
-                style={{
-                  margin: "0 0 1rem 0",
-                  color: "#0f766e",
-                  fontWeight: 600,
-                }}
-              >
-                Cost Breakdown (Margins from Margin & Uplift Engine)
-              </h3>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "2fr 1fr",
-                  gap: "0.75rem",
-                  marginBottom: "1rem",
-                  fontSize: "0.95rem",
-                }}
-              >
-                <div style={{ color: "#0d9488" }}>Material:</div>
-                <div style={{ textAlign: "right", fontWeight: 500 }}>
-                  ₹{totals.materialTotal.toFixed(2)}
+                <div style={{ marginTop: "1.5rem" }}>
+                  <label
+                    style={{
+                      display: "block",
+                      marginBottom: "0.5rem",
+                      color: "#0f766e",
+                      fontWeight: 500,
+                    }}
+                  >
+                    Notes (Optional)
+                  </label>
+                  <textarea
+                    value={notes ?? ""}
+                    disabled={isUiLocked}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Add any notes for the architect..."
+                    rows={3}
+                    style={{
+                      ...pageStyles.input,
+                      width: "100%",
+                      resize: "vertical",
+                    }}
+                  />
                 </div>
 
-                <div style={{ color: "#0d9488" }}>
-                  Labor (base):
+                <div style={{ marginTop: "2rem", textAlign: "center" }}>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={loading || isUiLocked}
+                    style={{
+                      ...pageStyles.primaryBtn,
+                      fontSize: "1.125rem",
+                      padding: "0.875rem 2rem",
+                      ...(loading || isUiLocked ? { opacity: 0.5, cursor: "not-allowed" } : {}),
+                    }}
+                  >
+                    {loading ? "Submitting..." : isUiLocked ? "AI Processing..." : "Submit Estimation"}
+                  </button>
                 </div>
-                <div style={{ textAlign: "right", fontWeight: 500 }}>
-                  ₹{totals.laborTotal.toFixed(2)}
-                </div>
-
-                <div style={{ color: "#0d9488", paddingLeft: "1rem" }}>
-                  + Labor Uplift ({marginConfig.laborUplift}%):
-                </div>
-                <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>
-                  ₹{totals.laborWithUplift.toFixed(2)}
-                </div>
-
-                <div style={{ color: "#0d9488" }}>
-                  Machinery (base):
-                </div>
-                <div style={{ textAlign: "right", fontWeight: 500 }}>
-                  ₹{totals.machineryTotal.toFixed(2)}
-                </div>
-
-                <div style={{ color: "#0d9488", paddingLeft: "1rem" }}>
-                  + Machinery Uplift ({marginConfig.machineryUplift}%):
-                </div>
-                <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>
-                  ₹{totals.machineryWithUplift.toFixed(2)}
-                </div>
-
-                <div style={{ color: "#0d9488" }}>Other:</div>
-                <div style={{ textAlign: "right", fontWeight: 500 }}>
-                  ₹{totals.otherTotal.toFixed(2)}
-                </div>
-
-                <div
-                  style={{
-                    borderTop: "2px solid #99f6e4",
-                    paddingTop: "0.75rem",
-                    marginTop: "0.5rem",
-                    color: "#0f766e",
-                    fontWeight: 600,
-                  }}
-                >
-                  Subtotal (with uplifts):
-                </div>
-                <div
-                  style={{
-                    borderTop: "2px solid #99f6e4",
-                    paddingTop: "0.75rem",
-                    marginTop: "0.5rem",
-                    textAlign: "right",
-                    fontWeight: 700,
-                    fontSize: "1.1rem",
-                    color: "#0f766e",
-                  }}
-                >
-                  ₹{totals.subtotalWithUplifts.toFixed(2)}
-                </div>
-
-                <div style={{ color: "#0d9488" }}>
-                  + Overall Margin ({marginConfig.overallMargin}%):
-                </div>
-                <div style={{ textAlign: "right", fontWeight: 500 }}>
-                  ₹{totals.marginAmount.toFixed(2)}
-                </div>
-
-                <div
-                  style={{
-                    borderTop: "3px solid #5eead4",
-                    paddingTop: "0.75rem",
-                    marginTop: "0.5rem",
-                    color: "#0f766e",
-                    fontWeight: 700,
-                    fontSize: "1.15rem",
-                  }}
-                >
-                  Grand Total:
-                </div>
-                <div
-                  style={{
-                    borderTop: "3px solid #5eead4",
-                    paddingTop: "0.75rem",
-                    marginTop: "0.5rem",
-                    textAlign: "right",
-                    fontWeight: 700,
-                    fontSize: "1.5rem",
-                    color: "#0f766e",
-                  }}
-                >
-                  ₹{totals.grandTotal.toFixed(2)}
-                </div>
-              </div>
-
-              <div style={{ marginTop: "1.5rem" }}>
-                <label
-                  style={{
-                    display: "block",
-                    marginBottom: "0.5rem",
-                    color: "#0f766e",
-                    fontWeight: 500,
-                  }}
-                >
-                  Notes (Optional)
-                </label>
-                <textarea
-                  value={notes ?? ""}
-                  disabled={isUiLocked}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add any notes for the architect..."
-                  rows={3}
-                  style={{
-                    ...pageStyles.input,
-                    width: "100%",
-                    resize: "vertical",
-                  }}
-                />
-              </div>
+                {!isLandscapeWide && renderCostBreakdownPanel({ marginTop: "1.25rem" })}
+            </div>
             </div>
 
-            {/* Submit Button */}
-            <div style={{ marginTop: "2rem", textAlign: "center" }}>
-              <button
-                onClick={handleSubmit}
-                disabled={loading || isUiLocked}
-                style={{
-                  ...pageStyles.primaryBtn,
-                  fontSize: "1.125rem",
-                  padding: "0.875rem 2rem",
-                  ...(loading || isUiLocked ? { opacity: 0.5, cursor: "not-allowed" } : {}),
-                }}
-              >
-                {loading ? "Submitting..." : isUiLocked ? "AI Processing..." : "Submit Estimate to Architect"}
-              </button>
-            </div>
+            {isLandscapeWide &&
+              renderCostBreakdownPanel({
+                position: "fixed",
+                right: "clamp(12px, 4vw, 32px)",
+                top: "108px",
+                width: `${FLOATING_BREAKDOWN_WIDTH}px`,
+                maxHeight: "calc(100vh - 132px)",
+                overflowY: "auto",
+                zIndex: 60,
+                boxShadow: "0 10px 30px rgba(15, 23, 42, 0.12)",
+              })}
           </>
         )}
 

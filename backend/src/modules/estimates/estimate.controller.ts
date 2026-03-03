@@ -77,6 +77,58 @@ export async function getProjectEstimates(req: Request, res: Response) {
   }
 }
 
+export async function postEstimateReview(req: Request, res: Response) {
+  try {
+    const { projectId, estimateId } = req.params;
+    const projectIdStr = Array.isArray(projectId) ? projectId[0] : projectId;
+    const estimateIdStr = Array.isArray(estimateId) ? estimateId[0] : estimateId;
+
+    const authUser = (req as any).user || {};
+    const userId = authUser.userId || authUser.id || authUser.sub || null;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const status = String(req.body?.status || "commented") as
+      | "commented"
+      | "changes_requested"
+      | "approved";
+    const comment = String(req.body?.comment || "");
+    const revisionId = req.body?.revisionId ? String(req.body.revisionId) : null;
+
+    if (!["commented", "changes_requested", "approved"].includes(status)) {
+      return res.status(400).json({ error: "Invalid review status" });
+    }
+
+    const result = await service.addReviewComment(
+      projectIdStr,
+      estimateIdStr,
+      userId,
+      status,
+      comment,
+      revisionId
+    );
+
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+}
+
+export async function getEstimateHistory(req: Request, res: Response) {
+  try {
+    const { projectId, estimateId } = req.params;
+    const projectIdStr = Array.isArray(projectId) ? projectId[0] : projectId;
+    const estimateIdStr = Array.isArray(estimateId) ? estimateId[0] : estimateId;
+
+    const result = await service.getEstimateHistory(projectIdStr, estimateIdStr);
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+}
+
 export async function createDraft(projectId: string, builderOrgId: string | null) {
   if (!builderOrgId) {
     throw new Error("Unauthorized: builder organization id required");

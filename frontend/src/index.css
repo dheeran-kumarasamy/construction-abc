@@ -63,6 +63,44 @@ button:hover {
   min-width: 100%;
 }
 
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table th,
+table td {
+  border: 1px solid var(--border, #e5e7eb) !important;
+  vertical-align: middle;
+}
+
+table th {
+  text-align: center !important;
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+table td {
+  text-align: left !important;
+}
+
+.amount-header,
+.num-header {
+  text-align: right !important;
+}
+
+.amount-cell,
+.num-cell {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Remove right border from last column */
 .table-wrapper th:last-child,
 .table-wrapper td:last-child {

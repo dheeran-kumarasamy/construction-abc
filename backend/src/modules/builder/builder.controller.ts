@@ -111,6 +111,27 @@ export async function getSubmittedEstimates(req: Request, res: Response) {
   }
 }
 
+export async function getSubmittedEstimateHistory(req: Request, res: Response) {
+  try {
+    const user = (req as any).user;
+    const builderOrgId = user?.organizationId;
+    const { estimateId } = req.params;
+    const estimateIdStr = Array.isArray(estimateId) ? estimateId[0] : estimateId;
+
+    if (!builderOrgId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const history = await service.getBuilderEstimateHistory(builderOrgId, estimateIdStr);
+    return res.json(history);
+  } catch (error) {
+    console.error("Get submitted estimate history error:", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to fetch estimate history",
+    });
+  }
+}
+
 export async function optimizeEstimateTarget(req: Request, res: Response) {
   try {
     const { projectId } = req.params;

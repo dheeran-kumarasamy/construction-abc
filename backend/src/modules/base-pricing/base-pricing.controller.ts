@@ -1,5 +1,21 @@
 import { Request, Response } from "express";
-import { parseBasePricingFile, uploadBasePricing } from "./base-pricing.service";
+import {
+  getBasePricingStarterTemplate,
+  parseBasePricingFile,
+  uploadBasePricing,
+} from "./base-pricing.service";
+
+export async function getBasePricingTemplate(req: Request, res: Response) {
+  try {
+    const template = getBasePricingStarterTemplate();
+    return res.json(template);
+  } catch (error) {
+    console.error("Get base pricing template error:", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to build template",
+    });
+  }
+}
 
 export async function parseBasePricing(req: Request, res: Response) {
   try {
