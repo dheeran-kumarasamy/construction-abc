@@ -14,6 +14,27 @@ function getReviewAction(status: ReviewStatus) {
   return "ESTIMATE_REVIEW_COMMENT";
 }
 
+async function assertArchitectHeadForProject(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  projectId: string,
+  userId: string
+) {
+  const access = await client.query(
+    `SELECT p.id
+     FROM projects p
+     JOIN users u ON u.id = $2
+     WHERE p.id = $1
+       AND p.architect_id = $2
+       AND u.role = 'architect'
+     LIMIT 1`,
+    [projectId, userId]
+  );
+
+  if (!access.rows.length) {
+    throw new Error("Only the head architect of this organization can approve or select a builder");
+  }
+}
+
 export async function createDraft(projectId: string, userId: string | null) {
   if (!userId) {
     throw new Error("Unauthorized: builder organization id required");
@@ -215,6 +236,10 @@ export async function addReviewComment(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    if (status === "approved") {
+      await assertArchitectHeadForProject(client, projectId, architectUserId);
+    }
 
     const estimateRes = await client.query(
       `SELECT id, project_id, builder_org_id, status
