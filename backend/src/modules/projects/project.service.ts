@@ -83,6 +83,35 @@ export async function getProjects(architectId: string | null) {
     return [];
   }
 
+  if (String(requester.role || "").toLowerCase() === "architect" && !requester.organization_id) {
+    const fallbackInviteRes = await pool.query(
+      `SELECT organization_id
+       FROM user_invites
+       WHERE user_id = $1
+         AND role = 'architect'
+         AND accepted_at IS NOT NULL
+         AND organization_id IS NOT NULL
+       ORDER BY accepted_at DESC
+       LIMIT 1`,
+      [architectId]
+    );
+
+    const inferredOrgId = fallbackInviteRes.rows[0]?.organization_id || null;
+
+    if (inferredOrgId) {
+      await pool.query(
+        `UPDATE users
+         SET organization_id = $1,
+             org_role = COALESCE(org_role, 'member')
+         WHERE id = $2
+           AND organization_id IS NULL`,
+        [inferredOrgId, architectId]
+      );
+
+      requester.organization_id = inferredOrgId;
+    }
+  }
+
   if (String(requester.role || "").toLowerCase() === "architect" && requester.organization_id) {
     const orgRes = await pool.query(
       `SELECT
@@ -105,8 +134,9 @@ export async function getProjects(architectId: string | null) {
          LIMIT 1
        ) pr ON true
        WHERE project_architect.organization_id = $1
+          OR p.architect_id = $2
        ORDER BY p.created_at DESC`,
-      [requester.organization_id]
+      [requester.organization_id, architectId]
     );
 
     return orgRes.rows;
