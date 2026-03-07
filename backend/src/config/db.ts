@@ -1,12 +1,58 @@
 import { Pool } from "pg";
 
 const isProduction = process.env.NODE_ENV === "production";
+const isVercelRuntime = Boolean(process.env.VERCEL);
 
-if (isProduction && !process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is required in production");
+function resolveDatabaseUrl(): string {
+  return (
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_URL_NON_POOLING ||
+    "postgresql://localhost/construction_db"
+  );
 }
 
-const databaseUrl = process.env.DATABASE_URL || "postgresql://localhost/construction_db";
+const databaseUrl = resolveDatabaseUrl();
+
+if ((isProduction || isVercelRuntime) && !databaseUrl) {
+  throw new Error("Database connection URL is required in production/runtime environment");
+}
+
+function isLocalDatabaseUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const host = (parsed.hostname || "").toLowerCase();
+    return host === "localhost" || host === "127.0.0.1";
+  } catch {
+    return /localhost|127\.0\.0\.1/i.test(url);
+  }
+}
+
+function resolveSslOption(url: string) {
+  if (!isProduction && !isVercelRuntime) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const sslMode = (parsed.searchParams.get("sslmode") || "").toLowerCase();
+
+    if (sslMode === "disable") {
+      return undefined;
+    }
+  } catch {
+    // Ignore parse failures and use production-safe fallback.
+  }
+
+  return { rejectUnauthorized: false };
+}
+
+if ((isProduction || isVercelRuntime) && isLocalDatabaseUrl(databaseUrl)) {
+  console.warn(
+    "[DB Config] Database URL points to localhost in runtime environment. Set DATABASE_URL or POSTGRES_URL in Vercel project settings."
+  );
+}
 
 function isLocalDatabaseUrl(url: string): boolean {
   try {
