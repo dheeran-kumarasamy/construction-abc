@@ -94,7 +94,20 @@ async function checkProjectOwnership(req: Request, res: Response, next: NextFunc
 
   try {
     const result = await pool.query(
-      "SELECT id FROM projects WHERE id = $1 AND architect_id = $2",
+      `SELECT p.id
+       FROM projects p
+       JOIN users requester ON requester.id = $2
+       JOIN users project_architect ON project_architect.id = p.architect_id
+       WHERE p.id = $1
+         AND requester.role = 'architect'
+         AND (
+           p.architect_id = requester.id
+           OR (
+             requester.organization_id IS NOT NULL
+             AND requester.organization_id = project_architect.organization_id
+           )
+         )
+       LIMIT 1`,
       [projectId, userId]
     );
     if (result.rows.length === 0) {

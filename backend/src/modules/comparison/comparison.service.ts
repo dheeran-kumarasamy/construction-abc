@@ -12,10 +12,13 @@ async function assertArchitectHeadForProject(
   const access = await client.query(
     `SELECT p.id
      FROM projects p
-     JOIN users u ON u.id = $2
+     JOIN users requester ON requester.id = $2
+     JOIN users project_architect ON project_architect.id = p.architect_id
      WHERE p.id = $1
-       AND p.architect_id = $2
-       AND u.role = 'architect'
+       AND requester.role = 'architect'
+       AND requester.org_role = 'head'
+       AND requester.organization_id IS NOT NULL
+       AND requester.organization_id = project_architect.organization_id
      LIMIT 1`,
     [projectId, userId]
   );
