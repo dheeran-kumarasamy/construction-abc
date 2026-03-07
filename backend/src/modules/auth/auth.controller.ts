@@ -1,5 +1,26 @@
 import { Request, Response } from "express";
 import * as service from "./auth.service";
+import { pool } from "../../config/db";
+
+async function resolveOrganizationId(req: Request): Promise<string | null> {
+  const tokenOrgId = (req as any).user?.organizationId;
+  if (tokenOrgId) {
+    return tokenOrgId;
+  }
+
+  const userId = (req as any).user?.userId;
+  if (!userId) {
+    return null;
+  }
+
+  const { rows } = await pool.query(
+    `SELECT organization_id FROM users WHERE id = $1 LIMIT 1`,
+    [userId]
+  );
+
+  const resolvedOrgId = rows[0]?.organization_id;
+  return resolvedOrgId || null;
+}
 
 export async function login(req: Request, res: Response) {
   try {
@@ -26,6 +47,42 @@ export async function login(req: Request, res: Response) {
   }
 }
 
+async function getRequesterProfile(req: Request) {
+  const userId = (req as any).user?.userId;
+  if (!userId) return null;
+
+  const { rows } = await pool.query(
+    `SELECT id, role, organization_id, org_role FROM users WHERE id = $1 LIMIT 1`,
+    [userId]
+  );
+
+  return rows[0] || null;
+}
+
+export async function register(req: Request, res: Response) {
+  try {
+    const { email, password, role, organizationName } = req.body || {};
+
+    const result = await service.registerUser({
+      email,
+      password,
+      role,
+      organizationName,
+    });
+
+    return res.status(201).json(result);
+  } catch (err: any) {
+    const message = String(err?.message || "Registration failed");
+    if (/builder self-registration is disabled/i.test(message)) {
+      return res.status(403).json({ error: message });
+    }
+    if (/already exists/i.test(message)) {
+      return res.status(409).json({ error: message });
+    }
+    return res.status(400).json({ error: message });
+  }
+}
+
 export async function acceptInvite(req: Request, res: Response) {
   try {
     const { token, password } = req.body;
@@ -41,8 +98,10 @@ export async function acceptInvite(req: Request, res: Response) {
 export async function inviteUser(req: Request, res: Response) {
   try {
     const { email, role = "builder", projectId } = req.body || {};
-    const orgId = (req as any).user?.organizationId || null;
+    const orgId = await resolveOrganizationId(req);
+    const normalizedRole = String(role || "").trim().toLowerCase();
     const referer = req.headers.referer;
+    const requester = await getRequesterProfile(req);
 
     if (!email) {
       return res.status(400).json({ error: "email is required" });
@@ -52,12 +111,42 @@ export async function inviteUser(req: Request, res: Response) {
       return res.status(403).json({ error: "Missing organization context" });
     }
 
-    // projectId can be required for project-scoped invites
-    if (!projectId) {
-      return res.status(400).json({ error: "projectId is required for project invites" });
+    if (!requester || String(requester.role || "").toLowerCase() !== "architect") {
+      return res.status(403).json({ error: "Only architect users can send invites" });
     }
 
-    const result = await service.createInvite(email, role, orgId, projectId, referer);
+    if (normalizedRole !== "builder" && normalizedRole !== "architect") {
+      return res.status(400).json({ error: "Invite role must be either builder or architect" });
+    }
+
+    if (normalizedRole === "builder") {
+      if (!projectId) {
+        return res.status(400).json({ error: "projectId is required for builder project invites" });
+      }
+
+      const projectAccess = await pool.query(
+        `SELECT p.id
+         FROM projects p
+         JOIN users architect_user ON architect_user.id = p.architect_id
+         WHERE p.id = $1
+           AND architect_user.organization_id = $2
+         LIMIT 1`,
+        [projectId, orgId]
+      );
+
+      if (!projectAccess.rows.length) {
+        return res.status(403).json({ error: "You can invite builders only for projects in your architect organization" });
+      }
+
+      const result = await service.createInvite(email, "builder", orgId, projectId, null, referer);
+      return res.json(result);
+    }
+
+    if (String(requester.org_role || "").toLowerCase() !== "head") {
+      return res.status(403).json({ error: "Only Architect Head can invite architect team members" });
+    }
+
+    const result = await service.createInvite(email, "architect", orgId, null, "member", referer);
 
     res.json(result);
   } catch (err: any) {
@@ -67,7 +156,7 @@ export async function inviteUser(req: Request, res: Response) {
 
 export async function getInvites(req: Request, res: Response) {
   try {
-    const orgId = (req as any).user?.organizationId || null;
+    const orgId = await resolveOrganizationId(req);
     const referer = req.headers.referer;
 
     if (!orgId) {

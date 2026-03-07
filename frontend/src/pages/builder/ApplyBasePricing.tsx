@@ -111,6 +111,7 @@ export default function ApplyBasePricing() {
   const [expenseRecommendations, setExpenseRecommendations] = useState<ExpenseRecommendation[]>([]);
   const [optimizerEngineInfo, setOptimizerEngineInfo] = useState<string>("");
   const [optimizerBaseRatesByItem, setOptimizerBaseRatesByItem] = useState<Record<number, number>>({});
+  const [activeRecommendationId, setActiveRecommendationId] = useState<string | null>(null);
   const [isLandscapeWide, setIsLandscapeWide] = useState(false);
   const suggestionsContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -178,6 +179,49 @@ export default function ApplyBasePricing() {
     setMarginConfig({ overallMargin, laborUplift, machineryUplift });
   }
 
+  function handleMarginConfigChange(
+    key: keyof MarginConfig,
+    storageKey: "overallMargin" | "laborUplift" | "machineryUplift",
+    nextValue: number
+  ) {
+    const normalizedValue = Number.isFinite(nextValue) ? Math.max(nextValue, 0) : 0;
+
+    setMarginConfig((prev) => ({
+      ...prev,
+      [key]: normalizedValue,
+    }));
+
+    sessionStorage.setItem(storageKey, String(normalizedValue));
+  }
+
+  function renderInlineAdjuster(
+    key: keyof MarginConfig,
+    storageKey: "overallMargin" | "laborUplift" | "machineryUplift",
+    value: number,
+    step = 1
+  ) {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", marginLeft: "0.35rem" }}>
+        <button
+          type="button"
+          disabled={isUiLocked}
+          onClick={() => handleMarginConfigChange(key, storageKey, value - step)}
+          style={{ ...pageStyles.secondaryBtn, height: "26px", padding: "0 8px", borderRadius: "6px", fontSize: "0.85rem" }}
+        >
+          -
+        </button>
+        <button
+          type="button"
+          disabled={isUiLocked}
+          onClick={() => handleMarginConfigChange(key, storageKey, value + step)}
+          style={{ ...pageStyles.secondaryBtn, height: "26px", padding: "0 8px", borderRadius: "6px", fontSize: "0.85rem" }}
+        >
+          +
+        </button>
+      </span>
+    );
+  }
+
   useEffect(() => {
     if (selectedProjectId && boqItems.length > 0) {
       autoMatchPricing(boqItems, basePricing);
@@ -238,6 +282,7 @@ export default function ApplyBasePricing() {
     setExpenseRecommendations([]);
     setOptimizerEngineInfo("");
     setOptimizerBaseRatesByItem({});
+    setActiveRecommendationId(null);
     setSelectedGuardrails(STANDARD_GUARDRAILS.map((item) => item.id));
     
     if (!projectId) {
@@ -364,6 +409,7 @@ export default function ApplyBasePricing() {
     setOptimizerLoading(true);
     setOptimizerError("");
     setOptimizerEngineInfo("");
+    setActiveRecommendationId(null);
     try {
       const token = localStorage.getItem("token");
       const selectedProject = projects.find((project) => project.id === selectedProjectId);
@@ -716,6 +762,7 @@ export default function ApplyBasePricing() {
       setExpenseRecommendations([]);
       setOptimizerEngineInfo("");
       setOptimizerBaseRatesByItem({});
+      setActiveRecommendationId(null);
       loadMarginConfig();
     } catch (err) {
       console.error("Submit estimate error:", err);
@@ -815,6 +862,32 @@ export default function ApplyBasePricing() {
     };
   });
 
+  const llmSuggestionByBoqItem = optimizerSuggestions.reduce<Map<number, OptimizerSuggestion>>((acc, suggestion) => {
+    if (suggestion.source !== "llm") {
+      return acc;
+    }
+
+    const existing = acc.get(suggestion.boqItemId);
+    if (!existing) {
+      acc.set(suggestion.boqItemId, suggestion);
+      return acc;
+    }
+
+    const existingPriority = getPriorityRank(existing.priority);
+    const nextPriority = getPriorityRank(suggestion.priority);
+    if (nextPriority < existingPriority || (nextPriority === existingPriority && suggestion.confidence > existing.confidence)) {
+      acc.set(suggestion.boqItemId, suggestion);
+    }
+
+    return acc;
+  }, new Map<number, OptimizerSuggestion>());
+
+  const activeRecommendation = activeRecommendationId
+    ? optimizerSuggestions.find((suggestion) => suggestion.suggestionId === activeRecommendationId) || null
+    : null;
+  const laborMarginAmount = totals.laborWithUplift - totals.laborTotal;
+  const machineryMarginAmount = totals.machineryWithUplift - totals.machineryTotal;
+
   const renderCostBreakdownPanel = (extraStyle: React.CSSProperties = {}) => (
     <div
       style={{
@@ -847,32 +920,41 @@ export default function ApplyBasePricing() {
         <div style={{ color: "#0d9488" }}>Material:</div>
         <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.materialTotal.toFixed(2)}</div>
 
-        <div style={{ color: "#0d9488" }}>Labor (base):</div>
+        <div style={{ color: "#0d9488" }}>Labor Rate:</div>
         <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.laborTotal.toFixed(2)}</div>
 
-        <div style={{ color: "#0d9488", paddingLeft: "1rem" }}>+ Labor Uplift ({marginConfig.laborUplift}%):</div>
-        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>₹{totals.laborWithUplift.toFixed(2)}</div>
+        <div style={{ color: "#0d9488", display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+          Labor Margin ({marginConfig.laborUplift}%)
+          {renderInlineAdjuster("laborUplift", "laborUplift", marginConfig.laborUplift)}
+        </div>
+        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>₹{laborMarginAmount.toFixed(2)}</div>
 
-        <div style={{ color: "#0d9488" }}>Machinery (base):</div>
+        <div style={{ color: "#0d9488" }}>Machinery Rate:</div>
         <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.machineryTotal.toFixed(2)}</div>
 
-        <div style={{ color: "#0d9488", paddingLeft: "1rem" }}>+ Machinery Uplift ({marginConfig.machineryUplift}%):</div>
-        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>₹{totals.machineryWithUplift.toFixed(2)}</div>
+        <div style={{ color: "#0d9488", display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+          Machinery Margin ({marginConfig.machineryUplift}%)
+          {renderInlineAdjuster("machineryUplift", "machineryUplift", marginConfig.machineryUplift)}
+        </div>
+        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>₹{machineryMarginAmount.toFixed(2)}</div>
 
         <div style={{ color: "#0d9488" }}>Other:</div>
         <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.otherTotal.toFixed(2)}</div>
 
         <div style={{ borderTop: "2px solid #99f6e4", paddingTop: "0.75rem", marginTop: "0.5rem", color: "#0f766e", fontWeight: 600 }}>
-          Subtotal (with uplifts):
+          Subtotal (with labor/machinery adjustments):
         </div>
         <div style={{ borderTop: "2px solid #99f6e4", paddingTop: "0.75rem", marginTop: "0.5rem", textAlign: "right", fontWeight: 700, fontSize: "1.1rem", color: "#0f766e" }}>
           ₹{totals.subtotalWithUplifts.toFixed(2)}
         </div>
 
-        <div style={{ color: "#0d9488" }}>+ Overall Margin ({marginConfig.overallMargin}%):</div>
-        <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.marginAmount.toFixed(2)}</div>
+        <div style={{ color: "#0d9488", display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+          Project Overall Margin ({marginConfig.overallMargin}%)
+          {renderInlineAdjuster("overallMargin", "overallMargin", marginConfig.overallMargin)}
+        </div>
+        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>₹{totals.marginAmount.toFixed(2)}</div>
 
-        <div style={{ borderTop: "3px solid #5eead4", paddingTop: "0.75rem", marginTop: "0.5rem", color: "#0f766e", fontWeight: 700, fontSize: "1.15rem" }}>
+        <div style={{ borderTop: "3px solid #5eead4", paddingTop: "0.75rem", marginTop: "0.5rem", color: "#0f766e", fontWeight: 700, fontSize: "1.15rem", display: "flex", alignItems: "center", flexWrap: "wrap" }}>
           Grand Total:
         </div>
         <div style={{ borderTop: "3px solid #5eead4", paddingTop: "0.75rem", marginTop: "0.5rem", textAlign: "right", fontWeight: 700, fontSize: "1.5rem", color: "#0f766e" }}>
@@ -1338,7 +1420,33 @@ export default function ApplyBasePricing() {
                       {pricedItems.map((item, index) => (
                         <tr key={item.id} style={index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
                           <td className="num-cell" style={pageStyles.td}>{index + 1}</td>
-                          <td style={pageStyles.td}>{item.item}</td>
+                          <td style={pageStyles.td}>
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+                              <span>{item.item}</span>
+                              {llmSuggestionByBoqItem.has(item.id) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveRecommendationId(llmSuggestionByBoqItem.get(item.id)?.suggestionId || null)}
+                                  disabled={isUiLocked}
+                                  title="View LLM recommendation"
+                                  aria-label={`View LLM recommendation for ${item.item}`}
+                                  style={{
+                                    border: "1px solid #99f6e4",
+                                    backgroundColor: "#f0fdfa",
+                                    color: "#0f766e",
+                                    width: "22px",
+                                    height: "22px",
+                                    borderRadius: "999px",
+                                    fontWeight: 700,
+                                    cursor: isUiLocked ? "not-allowed" : "pointer",
+                                    lineHeight: 1,
+                                  }}
+                                >
+                                  i
+                                </button>
+                              )}
+                            </div>
+                          </td>
                           <td className="num-cell" style={pageStyles.td}>{item.qty}</td>
                           <td style={pageStyles.td}>{item.uom}</td>
                           <td className="amount-cell" style={pageStyles.td}>
@@ -1417,6 +1525,99 @@ export default function ApplyBasePricing() {
                 zIndex: 60,
                 boxShadow: "0 10px 30px rgba(15, 23, 42, 0.12)",
               })}
+
+            {activeRecommendation && (
+              <div
+                role="dialog"
+                aria-modal="true"
+                onClick={() => setActiveRecommendationId(null)}
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  backgroundColor: "rgba(15, 23, 42, 0.45)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 120,
+                  padding: "1rem",
+                }}
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: "min(620px, 100%)",
+                    border: "1px solid #99f6e4",
+                    borderRadius: "12px",
+                    backgroundColor: "#ffffff",
+                    padding: "1rem",
+                    display: "grid",
+                    gap: "0.75rem",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+                    <strong style={{ color: "#0f172a" }}>LLM Recommendation</strong>
+                    <button
+                      type="button"
+                      onClick={() => setActiveRecommendationId(null)}
+                      style={pageStyles.secondaryBtn}
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  <p style={{ margin: 0, color: "#0f172a", fontWeight: 600 }}>
+                    {activeRecommendation.itemDescription || "(No item description)"}
+                  </p>
+
+                  <p style={{ margin: 0, color: "#334155" }}>{activeRecommendation.reason}</p>
+
+                  <p style={{ margin: 0, color: "#0f766e", fontWeight: 600 }}>
+                    Rate: ₹{activeRecommendation.oldRate.toFixed(2)} → ₹{activeRecommendation.newRate.toFixed(2)}
+                  </p>
+
+                  <p style={{ margin: 0, color: "#475569", fontSize: "0.9rem" }}>
+                    Total impact: ₹{activeRecommendation.totalDelta.toFixed(2)} • Confidence: {(activeRecommendation.confidence * 100).toFixed(0)}%
+                  </p>
+
+                  {activeRecommendation.qualityValidation && (
+                    <p style={{ margin: 0, color: "#0f766e", fontWeight: 500 }}>
+                      Quality validation: {activeRecommendation.qualityValidation}
+                    </p>
+                  )}
+
+                  {activeRecommendation.blocked ? (
+                    <p style={{ margin: 0, color: "#b91c1c", fontWeight: 600 }}>
+                      Guardrail blocked: {activeRecommendation.blockReason || "Blocked"}
+                    </p>
+                  ) : (
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSuggestionDecision(activeRecommendation.suggestionId, "accepted");
+                          setActiveRecommendationId(null);
+                        }}
+                        disabled={isUiLocked || activeRecommendation.decision === "accepted"}
+                        style={pageStyles.primaryBtn}
+                      >
+                        {activeRecommendation.decision === "accepted" ? "Accepted" : "Accept"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSuggestionDecision(activeRecommendation.suggestionId, "declined");
+                          setActiveRecommendationId(null);
+                        }}
+                        disabled={isUiLocked || activeRecommendation.decision === "declined"}
+                        style={pageStyles.secondaryBtn}
+                      >
+                        {activeRecommendation.decision === "declined" ? "Declined" : "Decline"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         )}
 
