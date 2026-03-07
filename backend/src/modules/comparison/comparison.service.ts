@@ -1,5 +1,30 @@
 import { pool } from "../../config/db";
 
+async function assertArchitectHeadForProject(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  projectId: string,
+  userId: string | null
+) {
+  if (!userId) {
+    throw new Error("Unauthorized");
+  }
+
+  const access = await client.query(
+    `SELECT p.id
+     FROM projects p
+     JOIN users u ON u.id = $2
+     WHERE p.id = $1
+       AND p.architect_id = $2
+       AND u.role = 'architect'
+     LIMIT 1`,
+    [projectId, userId]
+  );
+
+  if (!access.rows.length) {
+    throw new Error("Only the head architect of this organization can approve or select a builder");
+  }
+}
+
 export async function fetchComparison(projectId: string) {
   const res = await pool.query(
     `SELECT
@@ -44,6 +69,8 @@ export async function createAward(
 
   try {
     await client.query("BEGIN");
+
+    await assertArchitectHeadForProject(client, projectId, userId);
 
     // Ensure award not already created
     const existing = await client.query(

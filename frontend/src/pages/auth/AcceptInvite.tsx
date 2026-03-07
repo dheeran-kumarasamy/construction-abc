@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { apiUrl } from "../../services/api";
+import { useAuth } from "../../auth/AuthContext";
 
 export default function AcceptInvite() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [params] = useSearchParams();
   const token = params.get("token");
 
@@ -27,6 +29,7 @@ export default function AcceptInvite() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to accept invite");
 
+      login("invited-user", data.role, data.orgRole || null);
       localStorage.setItem("token", data.token);
       localStorage.setItem("role", data.role);
 

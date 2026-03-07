@@ -87,6 +87,8 @@ function ArchitectWorkflowBar() {
     { label: "View Audit Trail", path: "/architect/audit", step: 7 },
   ];
 
+  const orgRoleLabel = user.orgRole === "head" ? "Architect Head" : "Architect Team";
+
   return (
     <div
       style={{
@@ -99,6 +101,21 @@ function ArchitectWorkflowBar() {
         backdropFilter: "blur(4px)",
       }}
     >
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "6px" }}>
+        <span
+          style={{
+            background: "#ecfeff",
+            border: "1px solid #99f6e4",
+            color: "#0f766e",
+            borderRadius: "999px",
+            fontSize: "12px",
+            fontWeight: 700,
+            padding: "4px 10px",
+          }}
+        >
+          {orgRoleLabel}
+        </span>
+      </div>
       <div
         style={{
           display: "flex",

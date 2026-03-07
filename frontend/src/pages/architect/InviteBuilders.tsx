@@ -5,7 +5,8 @@ import { apiUrl } from "../../services/api";
 interface Invite {
   id: string;
   email: string;
-  projectId: string;
+  role?: "builder" | "architect";
+  projectId: string | null;
   projectName?: string;
   status: "open" | "accepted" | "expired" | "pending" | "failed";
   inviteLink?: string;
@@ -20,6 +21,7 @@ interface Project {
 
 export default function InviteBuilders() {
   const [email, setEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"builder" | "architect">("builder");
   const [projectId, setProjectId] = useState<string>("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -56,7 +58,7 @@ export default function InviteBuilders() {
 
     setLoadingInvites(true);
     try {
-      const res = await fetch(apiUrl("/auth/invites?role=builder"), {
+      const res = await fetch(apiUrl("/auth/invites"), {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -71,13 +73,15 @@ export default function InviteBuilders() {
   }
 
   async function sendInvite() {
-    if (!email.trim() || !projectId) return;
+    if (!email.trim()) return;
+    if (inviteRole === "builder" && !projectId) return;
 
     const newInvite: Invite = {
       id: `tmp-${Date.now()}`,
+      role: inviteRole,
       email,
-      projectId,
-      projectName: projects.find((p) => p.id === projectId)?.name,
+      projectId: inviteRole === "builder" ? projectId : null,
+      projectName: inviteRole === "builder" ? projects.find((p) => p.id === projectId)?.name : "Architect Team",
       status: "pending",
       createdAt: new Date().toISOString(),
     };
@@ -90,7 +94,11 @@ export default function InviteBuilders() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ email, role: "builder", projectId }),
+        body: JSON.stringify(
+          inviteRole === "builder"
+            ? { email, role: "builder", projectId }
+            : { email, role: "architect" }
+        ),
       });
 
       const body = await res.json();
@@ -107,6 +115,9 @@ export default function InviteBuilders() {
         )
       );
       setEmail("");
+      if (inviteRole === "architect") {
+        setInviteRole("builder");
+      }
       await loadInvites();
     } catch (err: any) {
       setInvites((prev) =>
@@ -135,9 +146,9 @@ export default function InviteBuilders() {
       <div style={{ ...pageStyles.card, width: "min(760px, 100%)" }}>
         <div style={pageStyles.header}>
           <div>
-            <h2 style={pageStyles.title}>Invite Builders</h2>
+            <h2 style={pageStyles.title}>Invite Team & Builders</h2>
             <p style={pageStyles.subtitle}>
-              Pick a project, add a builder email, and send the invite.
+              Architect Head can invite architect team members; both architect head/member can invite builders for a project.
             </p>
           </div>
           <div style={pageStyles.meta}>Projects: {projects.length}</div>
@@ -145,19 +156,30 @@ export default function InviteBuilders() {
 
         <div style={pageStyles.formRow}>
           <select
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
+            value={inviteRole}
+            onChange={(e) => setInviteRole(e.target.value as "builder" | "architect")}
             style={pageStyles.select}
           >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
+            <option value="builder">Builder Invite</option>
+            <option value="architect">Architect Team Invite</option>
           </select>
 
+          {inviteRole === "builder" && (
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              style={pageStyles.select}
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
+
           <input
-            placeholder="Builder email"
+            placeholder={inviteRole === "builder" ? "Builder email" : "Architect team member email"}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             style={pageStyles.input}
@@ -207,6 +229,7 @@ export default function InviteBuilders() {
           <thead>
             <tr>
               <th style={pageStyles.th}>Email</th>
+              <th style={pageStyles.th}>Role</th>
               <th style={pageStyles.th}>Project</th>
               <th style={pageStyles.th}>Status</th>
               <th style={pageStyles.th}>Invite Link</th>
@@ -215,13 +238,13 @@ export default function InviteBuilders() {
           <tbody>
             {loadingInvites ? (
               <tr>
-                <td colSpan={4} style={pageStyles.empty}>
+                <td colSpan={5} style={pageStyles.empty}>
                   Loading invites...
                 </td>
               </tr>
             ) : filteredInvites.length === 0 ? (
               <tr>
-                <td colSpan={4} style={pageStyles.empty}>
+                <td colSpan={5} style={pageStyles.empty}>
                   No invites found
                 </td>
               </tr>
@@ -232,8 +255,11 @@ export default function InviteBuilders() {
                   style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}
                 >
                   <td style={pageStyles.td}>{inv.email}</td>
+                  <td style={pageStyles.td}>{inv.role || "builder"}</td>
                   <td style={pageStyles.td}>
-                    {inv.projectName ||
+                    {inv.role === "architect"
+                      ? "Architect Team"
+                      : inv.projectName ||
                       projects.find((p) => p.id === inv.projectId)?.name ||
                       "-"}
                   </td>

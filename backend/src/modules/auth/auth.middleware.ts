@@ -20,7 +20,8 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     const payload = jwt.verify(token, JWT_SECRET) as {
       userId: string;
       role: string;
-      organizationId: string;
+      organizationId?: string | null;
+      orgRole?: "head" | "member" | null;
     };
 
     (req as any).user = payload;

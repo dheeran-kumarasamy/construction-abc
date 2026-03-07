@@ -31,6 +31,117 @@ function buildInviteLink(token: string, referer?: string): string {
   return `${baseUrl}/accept-invite?token=${token}`;
 }
 
+function normalizeOrgRole(role?: string | null): "head" | "member" | null {
+  const raw = String(role || "").trim().toLowerCase();
+  if (raw === "head") return "head";
+  if (raw === "member") return "member";
+  return null;
+}
+
+export async function registerUser(input: {
+  email: string;
+  password: string;
+  role: "architect" | "builder";
+  organizationName?: string;
+}) {
+  const email = String(input.email || "").trim().toLowerCase();
+  const password = String(input.password || "");
+  const role = String(input.role || "").trim().toLowerCase();
+  const organizationName = String(input.organizationName || "").trim();
+
+  if (!email || !password || !role) {
+    throw new Error("email, password and role are required");
+  }
+
+  if (password.length < 6) {
+    throw new Error("Password must be at least 6 characters");
+  }
+
+  if (role !== "architect") {
+    throw new Error("Builder self-registration is disabled. Builder accounts are created via invite links only");
+  }
+
+  if (!organizationName) {
+    throw new Error("organizationName is required for architect registration");
+  }
+
+  const existing = await pool.query(
+    `SELECT id, role FROM users WHERE LOWER(TRIM(email)) = $1 LIMIT 1`,
+    [email]
+  );
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const orgRes = await client.query(
+      `INSERT INTO organizations (name, type)
+       VALUES ($1, 'architect')
+       RETURNING id`,
+      [organizationName]
+    );
+
+    const organizationId = orgRes.rows[0].id;
+    const orgRole: "head" = "head";
+
+    let userRes;
+
+    if (existing.rows.length > 0) {
+      const existingRole = String(existing.rows[0].role || "").toLowerCase();
+
+      if (existingRole !== "builder") {
+        throw new Error("User already exists with this email");
+      }
+
+      userRes = await client.query(
+        `UPDATE users
+         SET password_hash = $1,
+             role = 'architect',
+             organization_id = $2,
+             org_role = $3
+         WHERE id = $4
+         RETURNING id, role, organization_id, org_role`,
+        [passwordHash, organizationId, orgRole, existing.rows[0].id]
+      );
+    } else {
+      userRes = await client.query(
+        `INSERT INTO users (email, password_hash, role, organization_id, org_role)
+         VALUES ($1, $2, 'architect', $3, $4)
+         RETURNING id, role, organization_id, org_role`,
+        [email, passwordHash, organizationId, orgRole]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    const user = userRes.rows[0];
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        role: user.role,
+        organizationId: user.organization_id,
+        orgRole: user.org_role,
+      },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    return {
+      token,
+      role: user.role,
+      organizationId: user.organization_id,
+      orgRole: user.org_role,
+    };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function loginUser(email: string, password: string) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
 
@@ -40,7 +151,7 @@ export async function loginUser(email: string, password: string) {
 
   try {
     const { rows } = await pool.query(
-    `SELECT u.id, u.password_hash, u.role, u.organization_id
+    `SELECT u.id, u.password_hash, u.role, u.organization_id, u.org_role
      FROM users u
      WHERE LOWER(TRIM(u.email)) = $1`,
     [normalizedEmail]
@@ -69,12 +180,13 @@ export async function loginUser(email: string, password: string) {
         userId: user.id,
         role: user.role,
         organizationId: user.organization_id,
+        orgRole: user.org_role,
       },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    return { token, role: user.role };
+    return { token, role: user.role, organizationId: user.organization_id, orgRole: user.org_role };
   } catch (err: any) {
     if (err.message === "Invalid credentials" || err.message === "User not activated" || err.message === "Email and password required") {
       throw err;
@@ -97,8 +209,10 @@ export async function acceptInvite(token: string, password: string) {
   const passwordHash = await bcrypt.hash(password, 10);
 
   // Check if user already exists
+  const inviteOrgRole = normalizeOrgRole(invite.org_role);
+
   const existingUserResult = await pool.query(
-    `SELECT id, role, organization_id FROM users WHERE email = $1`,
+    `SELECT id, role, organization_id, org_role FROM users WHERE email = $1`,
     [invite.email]
   );
 
@@ -109,18 +223,31 @@ export async function acceptInvite(token: string, password: string) {
     // User exists, update their password
     user = existingUserResult.rows[0];
     userId = user.id;
-    
+
+    const shouldUpdateOrgRole = invite.role === "architect" ? inviteOrgRole || "member" : user.org_role;
+
     await pool.query(
-      `UPDATE users SET password_hash = $1 WHERE id = $2`,
-      [passwordHash, userId]
+      `UPDATE users
+       SET password_hash = $1,
+           role = COALESCE($2, role),
+           organization_id = COALESCE($3, organization_id),
+           org_role = COALESCE($4, org_role)
+       WHERE id = $5`,
+      [passwordHash, invite.role || null, invite.organization_id || null, shouldUpdateOrgRole, userId]
     );
+
+    const refreshed = await pool.query(
+      `SELECT id, role, organization_id, org_role FROM users WHERE id = $1`,
+      [userId]
+    );
+    user = refreshed.rows[0];
   } else {
     // User doesn't exist, create them
     const userInsert = await pool.query(
-      `INSERT INTO users (email, password_hash, role, organization_id)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, role, organization_id`,
-      [invite.email, passwordHash, invite.role, invite.organization_id]
+      `INSERT INTO users (email, password_hash, role, organization_id, org_role)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, role, organization_id, org_role`,
+      [invite.email, passwordHash, invite.role, invite.organization_id, invite.role === "architect" ? inviteOrgRole || "member" : null]
     );
 
     user = userInsert.rows[0];
@@ -137,12 +264,13 @@ export async function acceptInvite(token: string, password: string) {
       userId: user.id,
       role: user.role,
       organizationId: user.organization_id,
+      orgRole: user.org_role,
     },
     JWT_SECRET,
     { expiresIn: "7d" }
   );
 
-  return { token: jwtToken, role: user.role };
+  return { token: jwtToken, role: user.role, organizationId: user.organization_id, orgRole: user.org_role };
 }
 
 export async function createInvite(
@@ -150,6 +278,7 @@ export async function createInvite(
   role: string,
   organizationId: string,
   projectId?: string | null,
+  orgRole?: "head" | "member" | null,
   referer?: string
 ) {
   const token = crypto.randomBytes(32).toString("hex");
@@ -158,9 +287,9 @@ export async function createInvite(
   expiresAt.setDate(expiresAt.getDate() + 7);
 
   await pool.query(
-    `INSERT INTO user_invites (email, role, organization_id, project_id, token, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [email, role, organizationId || null, projectId || null, token, expiresAt]
+    `INSERT INTO user_invites (email, role, organization_id, project_id, org_role, token, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [email, role, organizationId || null, projectId || null, orgRole || null, token, expiresAt]
   );
 
   const inviteLink = buildInviteLink(token, referer);

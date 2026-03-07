@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   type BasePriceItem,
   getBasePricing,
@@ -235,6 +235,31 @@ export default function BuilderBasePricing() {
     setAvailableColumns([]);
     setParseDiagnostics(null);
   }
+
+  const groupedItems = useMemo(() => {
+    const categoryOrder: BasePriceItem["category"][] = ["Material", "Labor", "Machinery", "Other"];
+
+    const grouped = items.reduce<Record<string, BasePriceItem[]>>((acc, item) => {
+      const category = item.category || "Other";
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push(item);
+      return acc;
+    }, {});
+
+    const orderedCategories = [
+      ...categoryOrder.filter((category) => grouped[category]?.length),
+      ...Object.keys(grouped)
+        .filter((category) => !categoryOrder.includes(category as BasePriceItem["category"]))
+        .sort((a, b) => a.localeCompare(b)),
+    ];
+
+    return orderedCategories.map((category) => ({
+      category,
+      items: [...grouped[category]].sort((a, b) => a.item.localeCompare(b.item)),
+    }));
+  }, [items]);
 
   return (
     <div style={pageStyles.page}>
@@ -556,13 +581,36 @@ export default function BuilderBasePricing() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((it, idx) => (
-                    <tr key={idx} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
-                      <td style={pageStyles.td}>{it.item}</td>
-                      <td className="amount-cell" style={pageStyles.td}>{it.rate}</td>
-                      <td style={pageStyles.td}>{it.uom}</td>
-                      <td style={pageStyles.td}>{it.category}</td>
-                    </tr>
+                  {groupedItems.map((group) => (
+                    <Fragment key={`${group.category}-group`}>
+                      <tr style={pageStyles.rowEven}>
+                        <td
+                          style={{
+                            ...pageStyles.td,
+                            background: "var(--accentSoft)",
+                            color: "var(--ink)",
+                            fontWeight: 700,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.4px",
+                            borderTop: "1px solid var(--border)",
+                          }}
+                          colSpan={4}
+                        >
+                          {group.category}
+                        </td>
+                      </tr>
+                      {group.items.map((it, idx) => (
+                        <tr
+                          key={`${group.category}-${it.item}-${it.uom}-${idx}`}
+                          style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}
+                        >
+                          <td style={pageStyles.td}>{it.item}</td>
+                          <td className="amount-cell" style={pageStyles.td}>{it.rate}</td>
+                          <td style={pageStyles.td}>{it.uom}</td>
+                          <td style={pageStyles.td}>{it.category}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

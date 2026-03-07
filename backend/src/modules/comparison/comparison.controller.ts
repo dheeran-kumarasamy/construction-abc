@@ -27,6 +27,10 @@ export async function awardProject(req: Request, res: Response) {
     const result = await service.createAward(projectIdStr, estimateRevisionId, userId);
     res.json(result);
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    const message = String(err?.message || "Failed to award project");
+    if (/only the head architect/i.test(message) || /unauthorized/i.test(message)) {
+      return res.status(403).json({ error: message });
+    }
+    res.status(400).json({ error: message });
   }
 }

@@ -112,7 +112,11 @@ export async function postEstimateReview(req: Request, res: Response) {
 
     return res.json(result);
   } catch (err: any) {
-    return res.status(400).json({ error: err.message });
+    const message = String(err?.message || "Failed to post estimate review");
+    if (/only the head architect/i.test(message) || /unauthorized/i.test(message)) {
+      return res.status(403).json({ error: message });
+    }
+    return res.status(400).json({ error: message });
   }
 }
 

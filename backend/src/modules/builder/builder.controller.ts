@@ -1,5 +1,49 @@
 import { Request, Response } from "express";
 import * as service from "./builder.service";
+import { pool } from "../../config/db";
+
+async function resolveBuilderOrganizationId(userId: string, projectId?: string): Promise<string | null> {
+  const userOrg = await pool.query(
+    `SELECT organization_id FROM users WHERE id = $1 LIMIT 1`,
+    [userId]
+  );
+
+  const organizationId = userOrg.rows[0]?.organization_id;
+  if (organizationId) {
+    return organizationId;
+  }
+
+  if (projectId) {
+    const inviteOrg = await pool.query(
+      `SELECT organization_id
+       FROM user_invites
+       WHERE user_id = $1
+         AND project_id = $2
+         AND accepted_at IS NOT NULL
+         AND organization_id IS NOT NULL
+       ORDER BY accepted_at DESC
+       LIMIT 1`,
+      [userId, projectId]
+    );
+
+    if (inviteOrg.rows[0]?.organization_id) {
+      return inviteOrg.rows[0].organization_id;
+    }
+  }
+
+  const anyInviteOrg = await pool.query(
+    `SELECT organization_id
+     FROM user_invites
+     WHERE user_id = $1
+       AND accepted_at IS NOT NULL
+       AND organization_id IS NOT NULL
+     ORDER BY accepted_at DESC
+     LIMIT 1`,
+    [userId]
+  );
+
+  return anyInviteOrg.rows[0]?.organization_id || null;
+}
 
 export async function getAvailableProjects(req: Request, res: Response) {
   try {
@@ -44,7 +88,13 @@ export async function getProjectBOQItems(req: Request, res: Response) {
 export async function getBuilderBasePricing(req: Request, res: Response) {
   try {
     const user = (req as any).user;
-    const builderOrgId = user?.organizationId;
+    const userId = user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const builderOrgId = user?.organizationId || (await resolveBuilderOrganizationId(userId));
 
     if (!builderOrgId) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -67,8 +117,8 @@ export async function createOrUpdateEstimate(req: Request, res: Response) {
     const { pricedItems, marginConfig, notes } = req.body;
 
     const user = (req as any).user;
-    const builderOrgId = user?.organizationId;
     const userId = user?.userId;
+    const builderOrgId = user?.organizationId || (userId ? await resolveBuilderOrganizationId(userId, projectIdStr) : null);
 
     if (!userId || !builderOrgId) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -95,7 +145,13 @@ export async function createOrUpdateEstimate(req: Request, res: Response) {
 export async function getSubmittedEstimates(req: Request, res: Response) {
   try {
     const user = (req as any).user;
-    const builderOrgId = user?.organizationId;
+    const userId = user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const builderOrgId = user?.organizationId || (await resolveBuilderOrganizationId(userId));
 
     if (!builderOrgId) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -114,9 +170,15 @@ export async function getSubmittedEstimates(req: Request, res: Response) {
 export async function getSubmittedEstimateHistory(req: Request, res: Response) {
   try {
     const user = (req as any).user;
-    const builderOrgId = user?.organizationId;
+    const userId = user?.userId;
     const { estimateId } = req.params;
     const estimateIdStr = Array.isArray(estimateId) ? estimateId[0] : estimateId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const builderOrgId = user?.organizationId || (await resolveBuilderOrganizationId(userId));
 
     if (!builderOrgId) {
       return res.status(401).json({ error: "Unauthorized" });
