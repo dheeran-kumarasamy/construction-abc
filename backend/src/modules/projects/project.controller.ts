@@ -4,9 +4,15 @@ import * as service from "./project.service";
 export async function createProject(req: Request, res: Response) {
   try {
     const { name, description, siteAddress, latitude, longitude, startDate, durationMonths, clientOrgId } = req.body || {};
+    const authUser = (req as any).user || {};
+    const userId = authUser.userId || authUser.id || authUser.sub || null;
 
     if (!name || !siteAddress || !startDate || !durationMonths) {
       return res.status(400).json({ error: "Missing required project fields" });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const result = await service.createProjectWithRevision({
@@ -17,7 +23,7 @@ export async function createProject(req: Request, res: Response) {
       longitude,
       startDate,
       durationMonths,
-      userId: (req as any).user?.userId || null,
+      userId,
     });
 
     res.json(result);
@@ -28,7 +34,8 @@ export async function createProject(req: Request, res: Response) {
 
 export async function getProjects(req: Request, res: Response) {
   try {
-    const userId = (req as any).user?.userId || null;
+    const authUser = (req as any).user || {};
+    const userId = authUser.userId || authUser.id || authUser.sub || null;
     const result = await service.getProjects(userId);
     res.json(result);
   } catch (err: any) {
