@@ -66,6 +66,52 @@ export async function createProjectWithRevision(input: CreateProjectInput) {
 }
 
 export async function getProjects(architectId: string | null) {
+  if (!architectId) {
+    return [];
+  }
+
+  const requesterRes = await pool.query(
+    `SELECT id, role, organization_id
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
+    [architectId]
+  );
+
+  const requester = requesterRes.rows[0];
+  if (!requester) {
+    return [];
+  }
+
+  if (String(requester.role || "").toLowerCase() === "architect" && requester.organization_id) {
+    const orgRes = await pool.query(
+      `SELECT
+         p.id,
+         p.name,
+         p.description,
+         p.created_at,
+         p.architect_id,
+         p.boq_id,
+         pr.site_address,
+         pr.tentative_start_date,
+         pr.duration_months
+       FROM projects p
+       JOIN users project_architect ON project_architect.id = p.architect_id
+       LEFT JOIN LATERAL (
+         SELECT site_address, tentative_start_date, duration_months
+         FROM project_revisions
+         WHERE project_id = p.id
+         ORDER BY revision_number DESC
+         LIMIT 1
+       ) pr ON true
+       WHERE project_architect.organization_id = $1
+       ORDER BY p.created_at DESC`,
+      [requester.organization_id]
+    );
+
+    return orgRes.rows;
+  }
+
   const res = await pool.query(
     `SELECT
        p.id,
@@ -85,7 +131,7 @@ export async function getProjects(architectId: string | null) {
        ORDER BY revision_number DESC
        LIMIT 1
      ) pr ON true
-     WHERE ($1::uuid IS NULL OR p.architect_id = $1)
+     WHERE p.architect_id = $1
      ORDER BY p.created_at DESC`,
     [architectId]
   );
