@@ -8,8 +8,11 @@ import { authenticate } from "./modules/auth/auth.middleware";
 import comparisonRoutes from "./modules/comparison/comparison.routes";
 import basePricingRoutes from "./modules/base-pricing/base-pricing.routes";
 import builderRoutes from "./modules/builder/builder.routes";
+import { startSchemaHealthCheckOnce } from "./config/db";
 
 export const app = express();
+
+startSchemaHealthCheckOnce();
 
 const configuredOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")

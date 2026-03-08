@@ -2,6 +2,7 @@ import { Pool } from "pg";
 
 const isProduction = process.env.NODE_ENV === "production";
 const isVercelRuntime = Boolean(process.env.VERCEL);
+let schemaHealthCheckStarted = false;
 
 function resolveDatabaseUrl(): string {
   return (
@@ -54,39 +55,6 @@ if ((isProduction || isVercelRuntime) && isLocalDatabaseUrl(databaseUrl)) {
   );
 }
 
-function isLocalDatabaseUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    const host = (parsed.hostname || "").toLowerCase();
-    return host === "localhost" || host === "127.0.0.1";
-  } catch {
-    return /localhost|127\.0\.0\.1/i.test(url);
-  }
-}
-
-function resolveSslOption(url: string) {
-  if (!isProduction) {
-    return undefined;
-  }
-
-  try {
-    const parsed = new URL(url);
-    const sslMode = (parsed.searchParams.get("sslmode") || "").toLowerCase();
-
-    if (sslMode === "disable") {
-      return undefined;
-    }
-  } catch {
-    // Ignore URL parse failures and fall back to production default SSL below.
-  }
-
-  return { rejectUnauthorized: false };
-}
-
-if (isProduction && isLocalDatabaseUrl(databaseUrl)) {
-  console.warn("[DB Config] DATABASE_URL points to localhost in production. Set a managed Postgres URL in Vercel environment variables.");
-}
-
 console.log("[DB Config] Connecting to:", databaseUrl.replace(/:[^@]*@/, ":***@")); // Log without password
 
 export const pool = new Pool({
@@ -106,4 +74,42 @@ export async function testDbConnection() {
   } finally {
     client.release();
   }
+}
+
+export async function logCriticalSchemaHealth() {
+  try {
+    const { rows } = await pool.query(
+      `SELECT table_name, column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND (
+           (table_name = 'users' AND column_name = 'org_role')
+           OR (table_name = 'user_invites' AND column_name = 'org_role')
+         )`
+    );
+
+    const found = new Set(rows.map((row: any) => `${row.table_name}.${row.column_name}`));
+    const required = ["users.org_role", "user_invites.org_role"];
+    const missing = required.filter((item) => !found.has(item));
+
+    if (missing.length) {
+      console.error(
+        `[DB Schema] Missing required columns: ${missing.join(", ")}. Apply migration 010_add_org_role_for_architects.sql to this database.`
+      );
+      return;
+    }
+
+    console.log("[DB Schema] Critical migration columns are present.");
+  } catch (err: any) {
+    console.error("[DB Schema] Unable to verify schema health:", err?.message || err);
+  }
+}
+
+export function startSchemaHealthCheckOnce() {
+  if (schemaHealthCheckStarted) {
+    return;
+  }
+  schemaHealthCheckStarted = true;
+
+  void logCriticalSchemaHealth();
 }
