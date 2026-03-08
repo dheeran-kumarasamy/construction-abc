@@ -77,10 +77,12 @@ function ArchitectWorkflowBar() {
     return null;
   }
 
+  const isArchitectHead = user.orgRole === "head";
+
   const flowSteps = [
     { label: "Create Project", path: "/architect/create", step: 1 },
     { label: "Upload BOQ", path: "/architect/boq-upload", step: 2 },
-    { label: "Invite Builders", path: "/architect/invite", step: 3 },
+    { label: isArchitectHead ? "Invite Team & Builders" : "Invite Builders", path: "/architect/invite", step: 3 },
     { label: "View Submitted Estimates", path: "/architect/received", step: 4 },
     { label: "Compare Builder Estimates", path: "/architect/comparison", step: 5 },
     { label: "View Projects", path: "/architect/projects", step: 6 },

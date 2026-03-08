@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { apiUrl } from "../../services/api";
+import { useAuth } from "../../auth/AuthContext";
 
 interface Invite {
   id: string;
@@ -20,6 +21,8 @@ interface Project {
 }
 
 export default function InviteBuilders() {
+  const { user } = useAuth();
+  const isArchitectHead = user?.role === "architect" && user?.orgRole === "head";
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"builder" | "architect">("builder");
   const [projectId, setProjectId] = useState<string>("");
@@ -74,6 +77,9 @@ export default function InviteBuilders() {
 
   async function sendInvite() {
     if (!email.trim()) return;
+    if (!isArchitectHead && inviteRole === "architect") {
+      return;
+    }
     if (inviteRole === "builder" && !projectId) return;
 
     const newInvite: Invite = {
@@ -95,7 +101,7 @@ export default function InviteBuilders() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(
-          inviteRole === "builder"
+          inviteRole === "builder" || !isArchitectHead
             ? { email, role: "builder", projectId }
             : { email, role: "architect" }
         ),
@@ -146,23 +152,33 @@ export default function InviteBuilders() {
       <div style={{ ...pageStyles.card, width: "min(760px, 100%)" }}>
         <div style={pageStyles.header}>
           <div>
-            <h2 style={pageStyles.title}>Invite Team & Builders</h2>
+            <h2 style={pageStyles.title}>{isArchitectHead ? "Invite Team & Builders" : "Invite Builders"}</h2>
             <p style={pageStyles.subtitle}>
-              Architect Head can invite architect team members; both architect head/member can invite builders for a project.
+              {isArchitectHead
+                ? "You can invite architect team members and also invite builders for a project."
+                : "You can invite builders for projects in your architect organization."}
             </p>
           </div>
           <div style={pageStyles.meta}>Projects: {projects.length}</div>
         </div>
 
         <div style={pageStyles.formRow}>
-          <select
-            value={inviteRole}
-            onChange={(e) => setInviteRole(e.target.value as "builder" | "architect")}
-            style={pageStyles.select}
-          >
-            <option value="builder">Builder Invite</option>
-            <option value="architect">Architect Team Invite</option>
-          </select>
+          {isArchitectHead ? (
+            <select
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value as "builder" | "architect")}
+              style={pageStyles.select}
+            >
+              <option value="builder">Builder Invite</option>
+              <option value="architect">Architect Team Invite</option>
+            </select>
+          ) : (
+            <input
+              value="Builder Invite"
+              readOnly
+              style={{ ...pageStyles.input, maxWidth: "180px", backgroundColor: "#f8fafc" }}
+            />
+          )}
 
           {inviteRole === "builder" && (
             <select
