@@ -40,6 +40,9 @@ function DashboardButton() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const hasWorkflowBar =
+    location.pathname.startsWith("/architect") ||
+    location.pathname.startsWith("/builder");
 
   if (!user || location.pathname === "/login") {
     return null;
@@ -51,7 +54,7 @@ function DashboardButton() {
       style={{
         ...pageStyles.secondaryBtn,
         position: "fixed",
-        top: 16,
+        top: hasWorkflowBar ? 72 : 16,
         right: 16,
         zIndex: 1000,
         height: "40px",
@@ -66,6 +69,40 @@ function DashboardButton() {
       Logout
     </button>
   );
+}
+
+function FlowBackgroundController() {
+  const { user } = useAuth();
+  const location = useLocation();
+
+  React.useEffect(() => {
+    const root = document.documentElement;
+
+    const isArchitectFlow =
+      location.pathname.startsWith("/architect") && user?.role === "architect";
+    const isBuilderFlow =
+      location.pathname.startsWith("/builder") && user?.role === "builder";
+
+    if (isArchitectFlow) {
+      root.style.setProperty(
+        "--flowBackgroundImage",
+        'url("https://assets.architecturaldigest.in/photos/6937ed0db1937d5a47ba2aa1/master/w_1600,c_limit/DSC_6900-HDR.jpg")'
+      );
+      return;
+    }
+
+    if (isBuilderFlow) {
+      root.style.setProperty(
+        "--flowBackgroundImage",
+        'url("https://plus.unsplash.com/premium_photo-1661915661139-5b6a4e4a6fcc?q=80&w=967&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D")'
+      );
+      return;
+    }
+
+    root.style.removeProperty("--flowBackgroundImage");
+  }, [location.pathname, user?.role]);
+
+  return null;
 }
 
 function ArchitectWorkflowBar() {
@@ -245,6 +282,7 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <FlowBackgroundController />
         <DashboardButton />
         <ArchitectWorkflowBar />
         <BuilderWorkflowBar />
