@@ -83,6 +83,20 @@ export async function register(req: Request, res: Response) {
   }
 }
 
+export async function resetPassword(req: Request, res: Response) {
+  try {
+    const { email, newPassword } = req.body || {};
+    const result = await service.resetPassword(email, newPassword);
+    return res.json(result);
+  } catch (err: any) {
+    const message = String(err?.message || "Password reset failed");
+    if (/user not found/i.test(message)) {
+      return res.status(404).json({ error: message });
+    }
+    return res.status(400).json({ error: message });
+  }
+}
+
 export async function acceptInvite(req: Request, res: Response) {
   try {
     const { token, password } = req.body;

@@ -196,6 +196,39 @@ export async function loginUser(email: string, password: string) {
   }
 }
 
+export async function resetPassword(email: string, newPassword: string) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const password = String(newPassword || "");
+
+  if (!normalizedEmail || !password) {
+    throw new Error("Email and new password are required");
+  }
+
+  if (password.length < 6) {
+    throw new Error("Password must be at least 6 characters");
+  }
+
+  const existingUser = await pool.query(
+    `SELECT id FROM users WHERE LOWER(TRIM(email)) = $1 LIMIT 1`,
+    [normalizedEmail]
+  );
+
+  if (!existingUser.rows.length) {
+    throw new Error("User not found");
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  await pool.query(
+    `UPDATE users
+     SET password_hash = $1
+     WHERE id = $2`,
+    [passwordHash, existingUser.rows[0].id]
+  );
+
+  return { ok: true };
+}
+
 export async function acceptInvite(token: string, password: string) {
   const { rows } = await pool.query(
     `SELECT * FROM user_invites WHERE token = $1 AND accepted_at IS NULL AND expires_at > NOW()`,

@@ -8,17 +8,19 @@ export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "reset">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [organizationName, setOrganizationName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSuccessMessage("");
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
@@ -58,6 +60,7 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSuccessMessage("");
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
@@ -98,13 +101,46 @@ export default function Login() {
     }
   }
 
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const res = await fetch(apiUrl("/auth/reset-password"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: normalizedEmail, newPassword: password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Password reset failed");
+      }
+
+      setSuccessMessage("Password reset successful. Please login with your new password.");
+      setMode("login");
+      setPassword("");
+    } catch (err: any) {
+      setError(err.message || "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div style={pageStyles.page}>
       <form
         style={{ ...pageStyles.card, width: "min(380px, 100%)" }}
-        onSubmit={mode === "login" ? handleLogin : handleRegister}
+        onSubmit={mode === "login" ? handleLogin : mode === "register" ? handleRegister : handleResetPassword}
       >
-        <h2 style={pageStyles.title}>{mode === "login" ? "Login" : "Register"}</h2>
+        <h2 style={pageStyles.title}>{mode === "login" ? "Login" : mode === "register" ? "Register" : "Reset Password"}</h2>
 
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button
@@ -123,9 +159,21 @@ export default function Login() {
             onClick={() => {
               setMode("register");
               setError("");
+              setSuccessMessage("");
             }}
           >
             Register
+          </button>
+          <button
+            type="button"
+            style={mode === "reset" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
+            onClick={() => {
+              setMode("reset");
+              setError("");
+              setSuccessMessage("");
+            }}
+          >
+            Reset Password
           </button>
         </div>
 
@@ -156,7 +204,7 @@ export default function Login() {
         <input
           style={pageStyles.input}
           type="password"
-          placeholder="Password"
+          placeholder={mode === "reset" ? "New Password" : "Password"}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
@@ -164,12 +212,23 @@ export default function Login() {
         />
 
         {error && <div style={pageStyles.error}>{error}</div>}
+        {successMessage && <div style={{ color: "#0f766e", fontWeight: 600 }}>{successMessage}</div>}
 
         <button
           style={pageStyles.primaryBtn}
           disabled={loading}
         >
-          {loading ? (mode === "login" ? "Signing in..." : "Creating account...") : mode === "login" ? "Sign In" : "Create Account"}
+          {loading
+            ? mode === "login"
+              ? "Signing in..."
+              : mode === "register"
+              ? "Creating account..."
+              : "Resetting password..."
+            : mode === "login"
+            ? "Sign In"
+            : mode === "register"
+            ? "Create Account"
+            : "Reset Password"}
         </button>
       </form>
     </div>
