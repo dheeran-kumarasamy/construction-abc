@@ -293,7 +293,7 @@ export default function InviteBuilders() {
                     </span>
                   </td>
                   <td style={pageStyles.td}>
-                    {inv.inviteLink ? (
+                    {inv.status === "open" && inv.inviteLink ? (
                       <a
                         href={inv.inviteLink}
                         target="_blank"
@@ -302,6 +302,8 @@ export default function InviteBuilders() {
                       >
                         Open
                       </a>
+                    ) : inv.status === "accepted" || inv.status === "expired" ? (
+                      <span style={{ color: "#64748b", fontWeight: 600 }}>Expired</span>
                     ) : inv.error ? (
                       <span style={pageStyles.error}>{inv.error}</span>
                     ) : (
