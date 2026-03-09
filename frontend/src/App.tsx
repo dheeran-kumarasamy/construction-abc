@@ -215,6 +215,8 @@ function BuilderWorkflowBar() {
     { label: "View Submission", path: "/builder/submit", step: 4 },
   ];
 
+  const roleLabel = "Builder";
+
   return (
     <div
       style={{
@@ -227,6 +229,21 @@ function BuilderWorkflowBar() {
         backdropFilter: "blur(4px)",
       }}
     >
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "6px" }}>
+        <span
+          style={{
+            background: "#ecfeff",
+            border: "1px solid #99f6e4",
+            color: "#0f766e",
+            borderRadius: "999px",
+            fontSize: "12px",
+            fontWeight: 700,
+            padding: "4px 10px",
+          }}
+        >
+          {roleLabel}
+        </span>
+      </div>
       <div
         style={{
           display: "flex",
