@@ -5,7 +5,7 @@ export const pageStyles: Record<string, CSSProperties> = {
     minHeight: "100vh",
     padding: "clamp(12px, 5vw, 32px)",
     backgroundImage:
-      "radial-gradient(900px 420px at 15% 10%, rgba(248, 250, 252, 0.48) 0%, rgba(248, 250, 252, 0.4) 45%, rgba(241, 245, 249, 0.38) 100%), url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=3200&q=95')",
+      "radial-gradient(900px 420px at 15% 10%, rgba(248, 250, 252, 0.48) 0%, rgba(248, 250, 252, 0.4) 45%, rgba(241, 245, 249, 0.38) 100%), var(--flowBackgroundImage, url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=3200&q=95'))",
     backgroundSize: "cover, cover",
     backgroundPosition: "center, center",
     backgroundRepeat: "no-repeat, no-repeat",
