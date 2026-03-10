@@ -8,6 +8,9 @@ import { authenticate } from "./modules/auth/auth.middleware";
 import comparisonRoutes from "./modules/comparison/comparison.routes";
 import basePricingRoutes from "./modules/base-pricing/base-pricing.routes";
 import builderRoutes from "./modules/builder/builder.routes";
+import pricesRoutes from "./modules/prices/prices.routes";
+import notificationsRoutes from "./modules/notifications/notifications.routes";
+import adminRoutes from "./modules/admin/admin.routes";
 import { startSchemaHealthCheckOnce } from "./config/db";
 
 export const app = express();
@@ -58,9 +61,13 @@ app.use("/auth", authRoutes);
 app.use("/projects", authenticate, projectRoutes);
 app.use("/api/projects", authenticate, projectRoutes);
 app.use("/projects", authenticate, boqRoutes);
-app.use("/", authenticate, estimateRoutes);
-app.use("/", authenticate, comparisonRoutes);
 
 app.use("/api/boq", boqRoutes);
 app.use("/api/base-pricing", authenticate, basePricingRoutes);
 app.use("/api/builder", authenticate, builderRoutes);
+app.use("/api/prices", pricesRoutes);
+app.use("/api/notifications", notificationsRoutes);
+app.use("/api/admin", adminRoutes);
+
+app.use("/", authenticate, estimateRoutes);
+app.use("/", authenticate, comparisonRoutes);
