@@ -436,6 +436,24 @@ export default function App() {
           />
 
           <Route
+            path="/architect/prices"
+            element={
+              <RequireAuth role="architect">
+                <PriceTrackerPage />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/builder/prices"
+            element={
+              <RequireAuth role="builder">
+                <PriceTrackerPage />
+              </RequireAuth>
+            }
+          />
+
+          <Route
             path="/prices"
             element={
               <RequireAuth>

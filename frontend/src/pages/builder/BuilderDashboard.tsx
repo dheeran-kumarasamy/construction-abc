@@ -22,7 +22,7 @@ export default function BuilderDashboard() {
           <button
             type="button"
             style={pageStyles.primaryBtn}
-            onClick={() => navigate("/prices")}
+            onClick={() => navigate("/builder/prices")}
           >
             Open Material Prices
           </button>
