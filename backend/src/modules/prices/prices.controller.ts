@@ -29,11 +29,20 @@ function isMissingRelationError(error: unknown, relation: string) {
   return err?.code === "42P01" && (err?.message || "").toLowerCase().includes(relation.toLowerCase());
 }
 
+function isAnyMissingRelationError(error: unknown) {
+  const err = error as { code?: string };
+  return err?.code === "42P01";
+}
+
 export async function listDistricts(_req: Request, res: Response) {
   try {
     const data = await getAllDistricts();
     return res.json(data);
   } catch (error) {
+    if (isMissingRelationError(error, "districts")) {
+      return res.status(503).json({ error: "Price tracker schema is missing. Run database migrations." });
+    }
+
     console.error("List districts error:", error);
     return res.status(500).json({ error: "Failed to fetch districts" });
   }
@@ -44,6 +53,10 @@ export async function listCategories(_req: Request, res: Response) {
     const data = await getAllCategoriesWithMaterials();
     return res.json(data);
   } catch (error) {
+    if (isMissingRelationError(error, "material_categories") || isMissingRelationError(error, "materials")) {
+      return res.status(503).json({ error: "Price tracker schema is missing. Run database migrations." });
+    }
+
     console.error("List categories error:", error);
     return res.status(500).json({ error: "Failed to fetch categories" });
   }
@@ -59,6 +72,10 @@ export async function getDistrictPrices(req: Request, res: Response) {
   } catch (error) {
     if (error instanceof Error && /(District|Category) not found/.test(error.message)) {
       return res.status(404).json({ error: error.message });
+    }
+
+    if (isAnyMissingRelationError(error)) {
+      return res.status(503).json({ error: "Price tracker schema is missing. Run database migrations." });
     }
 
     console.error("Get district prices error:", error);
@@ -82,6 +99,10 @@ export async function comparePrices(req: Request, res: Response) {
       return res.status(400).json({ error: error.message });
     }
 
+    if (isAnyMissingRelationError(error)) {
+      return res.status(503).json({ error: "Price tracker schema is missing. Run database migrations." });
+    }
+
     console.error("Compare prices error:", error);
     return res.status(500).json({ error: "Failed to compare prices" });
   }
@@ -96,6 +117,10 @@ export async function getHistory(req: Request, res: Response) {
     const data = await getPriceHistory(materialId, districtId, range);
     return res.json(data);
   } catch (error) {
+    if (isAnyMissingRelationError(error)) {
+      return res.status(503).json({ error: "Price tracker schema is missing. Run database migrations." });
+    }
+
     console.error("Get history error:", error);
     return res.status(500).json({ error: "Failed to fetch history" });
   }
