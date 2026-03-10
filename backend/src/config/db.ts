@@ -5,20 +5,26 @@ const isVercelRuntime = Boolean(process.env.VERCEL);
 let schemaHealthCheckStarted = false;
 
 function resolveDatabaseUrl(): string {
-  return (
+  const envUrl =
     process.env.DATABASE_URL ||
     process.env.POSTGRES_URL ||
     process.env.POSTGRES_PRISMA_URL ||
-    process.env.POSTGRES_URL_NON_POOLING ||
-    "postgresql://localhost/construction_db"
-  );
+    process.env.POSTGRES_URL_NON_POOLING;
+
+  if (envUrl) {
+    return envUrl;
+  }
+
+  if (isProduction || isVercelRuntime) {
+    throw new Error(
+      "Database connection URL is required in production/runtime environment. Set DATABASE_URL or POSTGRES_URL."
+    );
+  }
+
+  return "postgresql://localhost/construction_db";
 }
 
 const databaseUrl = resolveDatabaseUrl();
-
-if ((isProduction || isVercelRuntime) && !databaseUrl) {
-  throw new Error("Database connection URL is required in production/runtime environment");
-}
 
 function isLocalDatabaseUrl(url: string): boolean {
   try {
