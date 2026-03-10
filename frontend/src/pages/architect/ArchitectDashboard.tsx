@@ -22,7 +22,7 @@ export default function ArchitectDashboard() {
           <button
             type="button"
             style={pageStyles.primaryBtn}
-            onClick={() => navigate("/prices")}
+            onClick={() => navigate("/architect/prices")}
           >
             Open Material Prices
           </button>
