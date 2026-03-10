@@ -1,0 +1,139 @@
+.pt-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.pt-a2hs-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #99f6e4;
+  background: #ecfeff;
+  margin-bottom: 12px;
+}
+
+.pt-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.pt-tab {
+  min-height: 44px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+}
+
+.pt-tab.active {
+  background: #ccfbf1;
+  border-color: #14b8a6;
+}
+
+.pt-controls {
+  margin-bottom: 10px;
+}
+
+.pt-main-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 460px) 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.pt-map-wrap,
+.pt-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.pt-map {
+  width: 100%;
+  height: auto;
+  min-height: 400px;
+}
+
+.pt-map-hint {
+  font-size: 12px;
+  color: #475569;
+}
+
+.pt-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.pt-bookmark-btn,
+.pt-alert-open-btn {
+  min-height: 44px;
+}
+
+.pt-history-block {
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.pt-alert-list {
+  display: grid;
+  gap: 8px;
+}
+
+.pt-alert-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.pt-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  display: grid;
+  place-items: center;
+  z-index: 1200;
+  padding: 16px;
+}
+
+.pt-modal {
+  width: min(440px, 100%);
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.pt-modal select,
+.pt-modal input {
+  min-height: 44px;
+  padding: 8px;
+}
+
+.pt-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .pt-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pt-map {
+    min-height: 330px;
+  }
+}

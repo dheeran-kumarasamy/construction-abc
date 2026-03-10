@@ -1,6 +1,9 @@
 import { pageStyles } from "../../layouts/pageStyles";
+import { useNavigate } from "react-router-dom";
 
 export default function ArchitectDashboard() {
+  const navigate = useNavigate();
+
   return (
     <div style={pageStyles.page}>
       <div style={{ ...pageStyles.card, width: "min(860px, 100%)" }}>
@@ -14,6 +17,15 @@ export default function ArchitectDashboard() {
         </div>
         <div style={pageStyles.result}>
           Select any step from the top workflow to continue.
+        </div>
+        <div style={pageStyles.buttonRow}>
+          <button
+            type="button"
+            style={pageStyles.primaryBtn}
+            onClick={() => navigate("/prices")}
+          >
+            Open Material Prices
+          </button>
         </div>
       </div>
     </div>

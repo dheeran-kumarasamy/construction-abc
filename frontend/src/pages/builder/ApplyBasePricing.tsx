@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import TableWrapper from "../../components/TableWrapper";
@@ -113,17 +113,8 @@ export default function ApplyBasePricing() {
   const [optimizerBaseRatesByItem, setOptimizerBaseRatesByItem] = useState<Record<number, number>>({});
   const [activeRecommendationId, setActiveRecommendationId] = useState<string | null>(null);
   const [isLandscapeWide, setIsLandscapeWide] = useState(false);
+  const [isFloatingBreakdownCollapsed, setIsFloatingBreakdownCollapsed] = useState(false);
   const suggestionsContainerRef = useRef<HTMLDivElement | null>(null);
-
-  function getPriorityStyle(priority: OptimizerSuggestion["priority"]) {
-    if (priority === "zero_rate_fill") {
-      return { border: "#f59e0b", background: "#fffbeb", text: "#92400e", label: "Priority 1 • Zero-rate fill" };
-    }
-    if (priority === "location_pricing") {
-      return { border: "#3b82f6", background: "#eff6ff", text: "#1e40af", label: "Priority 2 • Location pricing" };
-    }
-    return { border: "#10b981", background: "#ecfdf5", text: "#065f46", label: "Priority 3 • Target alignment" };
-  }
 
   function getPriorityRank(priority: OptimizerSuggestion["priority"]) {
     if (priority === "zero_rate_fill") return 0;
@@ -170,6 +161,12 @@ export default function ApplyBasePricing() {
     window.addEventListener("resize", computeLayout);
     return () => window.removeEventListener("resize", computeLayout);
   }, []);
+
+  useEffect(() => {
+    if (!isLandscapeWide) {
+      setIsFloatingBreakdownCollapsed(false);
+    }
+  }, [isLandscapeWide]);
 
   function loadMarginConfig() {
     const overallMargin = Number(sessionStorage.getItem("overallMargin") || 10);
@@ -462,21 +459,32 @@ export default function ApplyBasePricing() {
       );
 
       const engine = String(data?.suggestionEngine || "heuristic").toUpperCase();
-      const model = data?.llmModel ? ` (${String(data.llmModel)})` : "";
-      const usedLabel = data?.llmUsed ? "LLM used" : "Fallback rules used";
-      const diagnostics = [
-        `attempted=${Boolean(data?.llmAttempted)}`,
-        `configured=${Boolean(data?.llmConfigured)}`,
-        `candidates=${Number(data?.llmCandidateCount || 0)}`,
-        `returned=${Number(data?.llmSuggestionCount || 0)}`,
-      ];
-      if (data?.llmFailureReason) {
-        diagnostics.push(`reason=${String(data.llmFailureReason)}`);
-      }
+      const llmConfigured = Boolean(data?.llmConfigured);
+      const llmAttempted = Boolean(data?.llmAttempted);
+      const llmUsed = Boolean(data?.llmUsed);
+      const failureReason = String(data?.llmFailureReason || "");
+      const model = llmConfigured && llmAttempted && data?.llmModel ? ` (${String(data.llmModel)})` : "";
+      const usedLabel = llmUsed ? "LLM used" : "Fallback rules used";
 
-      setOptimizerEngineInfo(
-        `Engine: ${engine}${model} • ${usedLabel} • ${diagnostics.join(" • ")}`
-      );
+      if (!llmConfigured && failureReason === "missing_api_key") {
+        setOptimizerEngineInfo(
+          "Engine: HEURISTIC • Fallback rules used • LLM disabled (missing API key). Set GEMINI_API_KEY in backend .env to enable LLM recommendations."
+        );
+      } else {
+        const diagnostics = [
+          `attempted=${llmAttempted}`,
+          `configured=${llmConfigured}`,
+          `candidates=${Number(data?.llmCandidateCount || 0)}`,
+          `returned=${Number(data?.llmSuggestionCount || 0)}`,
+        ];
+        if (failureReason) {
+          diagnostics.push(`reason=${failureReason}`);
+        }
+
+        setOptimizerEngineInfo(
+          `Engine: ${engine}${model} • ${usedLabel} • ${diagnostics.join(" • ")}`
+        );
+      }
     } catch (err) {
       setOptimizerError(err instanceof Error ? err.message : "Failed to generate suggestions");
     } finally {
@@ -839,31 +847,14 @@ export default function ApplyBasePricing() {
     const item = pricedItems.find((row) => row.id === id);
     return Number(item?.rate || 0) > 0;
   }).length;
-  const prioritySectionConfig: Array<{ key: OptimizerSuggestion["priority"]; title: string }> = [
-    { key: "zero_rate_fill", title: "Priority 1 • Zero-rate Fill" },
-    { key: "location_pricing", title: "Priority 2 • Location Pricing" },
-    { key: "target_alignment", title: "Priority 3 • Target Alignment" },
-  ];
-  const prioritySections: Array<{
-    key: OptimizerSuggestion["priority"];
-    title: string;
-    suggestions: OptimizerSuggestion[];
-    accepted: number;
-    blocked: number;
-    totalImpact: number;
-  }> = prioritySectionConfig.map((section) => {
-    const suggestions = sortedSuggestions.filter((item) => item.priority === section.key);
-    return {
-      ...section,
-      suggestions,
-      accepted: suggestions.filter((item) => item.decision === "accepted").length,
-      blocked: suggestions.filter((item) => item.blocked).length,
-      totalImpact: suggestions.reduce((sum, item) => sum + Number(item.totalDelta || 0), 0),
-    };
-  });
-
   const llmSuggestionByBoqItem = optimizerSuggestions.reduce<Map<number, OptimizerSuggestion>>((acc, suggestion) => {
     if (suggestion.source !== "llm") {
+      return acc;
+    }
+
+    const boqItem = pricedItems.find((item) => item.id === suggestion.boqItemId);
+    const category = String(boqItem?.category || "").toLowerCase();
+    if (category.includes("labor") || category.includes("labour") || category.includes("mach")) {
       return acc;
     }
 
@@ -888,7 +879,14 @@ export default function ApplyBasePricing() {
   const laborMarginAmount = totals.laborWithUplift - totals.laborTotal;
   const machineryMarginAmount = totals.machineryWithUplift - totals.machineryTotal;
 
-  const renderCostBreakdownPanel = (extraStyle: React.CSSProperties = {}) => (
+  const renderCostBreakdownPanel = (
+    extraStyle: React.CSSProperties = {},
+    options: {
+      collapsible?: boolean;
+      collapsed?: boolean;
+      onToggleCollapse?: () => void;
+    } = {}
+  ) => (
     <div
       style={{
         padding: "1rem",
@@ -898,25 +896,67 @@ export default function ApplyBasePricing() {
         ...extraStyle,
       }}
     >
-      <h3
-        style={{
-          margin: "0 0 1rem 0",
-          color: "#0f766e",
-          fontWeight: 600,
-        }}
-      >
-        Cost Breakdown (Margins from Margin & Uplift Engine)
-      </h3>
-
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "2fr 1fr",
+          margin: "0 0 1rem 0",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
           gap: "0.75rem",
-          marginBottom: "0.5rem",
-          fontSize: "0.95rem",
         }}
       >
+        <h3
+          style={{
+            margin: 0,
+            color: "#0f766e",
+            fontWeight: 600,
+          }}
+        >
+          Cost Breakdown (Margins from Margin & Uplift Engine)
+        </h3>
+        {options.collapsible && options.onToggleCollapse ? (
+          <button
+            type="button"
+            onClick={options.onToggleCollapse}
+            style={{
+              ...pageStyles.secondaryBtn,
+              height: "34px",
+              padding: "0 10px",
+              borderRadius: "8px",
+              fontSize: "0.85rem",
+            }}
+          >
+            {options.collapsed ? "Expand" : "Collapse"}
+          </button>
+        ) : null}
+      </div>
+
+      {options.collapsed ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr",
+            gap: "0.35rem",
+            fontSize: "0.95rem",
+          }}
+        >
+          <div style={{ color: "#0d9488", fontWeight: 600 }}>Grand Total</div>
+          <div style={{ color: "#0f766e", fontWeight: 700, fontSize: "1.4rem" }}>
+            ₹{totals.grandTotal.toFixed(2)}
+          </div>
+        </div>
+      ) : (
+        <>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "2fr 1fr",
+            gap: "0.75rem",
+            marginBottom: "0.5rem",
+            fontSize: "0.95rem",
+          }}
+        >
         <div style={{ color: "#0d9488" }}>Material:</div>
         <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.materialTotal.toFixed(2)}</div>
 
@@ -960,7 +1000,9 @@ export default function ApplyBasePricing() {
         <div style={{ borderTop: "3px solid #5eead4", paddingTop: "0.75rem", marginTop: "0.5rem", textAlign: "right", fontWeight: 700, fontSize: "1.5rem", color: "#0f766e" }}>
           ₹{totals.grandTotal.toFixed(2)}
         </div>
-      </div>
+        </div>
+        </>
+      )}
     </div>
   );
 
@@ -1210,106 +1252,6 @@ export default function ApplyBasePricing() {
                     )}
                   </div>
 
-                  {prioritySections.map((section) => {
-                    if (!section.suggestions.length) return null;
-                    const sectionStyle = getPriorityStyle(section.key);
-                    return (
-                      <div
-                        key={section.key}
-                        style={{
-                          border: `1px solid ${sectionStyle.border}`,
-                          borderRadius: "10px",
-                          backgroundColor: sectionStyle.background,
-                          padding: "0.85rem",
-                          display: "grid",
-                          gap: "0.65rem",
-                        }}
-                      >
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
-                          <strong style={{ color: sectionStyle.text }}>{section.title}</strong>
-                          <span style={{ color: sectionStyle.text, fontWeight: 600 }}>
-                            Items: {section.suggestions.length} • Accepted: {section.accepted} • Blocked: {section.blocked} • Impact: ₹{section.totalImpact.toFixed(2)}
-                          </span>
-                        </div>
-
-                        {section.suggestions.map((suggestion) => (
-                          <div
-                            key={suggestion.suggestionId}
-                            style={{
-                              border: "1px solid rgba(15, 23, 42, 0.12)",
-                              borderRadius: "8px",
-                              backgroundColor: "#ffffff",
-                              padding: "0.7rem",
-                              display: "grid",
-                              gap: "0.5rem",
-                            }}
-                          >
-                            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
-                              <strong>
-                                Item #{suggestion.boqItemId} • {suggestion.type.replace("_", " ")}
-                              </strong>
-                              <span style={{ color: "#334155", fontWeight: 600 }}>
-                                Rate: ₹{suggestion.oldRate.toFixed(2)} → ₹{suggestion.newRate.toFixed(2)}
-                              </span>
-                            </div>
-
-                            <p style={{ margin: 0, color: "#0f172a", fontWeight: 600 }}>
-                              {suggestion.itemDescription || "(No item description)"}
-                            </p>
-
-                            <p style={{ margin: 0, color: "#334155" }}>{suggestion.reason}</p>
-
-                            {suggestion.qualityValidation && (
-                              <p style={{ margin: 0, color: "#0f766e", fontWeight: 500 }}>
-                                Quality validation: {suggestion.qualityValidation}
-                              </p>
-                            )}
-
-                            {Array.isArray(suggestion.alternatives) && suggestion.alternatives.length > 0 && (
-                              <div>
-                                <p style={{ margin: 0, color: "#334155", fontWeight: 500 }}>Alternative options:</p>
-                                <ul style={{ margin: "0.25rem 0 0 1rem", color: "#475569" }}>
-                                  {suggestion.alternatives.map((option, optionIndex) => (
-                                    <li key={`${suggestion.suggestionId}-alt-${optionIndex}`}>{option}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-                              <span style={{ color: "#0f766e", fontWeight: 500 }}>
-                                Total impact: ₹{suggestion.totalDelta.toFixed(2)} • Confidence: {(suggestion.confidence * 100).toFixed(0)}% • Source: {(suggestion.source || "heuristic").toUpperCase()}
-                              </span>
-
-                              {suggestion.blocked ? (
-                                <span style={{ color: "#b91c1c", fontWeight: 600 }}>
-                                  Guardrail: {suggestion.blockReason || "Blocked"}
-                                </span>
-                              ) : (
-                                <div style={{ display: "flex", gap: "0.5rem" }}>
-                                  <button
-                                    onClick={() => handleSuggestionDecision(suggestion.suggestionId, "accepted")}
-                                    disabled={isUiLocked || suggestion.decision === "accepted"}
-                                    style={pageStyles.primaryBtn}
-                                  >
-                                    {suggestion.decision === "accepted" ? "Accepted" : "Accept"}
-                                  </button>
-                                  <button
-                                    onClick={() => handleSuggestionDecision(suggestion.suggestionId, "declined")}
-                                    disabled={isUiLocked || suggestion.decision === "declined"}
-                                    style={pageStyles.secondaryBtn}
-                                  >
-                                    {suggestion.decision === "declined" ? "Declined" : "Decline"}
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })}
-
                   {expenseRecommendations.length > 0 && (
                     <div
                       style={{
@@ -1417,56 +1359,98 @@ export default function ApplyBasePricing() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pricedItems.map((item, index) => (
-                        <tr key={item.id} style={index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
-                          <td className="num-cell" style={pageStyles.td}>{index + 1}</td>
-                          <td style={pageStyles.td}>
-                            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
-                              <span>{item.item}</span>
-                              {llmSuggestionByBoqItem.has(item.id) && (
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveRecommendationId(llmSuggestionByBoqItem.get(item.id)?.suggestionId || null)}
+                      {pricedItems.map((item, index) => {
+                        const llmSuggestion = llmSuggestionByBoqItem.get(item.id);
+                        return (
+                          <Fragment key={item.id}>
+                            <tr style={index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                              <td className="num-cell" style={pageStyles.td}>{index + 1}</td>
+                              <td style={pageStyles.td}>{item.item}</td>
+                              <td className="num-cell" style={pageStyles.td}>{item.qty}</td>
+                              <td style={pageStyles.td}>{item.uom}</td>
+                              <td className="amount-cell" style={pageStyles.td}>
+                                <input
+                                  type="number"
+                                  value={Number.isFinite(item.rate) ? item.rate : 0}
                                   disabled={isUiLocked}
-                                  title="View LLM recommendation"
-                                  aria-label={`View LLM recommendation for ${item.item}`}
+                                  onChange={(e) =>
+                                    handleRateChange(index, Number(e.target.value))
+                                  }
                                   style={{
-                                    border: "1px solid #99f6e4",
-                                    backgroundColor: "#f0fdfa",
-                                    color: "#0f766e",
-                                    width: "22px",
-                                    height: "22px",
-                                    borderRadius: "999px",
-                                    fontWeight: 700,
-                                    cursor: isUiLocked ? "not-allowed" : "pointer",
-                                    lineHeight: 1,
+                                    ...pageStyles.input,
+                                    width: "120px",
+                                    padding: "0.5rem",
                                   }}
-                                >
-                                  i
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                          <td className="num-cell" style={pageStyles.td}>{item.qty}</td>
-                          <td style={pageStyles.td}>{item.uom}</td>
-                          <td className="amount-cell" style={pageStyles.td}>
-                            <input
-                              type="number"
-                              value={Number.isFinite(item.rate) ? item.rate : 0}
-                              disabled={isUiLocked}
-                              onChange={(e) =>
-                                handleRateChange(index, Number(e.target.value))
-                              }
-                              style={{
-                                ...pageStyles.input,
-                                width: "120px",
-                                padding: "0.5rem",
-                              }}
-                            />
-                          </td>
-                          <td className="amount-cell" style={pageStyles.td}>{item.total.toFixed(2)}</td>
-                        </tr>
-                      ))}
+                                />
+                              </td>
+                              <td className="amount-cell" style={pageStyles.td}>{item.total.toFixed(2)}</td>
+                            </tr>
+
+                            {llmSuggestion && (
+                              <tr style={index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                                <td style={pageStyles.td} colSpan={6}>
+                                  <div
+                                    style={{
+                                      border: "1px solid #99f6e4",
+                                      backgroundColor: "#f0fdfa",
+                                      borderRadius: "8px",
+                                      padding: "0.6rem 0.75rem",
+                                      display: "grid",
+                                      gap: "0.4rem",
+                                    }}
+                                  >
+                                    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                                      <strong style={{ color: "#0f766e" }}>LLM Recommendation</strong>
+                                      <span style={{ color: "#334155", fontWeight: 600 }}>
+                                        Rate: ₹{llmSuggestion.oldRate.toFixed(2)} → ₹{llmSuggestion.newRate.toFixed(2)}
+                                      </span>
+                                    </div>
+
+                                    <p style={{ margin: 0, color: "#334155" }}>{llmSuggestion.reason}</p>
+
+                                    {llmSuggestion.qualityValidation && (
+                                      <p style={{ margin: 0, color: "#0f766e", fontWeight: 500 }}>
+                                        Quality validation: {llmSuggestion.qualityValidation}
+                                      </p>
+                                    )}
+
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                                      <span style={{ color: "#0f766e", fontWeight: 500 }}>
+                                        Total impact: ₹{llmSuggestion.totalDelta.toFixed(2)} • Confidence: {(llmSuggestion.confidence * 100).toFixed(0)}%
+                                      </span>
+
+                                      {llmSuggestion.blocked ? (
+                                        <span style={{ color: "#b91c1c", fontWeight: 600 }}>
+                                          Guardrail: {llmSuggestion.blockReason || "Blocked"}
+                                        </span>
+                                      ) : (
+                                        <div style={{ display: "flex", gap: "0.5rem" }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSuggestionDecision(llmSuggestion.suggestionId, "accepted")}
+                                            disabled={isUiLocked || llmSuggestion.decision === "accepted"}
+                                            style={pageStyles.primaryBtn}
+                                          >
+                                            {llmSuggestion.decision === "accepted" ? "Accepted" : "Accept"}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSuggestionDecision(llmSuggestion.suggestionId, "declined")}
+                                            disabled={isUiLocked || llmSuggestion.decision === "declined"}
+                                            style={pageStyles.secondaryBtn}
+                                          >
+                                            {llmSuggestion.decision === "declined" ? "Declined" : "Decline"}
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </TableWrapper>
@@ -1524,6 +1508,10 @@ export default function ApplyBasePricing() {
                 overflowY: "auto",
                 zIndex: 60,
                 boxShadow: "0 10px 30px rgba(15, 23, 42, 0.12)",
+              }, {
+                collapsible: true,
+                collapsed: isFloatingBreakdownCollapsed,
+                onToggleCollapse: () => setIsFloatingBreakdownCollapsed((prev) => !prev),
               })}
 
             {activeRecommendation && (

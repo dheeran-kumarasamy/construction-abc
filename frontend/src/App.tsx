@@ -19,6 +19,7 @@ import AuditTrail from "./pages/architect/AuditTrail";
 import ProjectsList from "./pages/architect/ProjectsList";
 import ComparisonScreen from "./pages/architect/ComparisonScreen";
 import AcceptInvite from "./pages/auth/AcceptInvite";
+import PriceTrackerPage from "./pages/PriceTracker/PriceTrackerPage";
 
 // Auth
 import LoginPage from "./pages/Login";
@@ -430,6 +431,23 @@ export default function App() {
             element={
               <RequireAuth role="builder">
                 <SubmitEstimate />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/prices"
+            element={
+              <RequireAuth>
+                <PriceTrackerPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/market-prices"
+            element={
+              <RequireAuth>
+                <PriceTrackerPage />
               </RequireAuth>
             }
           />
