@@ -4,9 +4,25 @@ const fs = require('fs');
 const path = require('path');
 const { Client } = require('pg');
 
+function resolveDatabaseUrl() {
+  return (
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_URL_NON_POOLING ||
+    'postgresql://localhost/construction_db'
+  );
+}
+
 async function runMigrations() {
+  const connectionString = resolveDatabaseUrl();
+
+  if (!connectionString) {
+    throw new Error('No database URL found. Set DATABASE_URL or POSTGRES_URL.');
+  }
+
   const client = new Client({
-    connectionString: process.env.DATABASE_URL || 'postgresql://localhost/construction_db',
+    connectionString,
   });
 
   try {

@@ -24,6 +24,11 @@ function asString(value: string | string[] | undefined) {
   return value || "";
 }
 
+function isMissingRelationError(error: unknown, relation: string) {
+  const err = error as { code?: string; message?: string };
+  return err?.code === "42P01" && (err?.message || "").toLowerCase().includes(relation.toLowerCase());
+}
+
 export async function listDistricts(_req: Request, res: Response) {
   try {
     const data = await getAllDistricts();
@@ -104,6 +109,10 @@ export async function listBookmarks(req: Request, res: Response) {
     const data = await getBookmarks(userId);
     return res.json(data);
   } catch (error) {
+    if (isMissingRelationError(error, "user_bookmarks")) {
+      return res.json([]);
+    }
+
     console.error("List bookmarks error:", error);
     return res.status(500).json({ error: "Failed to fetch bookmarks" });
   }
@@ -120,6 +129,10 @@ export async function createBookmark(req: Request, res: Response) {
     const data = await addBookmark(userId, districtId);
     return res.status(201).json(data);
   } catch (error) {
+    if (isMissingRelationError(error, "user_bookmarks")) {
+      return res.status(503).json({ error: "Bookmarks are unavailable until database migration 011 is applied" });
+    }
+
     console.error("Create bookmark error:", error);
     return res.status(500).json({ error: "Failed to create bookmark" });
   }
@@ -135,6 +148,10 @@ export async function removeBookmark(req: Request, res: Response) {
 
     return res.status(204).send();
   } catch (error) {
+    if (isMissingRelationError(error, "user_bookmarks")) {
+      return res.status(503).json({ error: "Bookmarks are unavailable until database migration 011 is applied" });
+    }
+
     console.error("Delete bookmark error:", error);
     return res.status(500).json({ error: "Failed to delete bookmark" });
   }
@@ -148,6 +165,10 @@ export async function listAlerts(req: Request, res: Response) {
     const data = await getAlerts(userId);
     return res.json(data);
   } catch (error) {
+    if (isMissingRelationError(error, "price_alerts")) {
+      return res.json([]);
+    }
+
     console.error("List alerts error:", error);
     return res.status(500).json({ error: "Failed to fetch alerts" });
   }
@@ -172,6 +193,10 @@ export async function createPriceAlert(req: Request, res: Response) {
 
     return res.status(201).json(data);
   } catch (error) {
+    if (isMissingRelationError(error, "price_alerts")) {
+      return res.status(503).json({ error: "Price alerts are unavailable until database migration 011 is applied" });
+    }
+
     console.error("Create alert error:", error);
     return res.status(500).json({ error: "Failed to create alert" });
   }
@@ -191,6 +216,10 @@ export async function updatePriceAlert(req: Request, res: Response) {
     if (!data) return res.status(404).json({ error: "Alert not found" });
     return res.json(data);
   } catch (error) {
+    if (isMissingRelationError(error, "price_alerts")) {
+      return res.status(503).json({ error: "Price alerts are unavailable until database migration 011 is applied" });
+    }
+
     console.error("Update alert error:", error);
     return res.status(500).json({ error: "Failed to update alert" });
   }
@@ -206,6 +235,10 @@ export async function removePriceAlert(req: Request, res: Response) {
 
     return res.status(204).send();
   } catch (error) {
+    if (isMissingRelationError(error, "price_alerts")) {
+      return res.status(503).json({ error: "Price alerts are unavailable until database migration 011 is applied" });
+    }
+
     console.error("Delete alert error:", error);
     return res.status(500).json({ error: "Failed to delete alert" });
   }
