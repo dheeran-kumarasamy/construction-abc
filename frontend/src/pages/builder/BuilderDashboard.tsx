@@ -26,6 +26,13 @@ export default function BuilderDashboard() {
           >
             Open Material Prices
           </button>
+          <button
+            type="button"
+            style={pageStyles.secondaryBtn}
+            onClick={() => navigate("/builder/estimation")}
+          >
+            Rate Analysis & BOQ
+          </button>
         </div>
       </div>
     </div>

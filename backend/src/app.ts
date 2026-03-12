@@ -11,6 +11,7 @@ import builderRoutes from "./modules/builder/builder.routes";
 import pricesRoutes from "./modules/prices/prices.routes";
 import notificationsRoutes from "./modules/notifications/notifications.routes";
 import adminRoutes from "./modules/admin/admin.routes";
+import estimationRoutes from "./modules/estimation/estimation.routes";
 import { startSchemaHealthCheckOnce } from "./config/db";
 
 export const app = express();
@@ -68,6 +69,7 @@ app.use("/api/builder", authenticate, builderRoutes);
 app.use("/api/prices", pricesRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/estimation", estimationRoutes);
 
 app.use("/", authenticate, estimateRoutes);
 app.use("/", authenticate, comparisonRoutes);
