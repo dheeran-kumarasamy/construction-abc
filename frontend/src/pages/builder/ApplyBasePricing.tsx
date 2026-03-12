@@ -66,6 +66,7 @@ interface ExpenseRecommendation {
 }
 
 const FLOATING_BREAKDOWN_WIDTH = 360;
+const FLOATING_BREAKDOWN_COLLAPSED_WIDTH = 220;
 const FLOATING_BREAKDOWN_GAP = 32;
 
 const STANDARD_GUARDRAILS = [
@@ -912,7 +913,7 @@ export default function ApplyBasePricing() {
             fontWeight: 600,
           }}
         >
-          Cost Breakdown (Margins from Margin & Uplift Engine)
+          Cost Summary
         </h3>
         {options.collapsible && options.onToggleCollapse ? (
           <button
@@ -1060,7 +1061,7 @@ export default function ApplyBasePricing() {
             <div
               style={{
                 marginRight: isLandscapeWide
-                  ? `${FLOATING_BREAKDOWN_WIDTH + FLOATING_BREAKDOWN_GAP}px`
+                  ? `${(isFloatingBreakdownCollapsed ? FLOATING_BREAKDOWN_COLLAPSED_WIDTH : FLOATING_BREAKDOWN_WIDTH) + FLOATING_BREAKDOWN_GAP}px`
                   : 0,
               }}
             >
@@ -1503,11 +1504,12 @@ export default function ApplyBasePricing() {
                 position: "fixed",
                 right: "clamp(12px, 4vw, 32px)",
                 top: "108px",
-                width: `${FLOATING_BREAKDOWN_WIDTH}px`,
+                width: `${isFloatingBreakdownCollapsed ? FLOATING_BREAKDOWN_COLLAPSED_WIDTH : FLOATING_BREAKDOWN_WIDTH}px`,
                 maxHeight: "calc(100vh - 132px)",
                 overflowY: "auto",
                 zIndex: 60,
                 boxShadow: "0 10px 30px rgba(15, 23, 42, 0.12)",
+                transition: "width 0.2s ease",
               }, {
                 collapsible: true,
                 collapsed: isFloatingBreakdownCollapsed,
