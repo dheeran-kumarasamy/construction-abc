@@ -358,11 +358,102 @@ export async function listInvitedProjects(userId: string) {
 }
 
 export async function getProject(projectId: string, userId: string) {
+  await ensureInvitedProjectSeeded(projectId, userId);
   const { rows } = await pool.query(
     `SELECT * FROM boq_projects WHERE id = $1 AND user_id = $2`,
     [projectId, userId]
   );
   return rows[0] || null;
+}
+
+function parseNumeric(value: unknown, fallback = 1): number {
+  const parsed = Number.parseFloat(String(value ?? "").replace(/,/g, "").trim());
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeBoqRows(raw: any): Array<{ description: string; quantity: number; unit: string }> {
+  const rows = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.items)
+      ? raw.items
+      : Array.isArray(raw?.rows)
+        ? raw.rows
+        : [];
+
+  return rows
+    .map((r: any) => {
+      const description = String(
+        r?.item ?? r?.description ?? r?.item_description ?? r?.name ?? ""
+      ).trim();
+      const quantity = parseNumeric(r?.qty ?? r?.quantity ?? r?.required_qty ?? r?.requiredQuantity, 1);
+      const unit = String(r?.uom ?? r?.unit ?? r?.units ?? "Nos").trim() || "Nos";
+      return { description, quantity, unit };
+    })
+    .filter((r: { description: string }) => r.description.length > 0);
+}
+
+async function ensureInvitedProjectSeeded(projectId: string, userId: string) {
+  const projectRes = await pool.query(
+    `SELECT id, user_id, notes FROM boq_projects WHERE id = $1 AND user_id = $2 LIMIT 1`,
+    [projectId, userId]
+  );
+  const project = projectRes.rows[0];
+  if (!project) return;
+
+  const notes = String(project.notes || "");
+  if (!notes.startsWith("source_project_id:")) return;
+
+  const countRes = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM boq_items WHERE project_id = $1`,
+    [projectId]
+  );
+  if ((countRes.rows[0]?.count || 0) > 0) return;
+
+  const sourceProjectId = notes.replace("source_project_id:", "").trim();
+  if (!sourceProjectId) return;
+
+  // Prefer parsed_data from boqs, fallback to parsed_json from boq_revisions.
+  const boqRes = await pool.query(
+    `SELECT parsed_data
+     FROM boqs
+     WHERE project_id = $1
+     ORDER BY uploaded_at DESC
+     LIMIT 1`,
+    [sourceProjectId]
+  );
+
+  let normalizedRows = normalizeBoqRows(boqRes.rows[0]?.parsed_data);
+
+  if (normalizedRows.length === 0) {
+    const revisionRes = await pool.query(
+      `SELECT parsed_json
+       FROM boq_revisions
+       WHERE project_id = $1
+       ORDER BY issued_at DESC
+       LIMIT 1`,
+      [sourceProjectId]
+    );
+    normalizedRows = normalizeBoqRows(revisionRes.rows[0]?.parsed_json);
+  }
+
+  if (normalizedRows.length === 0) return;
+
+  const sectionRes = await pool.query(
+    `INSERT INTO boq_sections (project_id, name, sort_order)
+     VALUES ($1, 'Imported Architect BOQ', 0)
+     RETURNING id`,
+    [projectId]
+  );
+  const sectionId = sectionRes.rows[0].id;
+
+  for (let i = 0; i < normalizedRows.length; i += 1) {
+    const row = normalizedRows[i];
+    await pool.query(
+      `INSERT INTO boq_items (section_id, project_id, item_number, description, quantity, unit, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [sectionId, projectId, `1.${i + 1}`, row.description, row.quantity, row.unit, i]
+    );
+  }
 }
 
 export async function updateProject(projectId: string, userId: string, data: Record<string, any>) {
@@ -419,7 +510,10 @@ export async function createSection(projectId: string, userId: string, data: { n
   return rows[0];
 }
 
-export async function listSections(projectId: string) {
+export async function listSections(projectId: string, userId?: string) {
+  if (userId) {
+    await ensureInvitedProjectSeeded(projectId, userId);
+  }
   const { rows } = await pool.query(`
     SELECT s.*,
       (SELECT COUNT(*) FROM boq_items bi WHERE bi.section_id = s.id) as item_count
@@ -480,7 +574,10 @@ export async function createItem(data: {
   return rows[0];
 }
 
-export async function listItems(projectId: string, sectionId?: string) {
+export async function listItems(projectId: string, sectionId?: string, userId?: string) {
+  if (userId) {
+    await ensureInvitedProjectSeeded(projectId, userId);
+  }
   let query = `
     SELECT bi.*, rt.code as template_code, rt.name as template_name
     FROM boq_items bi

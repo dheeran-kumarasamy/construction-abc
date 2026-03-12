@@ -251,7 +251,8 @@ export async function createSection(req: Request, res: Response) {
 
 export async function listSections(req: Request, res: Response) {
   try {
-    const sections = await service.listSections(param(req, "projectId"));
+    const userId = getUserId(req);
+    const sections = await service.listSections(param(req, "projectId"), userId);
     res.json(sections);
   } catch (err: any) {
     console.error("listSections error:", err);
@@ -295,8 +296,9 @@ export async function createItem(req: Request, res: Response) {
 
 export async function listItems(req: Request, res: Response) {
   try {
+    const userId = getUserId(req);
     const sectionId = req.query.section_id as string | undefined;
-    const items = await service.listItems(param(req, "projectId"), sectionId);
+    const items = await service.listItems(param(req, "projectId"), sectionId, userId);
     res.json(items);
   } catch (err: any) {
     console.error("listItems error:", err);
