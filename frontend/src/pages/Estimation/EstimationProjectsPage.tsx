@@ -9,11 +9,17 @@ const STATUS_COLORS: Record<string, string> = {
   in_progress: "#d97706",
   completed: "#059669",
   submitted: "#2563eb",
+  estimated: "#8b5cf6",
 };
+
+interface ProjectWithType extends BOQProject {
+  project_type?: "own" | "invited";
+  invitation_status?: string;
+}
 
 export default function EstimationProjectsPage() {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<BOQProject[]>([]);
+  const [projects, setProjects] = useState<ProjectWithType[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", client_name: "", project_location: "", terrain: "plains" as const });
@@ -25,8 +31,22 @@ export default function EstimationProjectsPage() {
   async function loadProjects() {
     try {
       setLoading(true);
-      const data = await api.fetchProjects();
-      setProjects(data);
+      const [ownProjects, invitedProjects] = await Promise.all([
+        api.fetchProjects(),
+        api.fetchInvitedProjects().catch(() => []),
+      ]);
+      
+      // Mark own projects
+      const marked = ownProjects.map((p) => ({ ...p, project_type: "own" as const }));
+      // Mark invited projects
+      const invitedMarked = invitedProjects.map((p) => ({ ...p, project_type: "invited" as const }));
+      
+      // Combine and sort by updated_at
+      const combined = [...marked, ...invitedMarked].sort(
+        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      );
+      
+      setProjects(combined);
     } catch (err) {
       console.error("Failed to load projects:", err);
     } finally {
@@ -150,7 +170,21 @@ export default function EstimationProjectsPage() {
                     <td style={{ ...pageStyles.td, fontWeight: 600, cursor: "pointer", color: "var(--accent)" }}
                       onClick={() => navigate(`/estimation/${p.id}`)}
                     >
-                      {p.name}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        {p.name}
+                        {p.project_type === "invited" && (
+                          <span style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            background: "#dbeafe",
+                            color: "#0c4a6e",
+                          }}>
+                            From Architect
+                          </span>
+                        )}
+                      </div>
                       {p.client_name && <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 400 }}>{p.client_name}</div>}
                     </td>
                     <td style={pageStyles.td}>{p.project_location || "—"}</td>
@@ -171,8 +205,10 @@ export default function EstimationProjectsPage() {
                       <div style={{ display: "flex", gap: 8 }}>
                         <button style={{ ...pageStyles.secondaryBtn, height: 32, fontSize: 13, padding: "0 12px" }}
                           onClick={() => navigate(`/estimation/${p.id}`)}>Open</button>
-                        <button style={{ ...pageStyles.secondaryBtn, height: 32, fontSize: 13, padding: "0 12px", color: "#dc2626" }}
-                          onClick={() => handleDelete(p.id)}>Delete</button>
+                        {p.project_type === "own" && (
+                          <button style={{ ...pageStyles.secondaryBtn, height: 32, fontSize: 13, padding: "0 12px", color: "#dc2626" }}
+                            onClick={() => handleDelete(p.id)}>Delete</button>
+                        )}
                       </div>
                     </td>
                   </tr>
