@@ -21,6 +21,7 @@ import {
   // BOQ Projects
   createProject,
   listProjects,
+  listInvitedProjects,
   getProject,
   updateProject,
   deleteProject as deleteProjectHandler,
@@ -68,6 +69,7 @@ router.post("/compute/batch", authenticate, computeRateBatch);
 // ── BOQ Projects (authenticated) ───────────────
 router.post("/projects", authenticate, createProject);
 router.get("/projects", authenticate, listProjects);
+router.get("/projects/invited", authenticate, listInvitedProjects);
 router.get("/projects/:id", authenticate, getProject);
 router.put("/projects/:id", authenticate, updateProject);
 router.delete("/projects/:id", authenticate, deleteProjectHandler);

@@ -188,6 +188,13 @@ export async function fetchProjects(): Promise<BOQProject[]> {
   return json<BOQProject[]>(res);
 }
 
+export async function fetchInvitedProjects(): Promise<BOQProject[]> {
+  const res = await fetch(apiUrl("/api/estimation/projects/invited"), {
+    headers: authHeaders(),
+  });
+  return json<BOQProject[]>(res);
+}
+
 export async function fetchProject(id: string): Promise<BOQProject> {
   const res = await fetch(apiUrl(`/api/estimation/projects/${id}`), {
     headers: authHeaders(),

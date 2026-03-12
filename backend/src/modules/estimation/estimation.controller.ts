@@ -188,6 +188,17 @@ export async function listProjects(req: Request, res: Response) {
   }
 }
 
+export async function listInvitedProjects(req: Request, res: Response) {
+  try {
+    const userId = getUserId(req);
+    const projects = await service.listInvitedProjects(userId);
+    res.json(projects);
+  } catch (err: any) {
+    console.error("listInvitedProjects error:", err);
+    res.status(500).json({ error: "Failed to list invited projects" });
+  }
+}
+
 export async function getProject(req: Request, res: Response) {
   try {
     const userId = getUserId(req);
