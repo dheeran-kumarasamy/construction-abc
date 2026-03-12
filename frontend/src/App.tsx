@@ -20,6 +20,9 @@ import ProjectsList from "./pages/architect/ProjectsList";
 import ComparisonScreen from "./pages/architect/ComparisonScreen";
 import AcceptInvite from "./pages/auth/AcceptInvite";
 import PriceTrackerPage from "./pages/PriceTracker/PriceTrackerPage";
+import EstimationProjectsPage from "./pages/Estimation/EstimationProjectsPage";
+import BOQWorkspacePage from "./pages/Estimation/BOQWorkspacePage";
+import TemplateEditorPage from "./pages/Estimation/TemplateEditorPage";
 
 // Auth
 import LoginPage from "./pages/Login";
@@ -476,6 +479,82 @@ export default function App() {
             element={
               <RequireAuth role="client">
                 <ClientView />
+              </RequireAuth>
+            }
+          />
+
+          {/* Estimation / BOQ */}
+          <Route
+            path="/estimation"
+            element={
+              <RequireAuth>
+                <EstimationProjectsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/estimation/:projectId"
+            element={
+              <RequireAuth>
+                <BOQWorkspacePage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/architect/estimation"
+            element={
+              <RequireAuth role="architect">
+                <EstimationProjectsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/architect/estimation/:projectId"
+            element={
+              <RequireAuth role="architect">
+                <BOQWorkspacePage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/builder/estimation"
+            element={
+              <RequireAuth role="builder">
+                <EstimationProjectsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/builder/estimation/:projectId"
+            element={
+              <RequireAuth role="builder">
+                <BOQWorkspacePage />
+              </RequireAuth>
+            }
+          />
+
+          {/* Template Editor */}
+          <Route
+            path="/estimation/templates"
+            element={
+              <RequireAuth>
+                <TemplateEditorPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/architect/estimation/templates"
+            element={
+              <RequireAuth role="architect">
+                <TemplateEditorPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/builder/estimation/templates"
+            element={
+              <RequireAuth role="builder">
+                <TemplateEditorPage />
               </RequireAuth>
             }
           />

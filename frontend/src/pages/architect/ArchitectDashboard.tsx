@@ -26,6 +26,13 @@ export default function ArchitectDashboard() {
           >
             Open Material Prices
           </button>
+          <button
+            type="button"
+            style={pageStyles.secondaryBtn}
+            onClick={() => navigate("/architect/estimation")}
+          >
+            Rate Analysis & BOQ
+          </button>
         </div>
       </div>
     </div>
