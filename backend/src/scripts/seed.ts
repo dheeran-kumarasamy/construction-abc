@@ -204,6 +204,10 @@ async function seed() {
     await pool.query(`DELETE FROM price_records WHERE source = 'seed_generator'`);
 
     const now = new Date();
+    const BATCH_SIZE = 500;
+    let values: string[] = [];
+    let params: any[] = [];
+    let paramIdx = 1;
 
     for (const district of districtRows.rows) {
       for (const material of materialRows.rows) {
@@ -217,15 +221,30 @@ async function seed() {
 
           const price = Number((base * regionFactor * localFactor * dayFluctuation(89 - i)).toFixed(2));
 
-          await pool.query(
-            `
-              INSERT INTO price_records (material_id, district_id, price, source, scraped_at, flagged, created_at)
-              VALUES ($1, $2, $3, 'seed_generator', $4, false, now())
-            `,
-            [material.id, district.id, price, date]
-          );
+          values.push(`($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, 'seed_generator', $${paramIdx + 3}, false, now())`);
+          params.push(material.id, district.id, price, date);
+          paramIdx += 4;
+
+          if (values.length >= BATCH_SIZE) {
+            await pool.query(
+              `INSERT INTO price_records (material_id, district_id, price, source, scraped_at, flagged, created_at) VALUES ${values.join(", ")}`,
+              params
+            );
+            console.log(`  Inserted ${values.length} price records...`);
+            values = [];
+            params = [];
+            paramIdx = 1;
+          }
         }
       }
+    }
+
+    if (values.length > 0) {
+      await pool.query(
+        `INSERT INTO price_records (material_id, district_id, price, source, scraped_at, flagged, created_at) VALUES ${values.join(", ")}`,
+        params
+      );
+      console.log(`  Inserted ${values.length} price records (final batch)...`);
     }
 
     await pool.query("COMMIT");

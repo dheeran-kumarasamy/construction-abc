@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "migrate": "node migrate.js",
-    "seed:prices": "ts-node-dev --transpile-only src/scripts/seed.ts"
+    "seed:prices": "ts-node-dev --transpile-only src/scripts/seed.ts",
+    "seed:sor": "ts-node-dev --transpile-only src/scripts/seedSOR.ts"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +18,7 @@
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.2.1",
