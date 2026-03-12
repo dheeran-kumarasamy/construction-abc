@@ -258,83 +258,111 @@ export async function listProjects(userId: string) {
       (SELECT COALESCE(SUM(bi.computed_amount), 0) FROM boq_items bi WHERE bi.project_id = p.id) as total_amount
     FROM boq_projects p
     WHERE p.user_id = $1
+      AND (p.notes IS NULL OR p.notes NOT LIKE 'source_project_id:%')
     ORDER BY p.updated_at DESC
   `, [userId]);
   return rows;
 }
 
 export async function listInvitedProjects(userId: string) {
-  // Get the user's organization_id
-  const userRes = await pool.query(`SELECT organization_id FROM users WHERE id = $1`, [userId]);
+  const userRes = await pool.query(
+    `SELECT organization_id, email FROM users WHERE id = $1`,
+    [userId]
+  );
   if (!userRes.rows.length) return [];
   const organizationId = userRes.rows[0].organization_id;
+  const userEmail = userRes.rows[0].email;
 
-  // Get projects where user's organization has been invited as a builder
-  const { rows } = await pool.query(`
-    SELECT 
-      p.id,
-      p.name,
-      p.client_name,
-      p.location as project_location,
-      p.description,
-      p.status,
-      p.created_at,
-      p.updated_at,
-      bi.status as invitation_status,
-      (SELECT COUNT(*) FROM boq_items bi WHERE bi.project_id = p.id) as item_count,
-      (SELECT COALESCE(SUM(bi.computed_amount), 0) FROM boq_items bi WHERE bi.project_id = p.id) as total_amount
+  const invitedProjectsRes = await pool.query(`
+    SELECT DISTINCT p.id, p.name, p.description, p.created_at,
+      CASE
+        WHEN ui.accepted_at IS NOT NULL THEN 'accepted'
+        ELSE 'pending'
+      END AS invitation_status
+    FROM projects p
+    JOIN user_invites ui ON p.id = ui.project_id
+    WHERE ui.role = 'builder'
+      AND ui.project_id IS NOT NULL
+      AND (
+        ui.user_id = $1
+        OR LOWER(TRIM(ui.email)) = LOWER(TRIM($2))
+        OR (ui.organization_id IS NOT NULL AND ui.organization_id = $3)
+      )
+      AND (ui.accepted_at IS NOT NULL OR ui.expires_at > NOW())
+
+    UNION
+
+    SELECT DISTINCT p.id, p.name, p.description, p.created_at, bi.status AS invitation_status
     FROM projects p
     JOIN builder_invitations bi ON p.id = bi.project_id
-    WHERE bi.builder_org_id = $1
+    WHERE bi.builder_org_id = $3
       AND bi.status IN ('pending', 'accepted')
-    ORDER BY p.updated_at DESC
-  `, [organizationId]);
-  return rows;
+
+    ORDER BY created_at DESC
+  `, [userId, userEmail, organizationId]);
+
+  if (!invitedProjectsRes.rows.length) {
+    return [];
+  }
+
+  const statusBySourceProject = new Map<string, string>();
+  for (const invited of invitedProjectsRes.rows) {
+    const existingStatus = statusBySourceProject.get(invited.id);
+    if (existingStatus === "accepted") continue;
+    statusBySourceProject.set(invited.id, invited.invitation_status || "pending");
+  }
+
+  for (const invited of invitedProjectsRes.rows) {
+    const marker = `source_project_id:${invited.id}`;
+    const existing = await pool.query(
+      `SELECT id FROM boq_projects WHERE user_id = $1 AND notes = $2 LIMIT 1`,
+      [userId, marker]
+    );
+
+    if (existing.rows.length === 0) {
+      await pool.query(`
+        INSERT INTO boq_projects (
+          user_id, name, description, status, terrain, notes, client_name, project_location
+        )
+        VALUES ($1, $2, $3, 'in_progress', 'plains', $4, NULL, NULL)
+      `, [
+        userId,
+        invited.name,
+        invited.description || null,
+        marker,
+      ]);
+    }
+  }
+
+  const markers = Array.from(statusBySourceProject.keys()).map(
+    (id: string) => `source_project_id:${id}`
+  );
+
+  const { rows } = await pool.query(`
+    SELECT bp.*,
+      (SELECT COUNT(*) FROM boq_items i WHERE i.project_id = bp.id) AS item_count,
+      (SELECT COALESCE(SUM(i.computed_amount), 0) FROM boq_items i WHERE i.project_id = bp.id) AS total_amount
+    FROM boq_projects bp
+    WHERE bp.user_id = $1
+      AND bp.notes = ANY($2::text[])
+    ORDER BY bp.updated_at DESC
+  `, [userId, markers]);
+
+  return rows.map((row: any) => {
+    const sourceProjectId = String(row.notes || "").replace("source_project_id:", "");
+    return {
+      ...row,
+      invitation_status: statusBySourceProject.get(sourceProjectId) || "pending",
+    };
+  });
 }
 
 export async function getProject(projectId: string, userId: string) {
-  // First, try to get the boq_project (user's own project)
-  const { rows: boqRows } = await pool.query(
+  const { rows } = await pool.query(
     `SELECT * FROM boq_projects WHERE id = $1 AND user_id = $2`,
     [projectId, userId]
   );
-  
-  if (boqRows.length > 0) {
-    return boqRows[0];
-  }
-
-  // If not found, check if this is an invited project (from architect) 
-  // Create a temporary boq_project representation for the invited project
-  const userRes = await pool.query(`SELECT organization_id FROM users WHERE id = $1`, [userId]);
-  if (!userRes.rows.length) return null;
-  const organizationId = userRes.rows[0].organization_id;
-
-  // Check if the user's organization was invited to this project as a builder
-  const { rows: inviteRows } = await pool.query(`
-    SELECT ap.*, bi.status as invitation_status
-    FROM projects ap
-    JOIN builder_invitations bi ON ap.id = bi.project_id
-    WHERE ap.id = $1 AND bi.builder_org_id = $2 AND bi.status IN ('pending', 'accepted')
-  `, [projectId, organizationId]);
-
-  if (inviteRows.length > 0) {
-    // Return the architect's project as if it were a boq_project
-    const ap = inviteRows[0];
-    return {
-      id: ap.id,
-      user_id: ap.architect_id,
-      name: ap.name,
-      client_name: ap.client_name,
-      project_location: ap.location,
-      description: ap.description,
-      status: ap.status,
-      created_at: ap.created_at,
-      updated_at: ap.updated_at,
-      is_invited_project: true,
-    };
-  }
-
-  return null;
+  return rows[0] || null;
 }
 
 export async function updateProject(projectId: string, userId: string, data: Record<string, any>) {

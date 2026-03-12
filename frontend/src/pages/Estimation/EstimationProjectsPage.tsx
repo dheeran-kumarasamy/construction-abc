@@ -31,10 +31,13 @@ export default function EstimationProjectsPage() {
   async function loadProjects() {
     try {
       setLoading(true);
-      const [ownProjects, invitedProjects] = await Promise.all([
-        api.fetchProjects(),
-        api.fetchInvitedProjects().catch(() => []),
-      ]);
+      const ownProjects = await api.fetchProjects();
+      let invitedProjects: BOQProject[] = [];
+      try {
+        invitedProjects = await api.fetchInvitedProjects();
+      } catch (err) {
+        console.error("Failed to load invited projects:", err);
+      }
       
       // Mark own projects
       const marked = ownProjects.map((p) => ({ ...p, project_type: "own" as const }));
