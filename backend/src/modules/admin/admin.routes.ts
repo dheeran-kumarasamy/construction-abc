@@ -1,23 +1,1089 @@
 import { Router, Request, Response } from "express";
-import { authenticate } from "../auth/auth.middleware";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import { unlink } from "fs/promises";
+import { pool } from "../../config/db";
+import { authenticate, requireAdmin } from "../auth/auth.middleware";
 import { runScrapers } from "../../services/scrapers";
 
 const router = Router();
 
-function isAdminUser(req: Request) {
-  const user = (req as any).user;
-  if (!user) return false;
-
-  if (user.role === "architect" && user.orgRole === "head") return true;
-  return false;
+function parsePagination(req: Request) {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+  const offset = (page - 1) * pageSize;
+  return { page, pageSize, offset };
 }
 
-router.post("/scrapers/run", authenticate, async (req: Request, res: Response) => {
+function getAdminUserId(req: Request): string {
+  return String((req as any).user?.userId || "");
+}
+
+function getFrontendBaseUrl(): string {
+  const envUrl = process.env.FRONTEND_URL || process.env.VITE_FRONTEND_URL;
+  if (envUrl) {
+    return envUrl.replace(/\/$/, "");
+  }
+
+  return "http://localhost:5173";
+}
+
+function buildInviteLink(token: string) {
+  return `${getFrontendBaseUrl()}/accept-invite?token=${token}`;
+}
+
+async function logAdminAction(req: Request, action: string, metadata: Record<string, unknown>) {
+  const adminUserId = getAdminUserId(req);
+  if (!adminUserId) {
+    return;
+  }
+
+  await pool.query(
+    `INSERT INTO audit_logs (project_id, user_id, action, metadata)
+     VALUES (NULL, $1, $2, $3::jsonb)`,
+    [adminUserId, action, JSON.stringify(metadata)]
+  );
+}
+
+router.use(authenticate, requireAdmin);
+
+router.get("/dashboard", async (_req: Request, res: Response) => {
   try {
-    if (!isAdminUser(req)) {
-      return res.status(403).json({ error: "Only admin users can run scrapers" });
+    const [users, organizations, projects, estimates, boqs, dealers, activeAlerts, recentActivity, lastScraperRun] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS count FROM users`),
+      pool.query(`SELECT COUNT(*)::int AS count FROM organizations`),
+      pool.query(`SELECT COUNT(*)::int AS count FROM projects`),
+      pool.query(`SELECT COUNT(*)::int AS count FROM estimates`),
+      pool.query(`SELECT COUNT(*)::int AS count FROM boqs`),
+      pool.query(`SELECT COUNT(*)::int AS count FROM dealers`),
+      pool.query(`SELECT COUNT(*)::int AS count FROM price_alerts WHERE is_active = true`),
+      pool.query(
+        `SELECT al.id, al.action, al.metadata, al.created_at, u.email AS user_email
+         FROM audit_logs al
+         LEFT JOIN users u ON u.id = al.user_id
+         ORDER BY al.created_at DESC
+         LIMIT 20`
+      ),
+      pool.query(
+        `SELECT created_at
+         FROM audit_logs
+         WHERE action = 'admin.scrapers.run'
+         ORDER BY created_at DESC
+         LIMIT 1`
+      ),
+    ]);
+
+    return res.json({
+      summary: {
+        users: users.rows[0]?.count || 0,
+        organizations: organizations.rows[0]?.count || 0,
+        projects: projects.rows[0]?.count || 0,
+        estimates: estimates.rows[0]?.count || 0,
+        boqUploads: boqs.rows[0]?.count || 0,
+        dealers: dealers.rows[0]?.count || 0,
+        activePriceAlerts: activeAlerts.rows[0]?.count || 0,
+      },
+      recentActivity: recentActivity.rows,
+      systemHealth: {
+        database: "connected",
+        lastScraperRunAt: lastScraperRun.rows[0]?.created_at || null,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to fetch admin dashboard", error);
+    return res.status(500).json({ error: "Failed to load dashboard" });
+  }
+});
+
+router.get("/users", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+    const role = String(req.query.role || "").trim().toLowerCase();
+    const search = String(req.query.search || "").trim().toLowerCase();
+
+    const where: string[] = [];
+    const params: Array<string | number> = [];
+
+    if (role) {
+      params.push(role);
+      where.push(`LOWER(u.role) = $${params.length}`);
     }
 
+    if (search) {
+      params.push(`%${search}%`);
+      where.push(`LOWER(u.email) LIKE $${params.length}`);
+    }
+
+    const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    const countQuery = await pool.query(
+      `SELECT COUNT(*)::int AS count
+       FROM users u
+       ${whereClause}`,
+      params
+    );
+
+    params.push(pageSize, offset);
+
+    const rows = await pool.query(
+      `SELECT u.id, u.email, u.role, u.org_role, u.organization_id, u.created_at,
+              u.last_login_at, COALESCE(u.is_active, true) AS is_active,
+              o.name AS organization_name
+       FROM users u
+       LEFT JOIN organizations o ON o.id = u.organization_id
+       ${whereClause}
+       ORDER BY u.created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: {
+        page,
+        pageSize,
+        total: countQuery.rows[0]?.count || 0,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to list users", error);
+    return res.status(500).json({ error: "Failed to list users" });
+  }
+});
+
+router.get("/users/:userId", async (req: Request, res: Response) => {
+  try {
+    const userId = String(req.params.userId || "");
+
+    const userQuery = await pool.query(
+      `SELECT u.id, u.email, u.role, u.org_role, u.organization_id, u.created_at,
+              u.last_login_at, COALESCE(u.is_active, true) AS is_active,
+              o.name AS organization_name
+       FROM users u
+       LEFT JOIN organizations o ON o.id = u.organization_id
+       WHERE u.id = $1
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (!userQuery.rows.length) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const [projects, invites, dealerProfile] = await Promise.all([
+      pool.query(
+        `SELECT id, name, description, created_at
+         FROM projects
+         WHERE architect_id = $1 OR client_id = $1
+         ORDER BY created_at DESC
+         LIMIT 50`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT id, email, role, project_id, organization_id, created_at, expires_at, accepted_at
+         FROM user_invites
+         WHERE user_id = $1 OR LOWER(TRIM(email)) = (
+           SELECT LOWER(TRIM(email)) FROM users WHERE id = $1
+         )
+         ORDER BY created_at DESC
+         LIMIT 50`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT *
+         FROM dealers
+         WHERE user_id = $1
+         LIMIT 1`,
+        [userId]
+      ),
+    ]);
+
+    return res.json({
+      user: userQuery.rows[0],
+      projects: projects.rows,
+      invites: invites.rows,
+      dealerProfile: dealerProfile.rows[0] || null,
+    });
+  } catch (error) {
+    console.error("Failed to fetch user detail", error);
+    return res.status(500).json({ error: "Failed to fetch user detail" });
+  }
+});
+
+router.patch("/users/:userId", async (req: Request, res: Response) => {
+  try {
+    const userId = String(req.params.userId || "");
+    const { role, orgRole, organizationId, isActive } = req.body || {};
+
+    const updates: string[] = [];
+    const params: Array<string | boolean | null> = [];
+
+    if (role !== undefined) {
+      const normalizedRole = String(role).trim().toLowerCase();
+      if (!["architect", "builder", "client", "dealer", "admin"].includes(normalizedRole)) {
+        return res.status(400).json({ error: "Invalid role" });
+      }
+      params.push(normalizedRole);
+      updates.push(`role = $${params.length}`);
+    }
+
+    if (orgRole !== undefined) {
+      const normalizedOrgRole = String(orgRole || "").trim().toLowerCase();
+      if (normalizedOrgRole && normalizedOrgRole !== "head" && normalizedOrgRole !== "member") {
+        return res.status(400).json({ error: "Invalid orgRole" });
+      }
+      params.push(normalizedOrgRole || null);
+      updates.push(`org_role = $${params.length}`);
+    }
+
+    if (organizationId !== undefined) {
+      params.push(organizationId || null);
+      updates.push(`organization_id = $${params.length}`);
+    }
+
+    if (isActive !== undefined) {
+      params.push(Boolean(isActive));
+      updates.push(`is_active = $${params.length}`);
+    }
+
+    if (!updates.length) {
+      return res.status(400).json({ error: "No fields provided" });
+    }
+
+    params.push(userId);
+
+    const result = await pool.query(
+      `UPDATE users
+       SET ${updates.join(", ")}
+       WHERE id = $${params.length}
+       RETURNING id, email, role, org_role, organization_id, COALESCE(is_active, true) AS is_active`,
+      params
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    await logAdminAction(req, "admin.users.update", {
+      targetUserId: userId,
+      updatedFields: Object.keys(req.body || {}),
+    });
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Failed to update user", error);
+    return res.status(500).json({ error: "Failed to update user" });
+  }
+});
+
+router.delete("/users/:userId", async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const { userId } = req.params;
+    const mode = String(req.query.mode || "soft").toLowerCase();
+
+    await client.query("BEGIN");
+
+    if (mode === "hard") {
+      await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+    } else {
+      await client.query(
+        `UPDATE users
+         SET is_active = false
+         WHERE id = $1`,
+        [userId]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    await logAdminAction(req, "admin.users.delete", {
+      targetUserId: userId,
+      mode,
+    });
+
+    return res.json({ success: true, mode });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Failed to delete user", error);
+    return res.status(500).json({ error: "Failed to delete user" });
+  } finally {
+    client.release();
+  }
+});
+
+router.post("/users/:userId/reset-password", async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const tempPassword = crypto.randomBytes(6).toString("base64url");
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+    const result = await pool.query(
+      `UPDATE users
+       SET password_hash = $1
+       WHERE id = $2
+       RETURNING id, email`,
+      [passwordHash, userId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    await logAdminAction(req, "admin.users.reset_password", { targetUserId: userId });
+
+    return res.json({
+      success: true,
+      user: result.rows[0],
+      tempPassword,
+    });
+  } catch (error) {
+    console.error("Failed to reset password", error);
+    return res.status(500).json({ error: "Failed to reset password" });
+  }
+});
+
+router.get("/organizations", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM organizations`);
+    const rows = await pool.query(
+      `SELECT o.id, o.name, o.type, o.created_at,
+              (SELECT COUNT(*)::int FROM users u WHERE u.organization_id = o.id) AS member_count,
+              (SELECT COUNT(*)::int FROM projects p WHERE p.architect_org_id = o.id OR p.client_org_id = o.id) AS project_count
+       FROM organizations o
+       ORDER BY o.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    console.error("Failed to list organizations", error);
+    return res.status(500).json({ error: "Failed to list organizations" });
+  }
+});
+
+router.patch("/organizations/:organizationId", async (req: Request, res: Response) => {
+  try {
+    const organizationId = String(req.params.organizationId || "");
+    const { name, type } = req.body || {};
+
+    const updates: string[] = [];
+    const params: Array<string> = [];
+
+    if (name !== undefined) {
+      const normalizedName = String(name || "").trim();
+      if (!normalizedName) {
+        return res.status(400).json({ error: "Organization name is required" });
+      }
+      params.push(normalizedName);
+      updates.push(`name = $${params.length}`);
+    }
+
+    if (type !== undefined) {
+      const normalizedType = String(type || "").trim().toLowerCase();
+      if (!["architect", "builder", "client"].includes(normalizedType)) {
+        return res.status(400).json({ error: "Invalid organization type" });
+      }
+      params.push(normalizedType);
+      updates.push(`type = $${params.length}`);
+    }
+
+    if (!updates.length) {
+      return res.status(400).json({ error: "No fields provided" });
+    }
+
+    params.push(organizationId);
+
+    const result = await pool.query(
+      `UPDATE organizations
+       SET ${updates.join(", ")}
+       WHERE id = $${params.length}
+       RETURNING id, name, type, created_at`,
+      params
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Organization not found" });
+    }
+
+    await logAdminAction(req, "admin.organizations.update", {
+      organizationId,
+      updatedFields: Object.keys(req.body || {}),
+    });
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Failed to update organization", error);
+    return res.status(500).json({ error: "Failed to update organization" });
+  }
+});
+
+router.delete("/organizations/:organizationId", async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const organizationId = String(req.params.organizationId || "");
+
+    await client.query("BEGIN");
+
+    const impact = await client.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM users WHERE organization_id = $1) AS user_count,
+         (SELECT COUNT(*)::int FROM projects WHERE architect_org_id = $1 OR client_org_id = $1) AS project_count,
+         (SELECT COUNT(*)::int FROM user_invites WHERE organization_id = $1) AS invite_count,
+         (SELECT COUNT(*)::int FROM dealers WHERE organization_id = $1) AS dealer_count,
+         (SELECT COUNT(*)::int FROM estimates WHERE builder_org_id = $1) AS estimate_count,
+         (SELECT COUNT(*)::int FROM base_pricing WHERE builder_org_id = $1) AS base_pricing_count,
+         (SELECT COUNT(*)::int FROM builder_invitations WHERE builder_org_id = $1) AS builder_invitation_count`,
+      [organizationId]
+    );
+
+    await client.query(`UPDATE users SET organization_id = NULL, org_role = NULL WHERE organization_id = $1`, [organizationId]);
+    await client.query(`UPDATE projects SET architect_org_id = NULL WHERE architect_org_id = $1`, [organizationId]);
+    await client.query(`UPDATE projects SET client_org_id = NULL WHERE client_org_id = $1`, [organizationId]);
+    await client.query(`UPDATE user_invites SET organization_id = NULL WHERE organization_id = $1`, [organizationId]);
+    await client.query(`UPDATE dealers SET organization_id = NULL WHERE organization_id = $1`, [organizationId]);
+    await client.query(`UPDATE estimates SET builder_org_id = NULL WHERE builder_org_id = $1`, [organizationId]);
+    await client.query(`UPDATE base_pricing SET builder_org_id = NULL WHERE builder_org_id = $1`, [organizationId]);
+    await client.query(`UPDATE builder_invitations SET builder_org_id = NULL WHERE builder_org_id = $1`, [organizationId]);
+
+    const result = await client.query(`DELETE FROM organizations WHERE id = $1 RETURNING id`, [organizationId]);
+    if (!result.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Organization not found" });
+    }
+
+    await client.query("COMMIT");
+
+    await logAdminAction(req, "admin.organizations.delete", {
+      organizationId,
+      impact: impact.rows[0],
+    });
+
+    return res.json({ success: true, impact: impact.rows[0] });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Failed to delete organization", error);
+    return res.status(500).json({ error: "Failed to delete organization" });
+  } finally {
+    client.release();
+  }
+});
+
+router.get("/projects", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM projects`);
+    const rows = await pool.query(
+      `SELECT p.id, p.name, p.description, p.created_at,
+              architect.email AS architect_email,
+              client.email AS client_email,
+              (SELECT COUNT(*)::int FROM boqs b WHERE b.project_id = p.id) AS boq_count,
+              (SELECT COUNT(*)::int FROM estimates e WHERE e.project_id = p.id) AS estimate_count
+       FROM projects p
+       LEFT JOIN users architect ON architect.id = p.architect_id
+       LEFT JOIN users client ON client.id = p.client_id
+       ORDER BY p.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    console.error("Failed to list projects", error);
+    return res.status(500).json({ error: "Failed to list projects" });
+  }
+});
+
+router.patch("/projects/:projectId", async (req: Request, res: Response) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const { name, description, architectId, clientId } = req.body || {};
+
+    const updates: string[] = [];
+    const params: Array<string | null> = [];
+
+    if (name !== undefined) {
+      const normalizedName = String(name || "").trim();
+      if (!normalizedName) {
+        return res.status(400).json({ error: "Project name is required" });
+      }
+      params.push(normalizedName);
+      updates.push(`name = $${params.length}`);
+    }
+
+    if (description !== undefined) {
+      params.push(String(description || "").trim() || null);
+      updates.push(`description = $${params.length}`);
+    }
+
+    if (architectId !== undefined) {
+      params.push(architectId || null);
+      updates.push(`architect_id = $${params.length}`);
+    }
+
+    if (clientId !== undefined) {
+      params.push(clientId || null);
+      updates.push(`client_id = $${params.length}`);
+    }
+
+    if (!updates.length) {
+      return res.status(400).json({ error: "No fields provided" });
+    }
+
+    params.push(projectId);
+
+    const result = await pool.query(
+      `UPDATE projects
+       SET ${updates.join(", ")}
+       WHERE id = $${params.length}
+       RETURNING id, name, description, architect_id, client_id, created_at`,
+      params
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    await logAdminAction(req, "admin.projects.update", {
+      projectId,
+      updatedFields: Object.keys(req.body || {}),
+    });
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Failed to update project", error);
+    return res.status(500).json({ error: "Failed to update project" });
+  }
+});
+
+router.delete("/projects/:projectId", async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const projectId = String(req.params.projectId || "");
+
+    await client.query("BEGIN");
+
+    const impact = await client.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM project_revisions WHERE project_id = $1) AS project_revision_count,
+         (SELECT COUNT(*)::int FROM boq_revisions WHERE project_id = $1) AS boq_revision_count,
+         (SELECT COUNT(*)::int FROM boqs WHERE project_id = $1) AS boq_count,
+         (SELECT COUNT(*)::int FROM builder_invitations WHERE project_id = $1) AS builder_invitation_count,
+         (SELECT COUNT(*)::int FROM user_invites WHERE project_id = $1) AS invite_count,
+         (SELECT COUNT(*)::int FROM estimates WHERE project_id = $1) AS estimate_count,
+         (SELECT COUNT(*)::int FROM awards WHERE project_id = $1) AS award_count,
+         (SELECT COUNT(*)::int FROM audit_logs WHERE project_id = $1) AS audit_log_count`,
+      [projectId]
+    );
+
+    const boqFiles = await client.query(`SELECT file_path FROM boqs WHERE project_id = $1`, [projectId]);
+    const estimateIds = await client.query(`SELECT id FROM estimates WHERE project_id = $1`, [projectId]);
+    const estimateIdList = estimateIds.rows.map((row) => row.id);
+
+    await client.query(`UPDATE projects SET boq_id = NULL WHERE id = $1`, [projectId]);
+    await client.query(`DELETE FROM awards WHERE project_id = $1`, [projectId]);
+
+    if (estimateIdList.length) {
+      await client.query(`DELETE FROM awards WHERE estimate_revision_id IN (
+        SELECT id FROM estimate_revisions WHERE estimate_id = ANY($1::uuid[])
+      )`, [estimateIdList]);
+      await client.query(`DELETE FROM estimate_revisions WHERE estimate_id = ANY($1::uuid[])`, [estimateIdList]);
+      await client.query(`DELETE FROM estimates WHERE id = ANY($1::uuid[])`, [estimateIdList]);
+    }
+
+    await client.query(`DELETE FROM user_invites WHERE project_id = $1`, [projectId]);
+    await client.query(`DELETE FROM builder_invitations WHERE project_id = $1`, [projectId]);
+    await client.query(`DELETE FROM boq_revisions WHERE project_id = $1`, [projectId]);
+    await client.query(`DELETE FROM project_revisions WHERE project_id = $1`, [projectId]);
+    await client.query(`DELETE FROM audit_logs WHERE project_id = $1`, [projectId]);
+    await client.query(`DELETE FROM boqs WHERE project_id = $1`, [projectId]);
+
+    const result = await client.query(`DELETE FROM projects WHERE id = $1 RETURNING id`, [projectId]);
+    if (!result.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    await client.query("COMMIT");
+
+    await Promise.all(
+      boqFiles.rows.map(async (row) => {
+        if (!row.file_path) return;
+        try {
+          await unlink(row.file_path);
+        } catch {
+          return;
+        }
+      })
+    );
+
+    await logAdminAction(req, "admin.projects.delete", {
+      projectId,
+      impact: impact.rows[0],
+    });
+
+    return res.json({ success: true, impact: impact.rows[0] });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Failed to delete project", error);
+    return res.status(500).json({ error: "Failed to delete project" });
+  } finally {
+    client.release();
+  }
+});
+
+router.get("/boqs", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM boqs`);
+    const rows = await pool.query(
+      `SELECT b.id, b.project_id, p.name AS project_name, b.uploaded_by, uploader.email AS uploaded_by_email,
+              b.file_name, b.file_type, b.file_size, b.created_at,
+              CASE WHEN b.parsed_data IS NOT NULL THEN 'parsed' ELSE 'pending' END AS parsed_status
+       FROM boqs b
+       LEFT JOIN projects p ON p.id = b.project_id
+       LEFT JOIN users uploader ON uploader.id = b.uploaded_by
+       ORDER BY b.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    console.error("Failed to list BOQs", error);
+    return res.status(500).json({ error: "Failed to list BOQs" });
+  }
+});
+
+router.get("/estimation-projects", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM boq_projects`);
+    const rows = await pool.query(
+      `SELECT bp.id, bp.name, bp.status, bp.terrain, bp.project_type, bp.created_at,
+              u.email AS user_email,
+              (SELECT COUNT(*)::int FROM boq_items bi WHERE bi.project_id = bp.id) AS item_count,
+              (SELECT COALESCE(SUM(bi.computed_amount), 0) FROM boq_items bi WHERE bi.project_id = bp.id) AS total_amount
+       FROM boq_projects bp
+       LEFT JOIN users u ON u.id = bp.user_id
+       ORDER BY bp.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    console.error("Failed to list estimation projects", error);
+    return res.status(500).json({ error: "Failed to list estimation projects" });
+  }
+});
+
+router.get("/estimates", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM estimates`);
+    const rows = await pool.query(
+      `SELECT e.id, e.project_id, p.name AS project_name, e.builder_org_id,
+              o.name AS builder_org_name, e.status, e.created_at,
+              (SELECT COUNT(*)::int FROM estimate_revisions er WHERE er.estimate_id = e.id) AS revision_count,
+              (SELECT er.grand_total FROM estimate_revisions er WHERE er.estimate_id = e.id ORDER BY er.revision_number DESC LIMIT 1) AS grand_total,
+              (SELECT er.submitted_at FROM estimate_revisions er WHERE er.estimate_id = e.id ORDER BY er.revision_number DESC LIMIT 1) AS submitted_at
+       FROM estimates e
+       LEFT JOIN projects p ON p.id = e.project_id
+       LEFT JOIN organizations o ON o.id = e.builder_org_id
+       ORDER BY e.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    console.error("Failed to list estimates", error);
+    return res.status(500).json({ error: "Failed to list estimates" });
+  }
+});
+
+router.get("/invites", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM user_invites`);
+    const rows = await pool.query(
+      `SELECT ui.id, ui.email, ui.role, ui.project_id, p.name AS project_name,
+              ui.organization_id, o.name AS organization_name,
+              ui.created_at, ui.expires_at, ui.accepted_at,
+              CASE
+                WHEN ui.accepted_at IS NOT NULL THEN 'accepted'
+                WHEN ui.expires_at < now() THEN 'expired'
+                ELSE 'open'
+              END AS status
+       FROM user_invites ui
+       LEFT JOIN projects p ON p.id = ui.project_id
+       LEFT JOIN organizations o ON o.id = ui.organization_id
+       ORDER BY ui.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    console.error("Failed to list invites", error);
+    return res.status(500).json({ error: "Failed to list invites" });
+  }
+});
+
+router.post("/invites/:inviteId/resend", async (req: Request, res: Response) => {
+  try {
+    const inviteId = String(req.params.inviteId || "");
+    const token = crypto.randomBytes(24).toString("hex");
+    const result = await pool.query(
+      `UPDATE user_invites
+       SET token = $1,
+           expires_at = now() + interval '7 days',
+           accepted_at = NULL
+       WHERE id = $2
+       RETURNING id, email, role, token, expires_at`,
+      [token, inviteId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Invite not found" });
+    }
+
+    const invite = result.rows[0];
+    const inviteLink = buildInviteLink(invite.token);
+
+    await logAdminAction(req, "admin.invites.resend", {
+      inviteId,
+      email: invite.email,
+    });
+
+    return res.json({
+      success: true,
+      inviteLink,
+      expiresAt: invite.expires_at,
+    });
+  } catch (error) {
+    console.error("Failed to resend invite", error);
+    return res.status(500).json({ error: "Failed to resend invite" });
+  }
+});
+
+router.delete("/invites/:inviteId", async (req: Request, res: Response) => {
+  try {
+    const inviteId = String(req.params.inviteId || "");
+    const result = await pool.query(`DELETE FROM user_invites WHERE id = $1 RETURNING id, email`, [inviteId]);
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Invite not found" });
+    }
+
+    await logAdminAction(req, "admin.invites.delete", {
+      inviteId,
+      email: result.rows[0].email,
+    });
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete invite", error);
+    return res.status(500).json({ error: "Failed to delete invite" });
+  }
+});
+
+router.get("/dealers", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM dealers`);
+    const rows = await pool.query(
+      `SELECT d.id, d.shop_name, d.email, d.city, d.state, d.is_approved, d.approval_date,
+              d.created_at, d.user_id,
+              (SELECT COUNT(*)::int FROM dealer_prices dp WHERE dp.dealer_id = d.id AND dp.is_active = true) AS price_count
+       FROM dealers d
+       ORDER BY d.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    console.error("Failed to list dealers", error);
+    return res.status(500).json({ error: "Failed to list dealers" });
+  }
+});
+
+router.patch("/dealers/:dealerId/approval", async (req: Request, res: Response) => {
+  try {
+    const { dealerId } = req.params;
+    const isApproved = Boolean(req.body?.isApproved);
+    const adminUserId = getAdminUserId(req);
+
+    const result = await pool.query(
+      `UPDATE dealers
+       SET is_approved = $1,
+           approval_date = CASE WHEN $1 THEN now() ELSE NULL END,
+           approved_by = CASE WHEN $1 THEN $2 ELSE NULL END
+       WHERE id = $3
+       RETURNING id, shop_name, is_approved, approval_date, approved_by`,
+      [isApproved, adminUserId, dealerId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Dealer not found" });
+    }
+
+    await logAdminAction(req, "admin.dealers.approval", { dealerId, isApproved });
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Failed to update dealer approval", error);
+    return res.status(500).json({ error: "Failed to update dealer approval" });
+  }
+});
+
+router.get("/prices/records", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM price_records`);
+    const rows = await pool.query(
+      `SELECT pr.id, pr.material_id, pr.district_id, pr.price, pr.source, pr.scraped_at, pr.flagged, pr.created_at,
+              m.name AS material_name, m.unit AS material_unit,
+              d.name AS district_name
+       FROM price_records pr
+       JOIN materials m ON m.id = pr.material_id
+       JOIN districts d ON d.id = pr.district_id
+       ORDER BY pr.scraped_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    console.error("Failed to list price records", error);
+    return res.status(500).json({ error: "Failed to list price records" });
+  }
+});
+
+router.get("/prices/reference", async (_req: Request, res: Response) => {
+  try {
+    const [materials, districts] = await Promise.all([
+      pool.query(`SELECT id, name, unit FROM materials ORDER BY name ASC`),
+      pool.query(`SELECT id, name, region FROM districts ORDER BY name ASC`),
+    ]);
+
+    return res.json({
+      materials: materials.rows,
+      districts: districts.rows,
+    });
+  } catch (error) {
+    console.error("Failed to load price references", error);
+    return res.status(500).json({ error: "Failed to load price references" });
+  }
+});
+
+router.post("/prices/records", async (req: Request, res: Response) => {
+  try {
+    const { materialId, districtId, price, source, scrapedAt, flagged } = req.body || {};
+    if (!materialId || !districtId || !price || !source) {
+      return res.status(400).json({ error: "materialId, districtId, price and source are required" });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO price_records (material_id, district_id, price, source, scraped_at, flagged)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, material_id, district_id, price, source, scraped_at, flagged, created_at`,
+      [
+        materialId,
+        districtId,
+        Number(price),
+        String(source).trim(),
+        scrapedAt || new Date().toISOString(),
+        Boolean(flagged),
+      ]
+    );
+
+    await logAdminAction(req, "admin.prices.create", {
+      priceRecordId: result.rows[0].id,
+      materialId,
+      districtId,
+    });
+
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("Failed to create price record", error);
+    return res.status(500).json({ error: "Failed to create price record" });
+  }
+});
+
+router.patch("/prices/records/:recordId", async (req: Request, res: Response) => {
+  try {
+    const recordId = String(req.params.recordId || "");
+    const { materialId, districtId, price, source, scrapedAt, flagged } = req.body || {};
+
+    const updates: string[] = [];
+    const params: Array<string | number | boolean> = [];
+
+    if (materialId !== undefined) {
+      params.push(String(materialId));
+      updates.push(`material_id = $${params.length}`);
+    }
+
+    if (districtId !== undefined) {
+      params.push(String(districtId));
+      updates.push(`district_id = $${params.length}`);
+    }
+
+    if (price !== undefined) {
+      params.push(Number(price));
+      updates.push(`price = $${params.length}`);
+    }
+
+    if (source !== undefined) {
+      params.push(String(source).trim());
+      updates.push(`source = $${params.length}`);
+    }
+
+    if (scrapedAt !== undefined) {
+      params.push(String(scrapedAt));
+      updates.push(`scraped_at = $${params.length}`);
+    }
+
+    if (flagged !== undefined) {
+      params.push(Boolean(flagged));
+      updates.push(`flagged = $${params.length}`);
+    }
+
+    if (!updates.length) {
+      return res.status(400).json({ error: "No fields provided" });
+    }
+
+    params.push(recordId);
+
+    const result = await pool.query(
+      `UPDATE price_records
+       SET ${updates.join(", ")}
+       WHERE id = $${params.length}
+       RETURNING id, material_id, district_id, price, source, scraped_at, flagged, created_at`,
+      params
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Price record not found" });
+    }
+
+    await logAdminAction(req, "admin.prices.update", {
+      priceRecordId: recordId,
+      updatedFields: Object.keys(req.body || {}),
+    });
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Failed to update price record", error);
+    return res.status(500).json({ error: "Failed to update price record" });
+  }
+});
+
+router.delete("/prices/records/:recordId", async (req: Request, res: Response) => {
+  try {
+    const recordId = String(req.params.recordId || "");
+    const result = await pool.query(`DELETE FROM price_records WHERE id = $1 RETURNING id`, [recordId]);
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Price record not found" });
+    }
+
+    await logAdminAction(req, "admin.prices.delete", { priceRecordId: recordId });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete price record", error);
+    return res.status(500).json({ error: "Failed to delete price record" });
+  }
+});
+
+router.get("/prices/alerts", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM price_alerts`);
+    const rows = await pool.query(
+      `SELECT pa.id, pa.condition, pa.threshold, pa.is_active, pa.last_triggered_at, pa.created_at,
+              u.email AS user_email, m.name AS material_name, d.name AS district_name
+       FROM price_alerts pa
+       JOIN users u ON u.id = pa.user_id
+       JOIN materials m ON m.id = pa.material_id
+       JOIN districts d ON d.id = pa.district_id
+       ORDER BY pa.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    console.error("Failed to list price alerts", error);
+    return res.status(500).json({ error: "Failed to list price alerts" });
+  }
+});
+
+router.get("/audit", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM audit_logs`);
+    const rows = await pool.query(
+      `SELECT al.id, al.project_id, al.user_id, u.email AS user_email,
+              al.action, al.metadata, al.created_at
+       FROM audit_logs al
+       LEFT JOIN users u ON u.id = al.user_id
+       ORDER BY al.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    console.error("Failed to list audit logs", error);
+    return res.status(500).json({ error: "Failed to list audit logs" });
+  }
+});
+
+router.post("/scrapers/run", async (req: Request, res: Response) => {
+  try {
     const sourceQuery = String(req.query.source || "all").toLowerCase();
     const source =
       sourceQuery === "indiamart" || sourceQuery === "pwd" || sourceQuery === "aggregator"
@@ -25,6 +1091,7 @@ router.post("/scrapers/run", authenticate, async (req: Request, res: Response) =
         : undefined;
 
     const result = await runScrapers(source);
+    await logAdminAction(req, "admin.scrapers.run", { source: source || "all", result });
     return res.json(result);
   } catch (error) {
     console.error("Manual scraper run failed", error);
