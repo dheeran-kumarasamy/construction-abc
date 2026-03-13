@@ -7,8 +7,11 @@ const navItems = [
   { label: "Users", path: "/admin/users" },
   { label: "Organizations", path: "/admin/organizations" },
   { label: "Projects", path: "/admin/projects" },
+  { label: "BOQs", path: "/admin/boqs" },
   { label: "Invites", path: "/admin/invites" },
   { label: "Dealers", path: "/admin/dealers" },
+  { label: "Est. Projects", path: "/admin/estimation-projects" },
+  { label: "Estimates", path: "/admin/estimates" },
   { label: "Prices", path: "/admin/prices" },
   { label: "Audit", path: "/admin/audit" },
 ];
