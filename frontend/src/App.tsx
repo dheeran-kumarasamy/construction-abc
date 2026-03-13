@@ -23,6 +23,14 @@ import PriceTrackerPage from "./pages/PriceTracker/PriceTrackerPage";
 import EstimationProjectsPage from "./pages/Estimation/EstimationProjectsPage";
 import BOQWorkspacePage from "./pages/Estimation/BOQWorkspacePage";
 import TemplateEditorPage from "./pages/Estimation/TemplateEditorPage";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminUsersPage from "./pages/admin/AdminUsersPage";
+import AdminOrganizationsPage from "./pages/admin/AdminOrganizationsPage";
+import AdminProjectsPage from "./pages/admin/AdminProjectsPage";
+import AdminInvitesPage from "./pages/admin/AdminInvitesPage";
+import AdminDealersPage from "./pages/admin/AdminDealersPage";
+import AdminPricesPage from "./pages/admin/AdminPricesPage";
+import AdminAuditPage from "./pages/admin/AdminAuditPage";
 
 // Auth
 import LoginPage from "./pages/Login";
@@ -314,6 +322,71 @@ export default function App() {
           <Route path="/accept-invite" element={<AcceptInvite />} />
 
           {/* Architect */}
+          <Route
+            path="/admin"
+            element={
+              <RequireAuth role="admin">
+                <AdminDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <RequireAuth role="admin">
+                <AdminUsersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/organizations"
+            element={
+              <RequireAuth role="admin">
+                <AdminOrganizationsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/projects"
+            element={
+              <RequireAuth role="admin">
+                <AdminProjectsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/invites"
+            element={
+              <RequireAuth role="admin">
+                <AdminInvitesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/dealers"
+            element={
+              <RequireAuth role="admin">
+                <AdminDealersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/prices"
+            element={
+              <RequireAuth role="admin">
+                <AdminPricesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/audit"
+            element={
+              <RequireAuth role="admin">
+                <AdminAuditPage />
+              </RequireAuth>
+            }
+          />
+
           <Route
             path="/architect"
             element={

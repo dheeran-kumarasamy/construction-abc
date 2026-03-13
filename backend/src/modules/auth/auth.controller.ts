@@ -39,7 +39,7 @@ export async function login(req: Request, res: Response) {
       return res.status(503).json({ error: err.message });
     }
 
-    if (err?.message === "Invalid credentials" || err?.message === "User not activated") {
+    if (err?.message === "Invalid credentials" || err?.message === "User not activated" || err?.message === "User account is disabled") {
       return res.status(401).json({ error: err.message });
     }
 
@@ -75,6 +75,9 @@ export async function register(req: Request, res: Response) {
   } catch (err: any) {
     const message = String(err?.message || "Registration failed");
     if (/builder self-registration is disabled/i.test(message)) {
+      return res.status(403).json({ error: message });
+    }
+    if (/admin self-registration is disabled/i.test(message)) {
       return res.status(403).json({ error: message });
     }
     if (/already exists/i.test(message)) {

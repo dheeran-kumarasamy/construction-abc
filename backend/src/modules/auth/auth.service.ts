@@ -41,7 +41,7 @@ function normalizeOrgRole(role?: string | null): "head" | "member" | null {
 export async function registerUser(input: {
   email: string;
   password: string;
-  role: "architect" | "builder" | "dealer";
+  role: "architect" | "builder" | "dealer" | "admin";
   organizationName?: string;
   dealerData?: {
     shopName: string;
@@ -69,6 +69,10 @@ export async function registerUser(input: {
 
   if (!email || !password || !role) {
     throw new Error("email, password and role are required");
+  }
+
+  if (requestedRole === "admin" || role === "admin") {
+    throw new Error("Admin self-registration is disabled. Admin accounts must be provisioned by CLI or seed script");
   }
 
   if (password.length < 6) {
@@ -208,8 +212,8 @@ export async function loginUser(email: string, password: string) {
   }
 
   try {
-    const { rows } = await pool.query(
-    `SELECT u.id, u.password_hash, u.role, u.organization_id, u.org_role
+        const { rows } = await pool.query(
+        `SELECT u.id, u.password_hash, u.role, u.organization_id, u.org_role
      FROM users u
      WHERE LOWER(TRIM(u.email)) = $1`,
     [normalizedEmail]
@@ -231,6 +235,17 @@ export async function loginUser(email: string, password: string) {
     if (!valid) {
       console.warn("Login failed: invalid password", { email: normalizedEmail });
       throw new Error("Invalid credentials");
+    }
+
+    try {
+      await pool.query(
+        `UPDATE users
+         SET last_login_at = now()
+         WHERE id = $1`,
+        [user.id]
+      );
+    } catch {
+      // Ignore if migration 014 has not yet been applied.
     }
 
     const token = jwt.sign(

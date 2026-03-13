@@ -52,6 +52,7 @@ export default function Login() {
       else if (data.role === "builder") navigate("/builder");
       else if (data.role === "client") navigate("/client");
       else if (data.role === "dealer") navigate("/prices");
+      else if (data.role === "admin") navigate("/admin");
       else navigate("/");
     } catch (err: any) {
       setError(err.message || "Something went wrong");
