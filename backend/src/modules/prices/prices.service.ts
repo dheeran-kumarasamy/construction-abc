@@ -433,3 +433,59 @@ export async function getNotifications(userId: string, unreadOnly: boolean) {
 
   return rows;
 }
+
+// Get combined market and dealer prices for a material
+export async function getMaterialPricesWithDealers(materialId: string, districtFilter?: string) {
+  const marketPricesResult = await pool.query(
+    `
+      WITH latest AS (
+        SELECT DISTINCT ON (pr.material_id)
+          pr.price,
+          pr.source,
+          pr.scraped_at,
+          pr.district_id
+        FROM price_records pr
+        WHERE pr.material_id = $1
+        ORDER BY pr.material_id, pr.scraped_at DESC
+      )
+      SELECT 
+        'market' as source_type,
+        d.name as location,
+        d.region,
+        l.price,
+        l.source,
+        l.scraped_at
+      FROM latest l
+      JOIN districts d ON d.id = l.district_id
+      ${districtFilter ? "WHERE d.name = $2 OR d.region = $2" : ""}
+      ORDER BY l.price ASC
+    `,
+    districtFilter ? [materialId, districtFilter] : [materialId]
+  );
+
+  const dealerPricesResult = await pool.query(
+    `
+      SELECT 
+        'dealer' as source_type,
+        d.shop_name as location,
+        d.city as location_detail,
+        dp.price,
+        d.user_id as dealer_id,
+        dp.updated_at as last_updated
+      FROM dealer_prices dp
+      JOIN dealers d ON d.id = dp.dealer_id
+      WHERE dp.material_id = $1 AND dp.is_active = true AND d.is_approved = true
+      ${districtFilter ? "AND (d.city = $2 OR d.state = $2)" : ""}
+      ORDER BY dp.price ASC
+    `,
+    districtFilter ? [materialId, districtFilter] : [materialId]
+  );
+
+  return {
+    marketPrices: marketPricesResult.rows,
+    dealerPrices: dealerPricesResult.rows,
+    combined: (marketPricesResult.rows as any[])
+      .concat((dealerPricesResult.rows as any[]))
+      .sort((a: any, b: any) => (a.price || 0) - (b.price || 0)),
+  };
+}
