@@ -53,9 +53,19 @@ export async function registerUser(input: {
 }) {
   const email = String(input.email || "").trim().toLowerCase();
   const password = String(input.password || "");
-  const role = String(input.role || "").trim().toLowerCase();
+  const requestedRole = String(input.role || "").trim().toLowerCase();
   const organizationName = String(input.organizationName || "").trim();
   const dealerData = input.dealerData;
+  const hasDealerProfile = Boolean(String(dealerData?.shopName || "").trim());
+
+  // Backward-compatible normalization for older clients that may still send role=builder.
+  let role = requestedRole;
+  if (requestedRole === "builder" && hasDealerProfile) {
+    role = "dealer";
+  }
+  if (requestedRole === "builder" && organizationName) {
+    role = "architect";
+  }
 
   if (!email || !password || !role) {
     throw new Error("email, password and role are required");
