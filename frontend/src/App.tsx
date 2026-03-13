@@ -31,6 +31,9 @@ import AdminInvitesPage from "./pages/admin/AdminInvitesPage";
 import AdminDealersPage from "./pages/admin/AdminDealersPage";
 import AdminPricesPage from "./pages/admin/AdminPricesPage";
 import AdminAuditPage from "./pages/admin/AdminAuditPage";
+import AdminBOQsPage from "./pages/admin/AdminBOQsPage";
+import AdminEstimationProjectsPage from "./pages/admin/AdminEstimationProjectsPage";
+import AdminEstimatesPage from "./pages/admin/AdminEstimatesPage";
 
 // Auth
 import LoginPage from "./pages/Login";
@@ -375,6 +378,30 @@ export default function App() {
             element={
               <RequireAuth role="admin">
                 <AdminPricesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/boqs"
+            element={
+              <RequireAuth role="admin">
+                <AdminBOQsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/estimation-projects"
+            element={
+              <RequireAuth role="admin">
+                <AdminEstimationProjectsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/estimates"
+            element={
+              <RequireAuth role="admin">
+                <AdminEstimatesPage />
               </RequireAuth>
             }
           />

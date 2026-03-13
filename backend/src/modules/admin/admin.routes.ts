@@ -669,6 +669,37 @@ router.get("/boqs", async (req: Request, res: Response) => {
   }
 });
 
+router.delete("/boqs/:boqId", async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const boqId = String(req.params.boqId || "");
+    const boqRow = await client.query(
+      `SELECT id, file_path, file_name, project_id FROM boqs WHERE id = $1`,
+      [boqId]
+    );
+    if (!boqRow.rows.length) {
+      return res.status(404).json({ error: "BOQ not found" });
+    }
+    const { file_path, file_name, project_id } = boqRow.rows[0];
+
+    await client.query("BEGIN");
+    await client.query(`UPDATE projects SET boq_id = NULL WHERE boq_id = $1`, [boqId]);
+    await client.query(`DELETE FROM boqs WHERE id = $1`, [boqId]);
+    await client.query("COMMIT");
+
+    try { await unlink(file_path); } catch { /* file already gone or path invalid */ }
+
+    await logAdminAction(req, "admin.boqs.delete", { boqId, fileName: file_name, projectId: project_id });
+    return res.json({ success: true });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Failed to delete BOQ", error);
+    return res.status(500).json({ error: "Failed to delete BOQ" });
+  } finally {
+    client.release();
+  }
+});
+
 router.get("/estimation-projects", async (req: Request, res: Response) => {
   try {
     const { page, pageSize, offset } = parsePagination(req);
@@ -693,6 +724,81 @@ router.get("/estimation-projects", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Failed to list estimation projects", error);
     return res.status(500).json({ error: "Failed to list estimation projects" });
+  }
+});
+
+router.patch("/estimation-projects/:projectId", async (req: Request, res: Response) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const { name, description, status, terrain } = req.body || {};
+
+    const updates: string[] = [];
+    const params: Array<string> = [];
+
+    if (name !== undefined) {
+      params.push(String(name).trim());
+      updates.push(`name = $${params.length}`);
+    }
+    if (description !== undefined) {
+      params.push(String(description).trim());
+      updates.push(`description = $${params.length}`);
+    }
+    if (status !== undefined) {
+      const allowed = ["draft", "in_progress", "completed", "submitted", "estimated"];
+      if (!allowed.includes(String(status))) {
+        return res.status(400).json({ error: `Invalid status. Allowed: ${allowed.join(", ")}` });
+      }
+      params.push(String(status));
+      updates.push(`status = $${params.length}`);
+    }
+    if (terrain !== undefined) {
+      params.push(String(terrain).trim());
+      updates.push(`terrain = $${params.length}`);
+    }
+
+    if (!updates.length) return res.status(400).json({ error: "No fields provided" });
+
+    params.push(projectId);
+    const result = await pool.query(
+      `UPDATE boq_projects SET ${updates.join(", ")} WHERE id = $${params.length} RETURNING id, name, status`,
+      params
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Estimation project not found" });
+
+    await logAdminAction(req, "admin.estimation-projects.update", {
+      projectId,
+      updatedFields: Object.keys(req.body || {}),
+    });
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Failed to update estimation project", error);
+    return res.status(500).json({ error: "Failed to update estimation project" });
+  }
+});
+
+router.delete("/estimation-projects/:projectId", async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const projectId = String(req.params.projectId || "");
+    const check = await client.query(`SELECT id, name FROM boq_projects WHERE id = $1`, [projectId]);
+    if (!check.rows.length) return res.status(404).json({ error: "Estimation project not found" });
+
+    const { name } = check.rows[0];
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM rate_computations WHERE project_id = $1`, [projectId]);
+    await client.query(`DELETE FROM boq_items WHERE project_id = $1`, [projectId]);
+    await client.query(`DELETE FROM boq_sections WHERE project_id = $1`, [projectId]);
+    await client.query(`DELETE FROM boq_projects WHERE id = $1`, [projectId]);
+    await client.query("COMMIT");
+
+    await logAdminAction(req, "admin.estimation-projects.delete", { projectId, name });
+    return res.json({ success: true });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Failed to delete estimation project", error);
+    return res.status(500).json({ error: "Failed to delete estimation project" });
+  } finally {
+    client.release();
   }
 });
 
@@ -722,6 +828,62 @@ router.get("/estimates", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Failed to list estimates", error);
     return res.status(500).json({ error: "Failed to list estimates" });
+  }
+});
+
+router.patch("/estimates/:estimateId", async (req: Request, res: Response) => {
+  try {
+    const estimateId = String(req.params.estimateId || "");
+    const { status } = req.body || {};
+
+    if (!status) return res.status(400).json({ error: "status is required" });
+    const allowed = ["draft", "submitted", "awarded", "rejected"];
+    if (!allowed.includes(String(status))) {
+      return res.status(400).json({ error: `Invalid status. Allowed: ${allowed.join(", ")}` });
+    }
+
+    const result = await pool.query(
+      `UPDATE estimates SET status = $1 WHERE id = $2 RETURNING id, project_id, status`,
+      [status, estimateId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Estimate not found" });
+
+    await logAdminAction(req, "admin.estimates.update", { estimateId, status });
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Failed to update estimate", error);
+    return res.status(500).json({ error: "Failed to update estimate" });
+  }
+});
+
+router.delete("/estimates/:estimateId", async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const estimateId = String(req.params.estimateId || "");
+    const check = await client.query(`SELECT id, project_id FROM estimates WHERE id = $1`, [estimateId]);
+    if (!check.rows.length) return res.status(404).json({ error: "Estimate not found" });
+
+    await client.query("BEGIN");
+    const revIds = await client.query(
+      `SELECT id FROM estimate_revisions WHERE estimate_id = $1`,
+      [estimateId]
+    );
+    const revIdList = revIds.rows.map((r: { id: string }) => r.id);
+    if (revIdList.length) {
+      await client.query(`DELETE FROM awards WHERE estimate_revision_id = ANY($1::uuid[])`, [revIdList]);
+    }
+    await client.query(`DELETE FROM estimate_revisions WHERE estimate_id = $1`, [estimateId]);
+    await client.query(`DELETE FROM estimates WHERE id = $1`, [estimateId]);
+    await client.query("COMMIT");
+
+    await logAdminAction(req, "admin.estimates.delete", { estimateId });
+    return res.json({ success: true });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Failed to delete estimate", error);
+    return res.status(500).json({ error: "Failed to delete estimate" });
+  } finally {
+    client.release();
   }
 });
 
