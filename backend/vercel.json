@@ -3,6 +3,11 @@
   "builds": [
     { "src": "api/index.ts", "use": "@vercel/node" }
   ],
+  "functions": {
+    "api/index.ts": {
+      "excludeFiles": "{data/**,uploads/**,dist/**,backup.dump,*.dump,.env,.env.*,**/Code Citations.md}"
+    }
+  },
   "rewrites": [
     { "source": "/(.*)", "destination": "/api/index.ts" }
   ],
