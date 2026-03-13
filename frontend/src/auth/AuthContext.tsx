@@ -3,7 +3,7 @@ import type { ReactNode, JSX } from "react";
 import { Navigate } from "react-router-dom";
 
 // --- Types ---
-export type Role = "architect" | "builder" | "client";
+export type Role = "architect" | "builder" | "client" | "dealer";
 export type OrgRole = "head" | "member";
 
 interface User {

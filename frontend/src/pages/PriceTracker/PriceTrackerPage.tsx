@@ -14,14 +14,17 @@ import {
   fetchBookmarks,
   fetchCategories,
   fetchCompare,
+  fetchDealerOwnPrices,
   fetchDistrictPrices,
   fetchDistricts,
   fetchHistory,
   removeBookmark,
+  setDealerMaterialPrice,
 } from "./priceTracker.api";
 import type {
   Bookmark,
   CompareResponse,
+  DealerOwnPrice,
   District,
   MaterialCategory,
   PriceAlert,
@@ -29,8 +32,12 @@ import type {
   PriceRecord,
 } from "./types";
 import "./priceTracker.css";
+import { useAuth } from "../../auth/AuthContext";
 
 export default function PriceTrackerPage() {
+  const { user } = useAuth();
+  const isDealer = user?.role === "dealer";
+
   const [districts, setDistricts] = useState<District[]>([]);
   const [categories, setCategories] = useState<MaterialCategory[]>([]);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
@@ -47,6 +54,16 @@ export default function PriceTrackerPage() {
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [alertDialogOpen, setAlertDialogOpen] = useState(false);
 
+  const [dealerMaterialId, setDealerMaterialId] = useState("");
+  const [dealerPrice, setDealerPrice] = useState("");
+  const [dealerUom, setDealerUom] = useState("");
+  const [dealerMinimumQty, setDealerMinimumQty] = useState("1");
+  const [dealerSpecs, setDealerSpecs] = useState("");
+  const [dealerSaving, setDealerSaving] = useState(false);
+  const [dealerError, setDealerError] = useState("");
+  const [dealerSuccess, setDealerSuccess] = useState("");
+  const [dealerOwnPrices, setDealerOwnPrices] = useState<DealerOwnPrice[]>([]);
+
   const selectedDistrict = useMemo(
     () => districts.find((district) => district.id === selectedDistrictId) || null,
     [districts, selectedDistrictId]
@@ -58,6 +75,10 @@ export default function PriceTrackerPage() {
   );
 
   const bookmarkedDistrictIds = useMemo(() => new Set(bookmarks.map((item) => item.districtId)), [bookmarks]);
+  const selectedDealerMaterial = useMemo(
+    () => prices.find((p) => p.materialId === dealerMaterialId) || null,
+    [prices, dealerMaterialId]
+  );
 
   useEffect(() => {
     (async () => {
@@ -104,6 +125,24 @@ export default function PriceTrackerPage() {
       setCompareData(data);
     })().catch(console.error);
   }, [compareMode, compareDistrictIds, activeCategory?.name]);
+
+  useEffect(() => {
+    if (!isDealer) return;
+
+    fetchDealerOwnPrices()
+      .then(setDealerOwnPrices)
+      .catch((error) => setDealerError(error.message || "Failed to load your prices"));
+  }, [isDealer]);
+
+  useEffect(() => {
+    if (!isDealer || !selectedDistrict || compareMode || !prices.length) return;
+
+    const exists = prices.some((p) => p.materialId === dealerMaterialId);
+    if (!dealerMaterialId || !exists) {
+      setDealerMaterialId(prices[0].materialId);
+      setDealerUom(prices[0].unit || "");
+    }
+  }, [isDealer, selectedDistrict, compareMode, prices, dealerMaterialId]);
 
   const onDistrictClick = (districtId: string) => {
     setSelectedDistrictId(districtId);
@@ -158,10 +197,202 @@ export default function PriceTrackerPage() {
     setAlerts((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const saveDealerPrice = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    setDealerError("");
+    setDealerSuccess("");
+
+    if (!selectedDistrictId) {
+      setDealerError("Please select a district first.");
+      return;
+    }
+
+    if (compareMode) {
+      setDealerError("Turn off compare mode and select one district to enter dealer prices.");
+      return;
+    }
+
+    if (!dealerMaterialId) {
+      setDealerError("Please choose a product/material.");
+      return;
+    }
+
+    if (!dealerPrice || Number(dealerPrice) <= 0) {
+      setDealerError("Please enter a valid price.");
+      return;
+    }
+
+    if (!dealerUom.trim()) {
+      setDealerError("UOM is required.");
+      return;
+    }
+
+    setDealerSaving(true);
+    try {
+      await setDealerMaterialPrice({
+        materialId: dealerMaterialId,
+        price: Number(dealerPrice),
+        minimumQuantity: Number(dealerMinimumQty) || 1,
+        unitOfSale: dealerUom.trim(),
+        notes: dealerSpecs.trim() || undefined,
+      });
+
+      setDealerSuccess("Price saved successfully.");
+      setDealerPrice("");
+      setDealerSpecs("");
+      const updated = await fetchDealerOwnPrices();
+      setDealerOwnPrices(updated);
+    } catch (error: any) {
+      setDealerError(error.message || "Failed to save price.");
+    } finally {
+      setDealerSaving(false);
+    }
+  };
+
   return (
     <div className="pt-page page-container">
       <AddToHomeScreenBanner />
       <h1>TN Construction Material Price Tracker</h1>
+
+      {isDealer ? (
+        <section className="pt-card pt-dealer-form-wrap">
+          <h2 className="pt-dealer-title">Dealer Product Pricing</h2>
+          <p className="pt-dealer-subtitle">
+            Select a district on the map. Then enter your own price for products shown in that district. UOM defaults from district rate and can be changed.
+          </p>
+
+          <div className="pt-map-hint" style={{ marginBottom: 10 }}>
+            {compareMode
+              ? "Compare mode is ON. Turn it OFF to enter dealer prices for a single district."
+              : selectedDistrict
+              ? `Selected district: ${selectedDistrict.name}`
+              : "Select a district to start entering prices."}
+          </div>
+
+          <form className="pt-dealer-form" onSubmit={saveDealerPrice}>
+            <label>
+              Product / Material (from selected district rates)
+              <select
+                value={dealerMaterialId}
+                onChange={(e) => {
+                  const materialId = e.target.value;
+                  setDealerMaterialId(materialId);
+                  const picked = prices.find((p) => p.materialId === materialId);
+                  if (picked) {
+                    setDealerUom(picked.unit || "");
+                  }
+                }}
+                required
+                disabled={!selectedDistrict || compareMode || prices.length === 0}
+              >
+                {prices.map((material) => (
+                  <option key={material.materialId} value={material.materialId}>
+                    {material.materialName} ({material.unit})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Price
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={dealerPrice}
+                onChange={(e) => setDealerPrice(e.target.value)}
+                placeholder="e.g. 420.50"
+                disabled={!selectedDistrict || compareMode}
+                required
+              />
+            </label>
+
+            <label>
+              UOM (required)
+              <input
+                type="text"
+                value={dealerUom}
+                onChange={(e) => setDealerUom(e.target.value)}
+                placeholder="e.g. bag, ton, kg, piece"
+                disabled={!selectedDistrict || compareMode}
+                required
+              />
+            </label>
+
+            <label>
+              Minimum Quantity
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={dealerMinimumQty}
+                onChange={(e) => setDealerMinimumQty(e.target.value)}
+                disabled={!selectedDistrict || compareMode}
+              />
+            </label>
+
+            <label className="pt-dealer-spec-label">
+              Product Specification (free text)
+              <textarea
+                value={dealerSpecs}
+                onChange={(e) => setDealerSpecs(e.target.value)}
+                rows={3}
+                placeholder="Example: Ultratech OPC 53 Grade, fresh stock, moisture-resistant packing"
+                disabled={!selectedDistrict || compareMode}
+              />
+            </label>
+
+            {selectedDealerMaterial ? (
+              <div className="pt-map-hint" style={{ gridColumn: "1 / -1" }}>
+                District reference rate for {selectedDealerMaterial.materialName}: ₹
+                {selectedDealerMaterial.price ? selectedDealerMaterial.price.toFixed(2) : "-"} per {selectedDealerMaterial.unit}
+              </div>
+            ) : null}
+
+            {dealerError ? <div className="pt-dealer-error">{dealerError}</div> : null}
+            {dealerSuccess ? <div className="pt-dealer-success">{dealerSuccess}</div> : null}
+
+            <button
+              type="submit"
+              className="pt-dealer-save-btn"
+              disabled={dealerSaving || !selectedDistrict || compareMode || prices.length === 0}
+            >
+              {dealerSaving ? "Saving..." : "Save Product Price"}
+            </button>
+          </form>
+
+          <div className="pt-dealer-price-list">
+            <h3>Your Saved Prices</h3>
+            {dealerOwnPrices.length === 0 ? (
+              <p className="pt-map-hint">No product prices saved yet.</p>
+            ) : (
+              <div className="pt-dealer-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>Price</th>
+                      <th>UOM</th>
+                      <th>Specification</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dealerOwnPrices.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.materialName || row.materialId}</td>
+                        <td>{row.price.toFixed(2)}</td>
+                        <td>{row.unitOfSale || "-"}</td>
+                        <td>{row.notes || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
 
       <CategoryTabs
         categories={categories}
