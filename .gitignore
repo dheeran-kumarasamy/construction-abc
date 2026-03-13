@@ -26,3 +26,10 @@ dist-ssr
 
 # Local environment secrets
 backend/.env
+
+# Backend deployment/runtime artifacts
+backend/data/
+backend/uploads/
+backend/dist/
+backend/backup.dump
+backend/*.dump
