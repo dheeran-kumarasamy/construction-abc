@@ -9,9 +9,12 @@ export default function Login() {
   const { login } = useAuth();
 
   const [mode, setMode] = useState<"login" | "register" | "reset">("login");
+  const [registerRole, setRegisterRole] = useState<"architect" | "dealer">("architect");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [organizationName, setOrganizationName] = useState("");
+  const [shopName, setShopName] = useState("");
+  const [city, setCity] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -48,6 +51,7 @@ export default function Login() {
       if (data.role === "architect") navigate("/architect");
       else if (data.role === "builder") navigate("/builder");
       else if (data.role === "client") navigate("/client");
+      else if (data.role === "dealer") navigate("/prices");
       else navigate("/");
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -65,13 +69,20 @@ export default function Login() {
     try {
       const normalizedEmail = email.trim().toLowerCase();
 
-      const payload: Record<string, string> = {
+      const payload: Record<string, any> = {
         email: normalizedEmail,
         password,
-        role: "architect",
+        role: registerRole,
       };
 
-      payload.organizationName = organizationName.trim();
+      if (registerRole === "architect") {
+        payload.organizationName = organizationName.trim();
+      } else {
+        payload.dealerData = {
+          shopName: shopName.trim(),
+          city: city.trim() || undefined,
+        };
+      }
 
       const res = await fetch(apiUrl("/auth/register"), {
         method: "POST",
@@ -93,6 +104,7 @@ export default function Login() {
 
       if (data.role === "architect") navigate("/architect");
       else if (data.role === "builder") navigate("/builder");
+      else if (data.role === "dealer") navigate("/prices");
       else navigate("/");
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -191,14 +203,53 @@ export default function Login() {
         />
 
         {mode === "register" && (
-          <input
-            style={pageStyles.input}
-            type="text"
-            placeholder="Organization Name"
-            value={organizationName}
-            onChange={(e) => setOrganizationName(e.target.value)}
-            required
-          />
+          <>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button
+                type="button"
+                style={registerRole === "architect" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
+                onClick={() => setRegisterRole("architect")}
+              >
+                Architect
+              </button>
+              <button
+                type="button"
+                style={registerRole === "dealer" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
+                onClick={() => setRegisterRole("dealer")}
+              >
+                Dealer
+              </button>
+            </div>
+
+            {registerRole === "architect" ? (
+              <input
+                style={pageStyles.input}
+                type="text"
+                placeholder="Organization Name"
+                value={organizationName}
+                onChange={(e) => setOrganizationName(e.target.value)}
+                required
+              />
+            ) : (
+              <>
+                <input
+                  style={pageStyles.input}
+                  type="text"
+                  placeholder="Shop Name"
+                  value={shopName}
+                  onChange={(e) => setShopName(e.target.value)}
+                  required
+                />
+                <input
+                  style={pageStyles.input}
+                  type="text"
+                  placeholder="City (optional)"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                />
+              </>
+            )}
+          </>
         )}
 
         <input

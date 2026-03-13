@@ -2,6 +2,8 @@ import { apiUrl } from "../../services/api";
 import type {
   Bookmark,
   CompareResponse,
+  DealerOwnPrice,
+  DealerPricePayload,
   District,
   MaterialCategory,
   PriceAlert,
@@ -128,4 +130,41 @@ export async function deleteAlert(alertId: string) {
   });
 
   if (!res.ok && res.status !== 204) throw new Error("Failed to delete alert");
+}
+
+export async function fetchDealerOwnPrices(): Promise<DealerOwnPrice[]> {
+  const res = await fetch(apiUrl("/api/prices/dealers/prices"), {
+    headers: authHeaders(),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to fetch dealer prices");
+  }
+
+  const rows = await res.json();
+  return rows.map((row: any) => ({
+    id: row.id,
+    materialId: row.materialId,
+    materialName: row.materialName,
+    categoryName: row.categoryName,
+    price: Number(row.price),
+    minimumQuantity: Number(row.minimumQuantity || 1),
+    unitOfSale: row.unitOfSale || null,
+    notes: row.notes || null,
+    updatedAt: row.updatedAt,
+  }));
+}
+
+export async function setDealerMaterialPrice(payload: DealerPricePayload): Promise<void> {
+  const res = await fetch(apiUrl("/api/prices/dealers/prices/set"), {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to save dealer price");
+  }
 }

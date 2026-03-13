@@ -39,6 +39,100 @@
   margin-bottom: 10px;
 }
 
+.pt-dealer-form-wrap {
+  margin-bottom: 14px;
+}
+
+.pt-dealer-title {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.pt-dealer-subtitle {
+  margin: 0 0 10px;
+  color: #334155;
+  font-size: 13px;
+}
+
+.pt-dealer-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.pt-dealer-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.pt-dealer-form select,
+.pt-dealer-form input,
+.pt-dealer-form textarea {
+  min-height: 40px;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.pt-dealer-spec-label {
+  grid-column: 1 / -1;
+}
+
+.pt-dealer-error {
+  grid-column: 1 / -1;
+  color: #b91c1c;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.pt-dealer-success {
+  grid-column: 1 / -1;
+  color: #0f766e;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.pt-dealer-save-btn {
+  grid-column: 1 / -1;
+  min-height: 42px;
+  border: none;
+  border-radius: 10px;
+  background: #0f766e;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pt-dealer-price-list {
+  margin-top: 14px;
+}
+
+.pt-dealer-price-list h3 {
+  margin: 0 0 8px;
+}
+
+.pt-dealer-table-wrap {
+  overflow-x: auto;
+}
+
+.pt-dealer-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pt-dealer-table-wrap th,
+.pt-dealer-table-wrap td {
+  border: 1px solid #e2e8f0;
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
 .pt-main-grid {
   display: grid;
   grid-template-columns: minmax(320px, 460px) 1fr;
@@ -54,15 +148,72 @@
   padding: 12px;
 }
 
-.pt-map {
+/* ── Leaflet map container ── */
+.pt-leaflet-map {
   width: 100%;
-  height: auto;
-  min-height: 400px;
+  height: 480px;
+  border-radius: 10px;
+  z-index: 1;            /* keep below modals */
+}
+
+.pt-leaflet-map .leaflet-control-zoom a {
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+  font-size: 16px;
+}
+
+/* ── District tooltip ── */
+.pt-district-tooltip {
+  background: #fff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  padding: 6px 10px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,.12) !important;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.pt-district-tooltip::before {
+  border-top-color: #cbd5e1 !important;
+}
+
+.pt-tooltip-name {
+  font-weight: 600;
+  color: #0f172a;
+  display: block;
+}
+
+.pt-tooltip-badge {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.pt-tooltip-badge.selected {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+.pt-tooltip-badge.compared {
+  background: #dbeafe;
+  color: #2563eb;
+}
+.pt-tooltip-badge.bookmarked {
+  background: #fef9c3;
+  color: #a16207;
+}
+
+/* ── Map hover pulse animation on CircleMarkers ── */
+.leaflet-interactive:hover {
+  filter: brightness(1.15);
 }
 
 .pt-map-hint {
   font-size: 12px;
   color: #475569;
+  margin-top: 8px;
 }
 
 .pt-panel-header {
@@ -129,11 +280,15 @@
 }
 
 @media (max-width: 768px) {
+  .pt-dealer-form {
+    grid-template-columns: 1fr;
+  }
+
   .pt-main-grid {
     grid-template-columns: 1fr;
   }
 
-  .pt-map {
-    min-height: 330px;
+  .pt-leaflet-map {
+    height: 350px;
   }
 }

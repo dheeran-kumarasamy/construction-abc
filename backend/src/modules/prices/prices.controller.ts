@@ -11,6 +11,7 @@ import {
   getBookmarks,
   getDistrictCategoryPrices,
   getNotifications,
+  getMaterialPricesWithDealers,
   getPriceHistory,
   updateAlert,
 } from "./prices.service";
@@ -280,5 +281,26 @@ export async function listNotifications(req: Request, res: Response) {
   } catch (error) {
     console.error("List notifications error:", error);
     return res.status(500).json({ error: "Failed to fetch notifications" });
+  }
+}
+
+export async function getMaterialPricesComparison(req: Request, res: Response) {
+  try {
+    const materialId = asString(req.params.materialId);
+    const location = asString((req.query.location as any) || "");
+
+    if (!materialId) {
+      return res.status(400).json({ error: "materialId is required" });
+    }
+
+    const data = await getMaterialPricesWithDealers(materialId, location || undefined);
+    return res.json(data);
+  } catch (error) {
+    if (isAnyMissingRelationError(error)) {
+      return res.status(503).json({ error: "Price tracker schema is missing. Run database migrations." });
+    }
+
+    console.error("Get material prices comparison error:", error);
+    return res.status(500).json({ error: "Failed to fetch price comparison" });
   }
 }
