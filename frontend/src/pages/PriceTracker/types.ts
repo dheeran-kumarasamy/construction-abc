@@ -59,3 +59,23 @@ export interface CompareResponse {
   materials: Array<{ materialId: string; materialName: string; unit: string }>;
   districts: Record<string, Record<string, number | null>>;
 }
+
+export interface DealerOwnPrice {
+  id: string;
+  materialId: string;
+  materialName?: string;
+  categoryName?: string;
+  price: number;
+  minimumQuantity: number;
+  unitOfSale: string | null;
+  notes: string | null;
+  updatedAt: string;
+}
+
+export interface DealerPricePayload {
+  materialId: string;
+  price: number;
+  minimumQuantity?: number;
+  unitOfSale: string;
+  notes?: string;
+}

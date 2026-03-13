@@ -41,13 +41,21 @@ function normalizeOrgRole(role?: string | null): "head" | "member" | null {
 export async function registerUser(input: {
   email: string;
   password: string;
-  role: "architect" | "builder";
+  role: "architect" | "builder" | "dealer";
   organizationName?: string;
+  dealerData?: {
+    shopName: string;
+    location?: string;
+    contactNumber?: string;
+    city?: string;
+    state?: string;
+  };
 }) {
   const email = String(input.email || "").trim().toLowerCase();
   const password = String(input.password || "");
   const role = String(input.role || "").trim().toLowerCase();
   const organizationName = String(input.organizationName || "").trim();
+  const dealerData = input.dealerData;
 
   if (!email || !password || !role) {
     throw new Error("email, password and role are required");
@@ -57,12 +65,20 @@ export async function registerUser(input: {
     throw new Error("Password must be at least 6 characters");
   }
 
-  if (role !== "architect") {
+  if (role === "builder") {
     throw new Error("Builder self-registration is disabled. Builder accounts are created via invite links only");
   }
 
-  if (!organizationName) {
+  if (role === "architect" && !organizationName) {
     throw new Error("organizationName is required for architect registration");
+  }
+
+  if (role === "dealer" && !dealerData?.shopName) {
+    throw new Error("shopName is required for dealer registration");
+  }
+
+  if (role !== "architect" && role !== "dealer") {
+    throw new Error("Invalid role. Supported roles are: architect, dealer");
   }
 
   const existing = await pool.query(
@@ -76,41 +92,73 @@ export async function registerUser(input: {
   try {
     await client.query("BEGIN");
 
-    const orgRes = await client.query(
-      `INSERT INTO organizations (name, type)
-       VALUES ($1, 'architect')
-       RETURNING id`,
-      [organizationName]
-    );
+    let organizationId: string | null = null;
+    let orgRole: string | null = null;
+    let userRes: any;
 
-    const organizationId = orgRes.rows[0].id;
-    const orgRole: "head" = "head";
+    if (role === "architect") {
+      const orgRes = await client.query(
+        `INSERT INTO organizations (name, type)
+         VALUES ($1, 'architect')
+         RETURNING id`,
+        [organizationName]
+      );
 
-    let userRes;
+      organizationId = orgRes.rows[0].id;
+      orgRole = "head";
 
-    if (existing.rows.length > 0) {
-      const existingRole = String(existing.rows[0].role || "").toLowerCase();
+      if (existing.rows.length > 0) {
+        const existingRole = String(existing.rows[0].role || "").toLowerCase();
 
-      if (existingRole !== "builder") {
+        if (existingRole !== "builder") {
+          throw new Error("User already exists with this email");
+        }
+
+        userRes = await client.query(
+          `UPDATE users
+           SET password_hash = $1,
+               role = 'architect',
+               organization_id = $2,
+               org_role = $3
+           WHERE id = $4
+           RETURNING id, role, organization_id, org_role`,
+          [passwordHash, organizationId, orgRole, existing.rows[0].id]
+        );
+      } else {
+        userRes = await client.query(
+          `INSERT INTO users (email, password_hash, role, organization_id, org_role)
+           VALUES ($1, $2, 'architect', $3, $4)
+           RETURNING id, role, organization_id, org_role`,
+          [email, passwordHash, organizationId, orgRole]
+        );
+      }
+    } else if (role === "dealer") {
+      if (existing.rows.length > 0) {
         throw new Error("User already exists with this email");
       }
 
       userRes = await client.query(
-        `UPDATE users
-         SET password_hash = $1,
-             role = 'architect',
-             organization_id = $2,
-             org_role = $3
-         WHERE id = $4
-         RETURNING id, role, organization_id, org_role`,
-        [passwordHash, organizationId, orgRole, existing.rows[0].id]
+        `INSERT INTO users (email, password_hash, role)
+         VALUES ($1, $2, 'dealer')
+         RETURNING id, role`,
+        [email, passwordHash]
       );
-    } else {
-      userRes = await client.query(
-        `INSERT INTO users (email, password_hash, role, organization_id, org_role)
-         VALUES ($1, $2, 'architect', $3, $4)
-         RETURNING id, role, organization_id, org_role`,
-        [email, passwordHash, organizationId, orgRole]
+
+      const userId = userRes.rows[0].id;
+
+      // Create dealer profile
+      await client.query(
+        `INSERT INTO dealers (user_id, shop_name, email, location, contact_number, city, state)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          userId,
+          dealerData!.shopName,
+          email,
+          dealerData?.location || null,
+          dealerData?.contactNumber || null,
+          dealerData?.city || null,
+          dealerData?.state || null,
+        ]
       );
     }
 
@@ -121,8 +169,8 @@ export async function registerUser(input: {
       {
         userId: user.id,
         role: user.role,
-        organizationId: user.organization_id,
-        orgRole: user.org_role,
+        organizationId: user.organization_id || null,
+        orgRole: user.org_role || null,
       },
       JWT_SECRET,
       { expiresIn: "7d" }
@@ -131,8 +179,8 @@ export async function registerUser(input: {
     return {
       token,
       role: user.role,
-      organizationId: user.organization_id,
-      orgRole: user.org_role,
+      organizationId: user.organization_id || null,
+      orgRole: user.org_role || null,
     };
   } catch (err) {
     await client.query("ROLLBACK");
