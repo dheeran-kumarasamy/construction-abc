@@ -1,0 +1,8 @@
+data/**
+uploads/**
+dist/**
+backup.dump
+*.dump
+.env
+.env.*
+**/Code Citations.md
