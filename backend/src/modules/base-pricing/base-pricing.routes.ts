@@ -9,15 +9,12 @@ import {
 } from "./base-pricing.controller";
 
 const router = Router();
+const uploadRoot = process.env.UPLOAD_ROOT || path.join(process.cwd(), "uploads");
 
 // Configure multer storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Use /tmp for serverless (Vercel), uploads for local
-    const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
-    const uploadPath = isProduction 
-      ? path.join("/tmp", "base-pricing")
-      : path.join(process.cwd(), "uploads", "base-pricing");
+    const uploadPath = path.join(uploadRoot, "base-pricing");
     
     // Ensure directory exists
     fs.mkdirSync(uploadPath, { recursive: true });

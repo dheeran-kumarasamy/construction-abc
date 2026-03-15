@@ -1,7 +1,12 @@
 import { Pool } from "pg";
 
 const isProduction = process.env.NODE_ENV === "production";
-const isVercelRuntime = Boolean(process.env.VERCEL);
+const isRailwayRuntime = Boolean(
+  process.env.RAILWAY_ENVIRONMENT_ID ||
+  process.env.RAILWAY_PROJECT_ID ||
+  process.env.RAILWAY_SERVICE_ID
+);
+const isHostedRuntime = isProduction || isRailwayRuntime;
 let schemaHealthCheckStarted = false;
 
 function normalizeDatabaseUrl(url: string): string {
@@ -32,7 +37,7 @@ function resolveDatabaseUrl(): string {
     return normalizeDatabaseUrl(envUrl);
   }
 
-  if (isProduction || isVercelRuntime) {
+  if (isHostedRuntime) {
     throw new Error(
       "Database connection URL is required in production/runtime environment. Set DATABASE_URL or POSTGRES_URL."
     );
@@ -54,7 +59,7 @@ function isLocalDatabaseUrl(url: string): boolean {
 }
 
 function resolveSslOption(url: string) {
-  if (!isProduction && !isVercelRuntime) {
+  if (!isHostedRuntime) {
     return undefined;
   }
 
@@ -77,9 +82,9 @@ function resolveSslOption(url: string) {
   return { rejectUnauthorized: false };
 }
 
-if ((isProduction || isVercelRuntime) && isLocalDatabaseUrl(databaseUrl)) {
+if (isHostedRuntime && isLocalDatabaseUrl(databaseUrl)) {
   console.warn(
-    "[DB Config] Database URL points to localhost in runtime environment. Set DATABASE_URL or POSTGRES_URL in Vercel project settings."
+    "[DB Config] Database URL points to localhost in runtime environment. Set DATABASE_URL or POSTGRES_URL in Railway service variables."
   );
 }
 
