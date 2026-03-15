@@ -905,10 +905,33 @@ function toPercentNumber(value: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function normalizeBuildingClass(value: unknown): string {
+  const raw = String(value || "").trim().toUpperCase();
+  const classAliasMap: Record<string, string> = {
+    A1: "I-A",
+    A2: "I-B",
+    B1: "II-A",
+    B2: "II-B",
+    C: "III-A",
+  };
+  return classAliasMap[raw] || raw;
+}
+
+function normalizeRoofType(value: unknown): string {
+  const raw = String(value || "").trim();
+  const roofAliasMap: Record<string, string> = {
+    rcc: "RCC Slab",
+    tiled: "Mangalore Tile",
+    "madras terrace": "Mangalore Tile",
+  };
+  const mapped = roofAliasMap[raw.toLowerCase()];
+  return mapped || raw;
+}
+
 export async function getFingerInAirEstimate(input: FingerInAirInput) {
   const defaults = {
-    building_class: "A1",
-    roof_type: "RCC",
+    building_class: "I-A",
+    roof_type: "RCC Slab",
     plinth_area_sqm: 111.48, // ~1200 sq.ft
     num_floors: 2,
     location_zone: "normal" as const,
@@ -920,8 +943,8 @@ export async function getFingerInAirEstimate(input: FingerInAirInput) {
   };
 
   const normalized = {
-    building_class: String(input.building_class || defaults.building_class).toUpperCase(),
-    roof_type: String(input.roof_type || defaults.roof_type),
+    building_class: normalizeBuildingClass(input.building_class || defaults.building_class),
+    roof_type: normalizeRoofType(input.roof_type || defaults.roof_type),
     plinth_area_sqm: toPositiveNumber(input.plinth_area_sqm, defaults.plinth_area_sqm),
     num_floors: Math.max(1, Math.round(toPositiveNumber(input.num_floors, defaults.num_floors))),
     location_zone: ["normal", "urban", "metro", "rural"].includes(String(input.location_zone || ""))
@@ -940,14 +963,44 @@ export async function getFingerInAirEstimate(input: FingerInAirInput) {
     escalation_percent: toPercentNumber(input.escalation_percent, defaults.escalation_percent),
   };
 
-  const { rows: plinthRates } = await pool.query(
-    `SELECT *
-     FROM plinth_area_rates
-     WHERE class_code = $1
-       AND ($2::text IS NULL OR roof_type ILIKE $2)
-     ORDER BY CASE WHEN floor = 'ground' THEN 0 ELSE 1 END, floor`,
-    [normalized.building_class, normalized.roof_type || null]
-  );
+  const loadPlinthRates = async (classCode: string, roofType?: string | null) => {
+    const { rows } = await pool.query(
+      `SELECT *
+       FROM plinth_area_rates
+       WHERE class_code = $1
+         AND ($2::text IS NULL OR roof_type ILIKE $2)
+       ORDER BY
+         CASE
+           WHEN floor ILIKE '%ground%' THEN 0
+           WHEN floor ILIKE '%first%' OR floor ILIKE '%upper%' THEN 1
+           ELSE 2
+         END,
+         floor`,
+      [classCode, roofType || null]
+    );
+    return rows;
+  };
+
+  let plinthRates = await loadPlinthRates(normalized.building_class, normalized.roof_type);
+  let appliedClass = normalized.building_class;
+  let appliedRoof = normalized.roof_type;
+
+  if (!plinthRates.length) {
+    plinthRates = await loadPlinthRates(normalized.building_class, null);
+    appliedRoof = plinthRates.length ? "ANY" : appliedRoof;
+  }
+
+  if (!plinthRates.length) {
+    plinthRates = await loadPlinthRates(defaults.building_class, defaults.roof_type);
+    appliedClass = plinthRates.length ? defaults.building_class : appliedClass;
+    appliedRoof = plinthRates.length ? defaults.roof_type : appliedRoof;
+  }
+
+  if (!plinthRates.length) {
+    plinthRates = await loadPlinthRates(defaults.building_class, null);
+    appliedClass = plinthRates.length ? defaults.building_class : appliedClass;
+    appliedRoof = plinthRates.length ? "ANY" : appliedRoof;
+  }
 
   if (!plinthRates.length) {
     return {
@@ -961,9 +1014,15 @@ export async function getFingerInAirEstimate(input: FingerInAirInput) {
     };
   }
 
-  const groundRate = plinthRates.find((r: any) => r.floor === "ground") || plinthRates[0];
+  const groundRate =
+    plinthRates.find((r: any) => String(r.floor || "").toLowerCase().includes("ground")) ||
+    plinthRates[0];
   const upperRate =
-    plinthRates.find((r: any) => r.floor === "upper") ||
+    plinthRates.find(
+      (r: any) =>
+        String(r.floor || "").toLowerCase().includes("upper") ||
+        String(r.floor || "").toLowerCase().includes("first")
+    ) ||
     plinthRates.find((r: any) => r.additional_floor_rate != null) ||
     groundRate;
 
@@ -1008,13 +1067,18 @@ export async function getFingerInAirEstimate(input: FingerInAirInput) {
   const perSqm = totalAreaSqm > 0 ? total / totalAreaSqm : 0;
   const perSqft = totalAreaSqft > 0 ? total / totalAreaSqft : 0;
 
+  const usedFallback = appliedClass !== normalized.building_class || appliedRoof !== normalized.roof_type;
+  const roofLabel = appliedRoof === "ANY" ? "any available roof type" : appliedRoof;
+
   return {
     status: "ok",
-    message: "Finger-in-air estimate computed using PWD plinth area norms",
+    message: usedFallback
+      ? `Quick estimate computed using fallback PWD plinth rates (${appliedClass}, ${roofLabel})`
+      : "Quick estimate computed using PWD plinth area norms",
     inputs: normalized,
     applied_pwd_reference: {
-      building_class: normalized.building_class,
-      roof_type: normalized.roof_type,
+      building_class: appliedClass,
+      roof_type: appliedRoof,
       ground_floor_rate_per_sqm: Math.round(groundRatePerSqm * 100) / 100,
       upper_floor_rate_per_sqm: Math.round(upperRatePerSqm * 100) / 100,
     },

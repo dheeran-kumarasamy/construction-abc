@@ -1,7 +1,10 @@
 {
+  "variables": {
+    "NIXPACKS_NODE_VERSION": "20.19.0"
+  },
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm ci --include=dev && npm run build"
+    "buildCommand": "rm -rf node_modules/.cache || true; npm ci --include=dev --cache /tmp/npm-cache && npm run build"
   },
   "deploy": {
     "startCommand": "npm run start",
