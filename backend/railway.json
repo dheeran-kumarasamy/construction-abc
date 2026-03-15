@@ -4,7 +4,7 @@
   },
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "rm -rf node_modules/.cache || true; npm ci --include=dev --cache /tmp/npm-cache && npm run build"
+    "buildCommand": "npm run build"
   },
   "deploy": {
     "startCommand": "npm run start",
