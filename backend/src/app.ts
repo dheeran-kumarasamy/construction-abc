@@ -31,11 +31,12 @@ const corsOptions: CorsOptions = {
     }
 
     const isLocalOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
-    const isVercelFrontendVercelApp =
+    const isHostedFrontendOrigin =
       /^https:\/\/.*-frontend(?:-.*)?\.vercel\.app$/i.test(origin);
+    const isRailwayFrontendOrigin = /^https:\/\/.*\.up\.railway\.app$/i.test(origin);
     const isConfiguredOrigin = configuredOrigins.includes(origin);
 
-    if (isLocalOrigin || isVercelFrontendVercelApp || isConfiguredOrigin) {
+    if (isLocalOrigin || isHostedFrontendOrigin || isRailwayFrontendOrigin || isConfiguredOrigin) {
       callback(null, true);
       return;
     }

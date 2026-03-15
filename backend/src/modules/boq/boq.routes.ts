@@ -8,6 +8,7 @@ import { pool } from "../../config/db";
 
 const router = Router();
 const maxUploadSizeBytes = Number(process.env.BOQ_UPLOAD_MAX_BYTES || 3 * 1024 * 1024);
+const uploadRoot = process.env.UPLOAD_ROOT || path.join(process.cwd(), "uploads");
 
 // Configure multer for file upload
 const diskStorage = multer.diskStorage({
@@ -20,11 +21,7 @@ const diskStorage = multer.diskStorage({
       return cb(new Error("projectId is required for BOQ upload"), "");
     }
     
-    // Use /tmp for serverless (Vercel), uploads for local
-    const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
-    const uploadPath = isProduction
-      ? path.join("/tmp", "boq", projectId)
-      : path.join("uploads", "boq", projectId);
+    const uploadPath = path.join(uploadRoot, "boq", projectId);
     
     import("fs").then(fs => {
       fs.mkdirSync(uploadPath, { recursive: true });
