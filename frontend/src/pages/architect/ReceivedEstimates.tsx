@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import { apiUrl } from "../../services/api";
@@ -23,8 +24,10 @@ interface Project {
 }
 
 export default function ReceivedEstimates() {
+  const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
+  const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
   const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
   const [historyData, setHistoryData] = useState<any | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -52,7 +55,13 @@ export default function ReceivedEstimates() {
       if (!res.ok) throw new Error("Failed to load projects");
       const data = await res.json();
       setProjects(data);
-      if (data.length > 0) setSelectedProjectId(data[0].id);
+      const requestedProjectId = searchParams.get("projectId") || "";
+      const matchedProject = data.find((project: Project) => project.id === requestedProjectId);
+      if (matchedProject) {
+        setSelectedProjectId(matchedProject.id);
+      } else if (data.length > 0) {
+        setSelectedProjectId(data[0].id);
+      }
       setLoading(false);
     } catch (err) {
       console.error("Load projects error:", err);
@@ -72,10 +81,33 @@ export default function ReceivedEstimates() {
       if (!res.ok) throw new Error("Failed to load estimates");
       const data = await res.json();
       setEstimates(data);
+      setSelectedForCompare([]);
       setSelectedEstimate(null);
     } catch (err) {
       console.error("Load estimates error:", err);
     }
+  }
+
+  function toggleCompareSelection(estimateId: string) {
+    setSelectedForCompare((prev) => {
+      if (prev.includes(estimateId)) {
+        return prev.filter((id) => id !== estimateId);
+      }
+      return [...prev, estimateId];
+    });
+  }
+
+  function toggleEstimateReview(estimate: Estimate) {
+    if (selectedEstimate?.estimate_id === estimate.estimate_id) {
+      setSelectedEstimate(null);
+      setHistoryData(null);
+      setReviewComment("");
+      return;
+    }
+
+    setSelectedEstimate(estimate);
+    setReviewComment(estimate.latest_review_comment || "");
+    fetchEstimateHistory(estimate.estimate_id);
   }
 
   async function fetchEstimateHistory(estimateId: string) {
@@ -170,6 +202,37 @@ export default function ReceivedEstimates() {
       ? Math.min(...estimates.map((e) => getGrandTotal(e)))
       : null;
 
+  const selectedComparisonEstimates = estimates.filter((estimate) =>
+    selectedForCompare.includes(estimate.estimate_id)
+  );
+
+  const builderHeaders = selectedComparisonEstimates.map(
+    (estimate) => `${estimate.builder_name} (Rev ${estimate.revision_number || 1})`
+  );
+
+  const comparisonItemsByName = selectedComparisonEstimates.reduce(
+    (acc, estimate) => {
+      const builderKey = `${estimate.builder_name} (Rev ${estimate.revision_number || 1})`;
+      const items = getPricingItems(estimate);
+
+      for (const item of items) {
+        const name = String(item.item ?? item.Item ?? item.description ?? "Unnamed item").trim() || "Unnamed item";
+        const qty = Number(item.qty ?? item.Qty ?? 0);
+        const rate = Number(item.rate ?? item.Rate ?? 0);
+        const total = Number(item.total ?? qty * rate);
+
+        if (!acc[name]) {
+          acc[name] = {};
+        }
+
+        acc[name][builderKey] = total;
+      }
+
+      return acc;
+    },
+    {} as Record<string, Record<string, number>>
+  );
+
   return (
     <div style={pageStyles.page}>
       <div style={{ ...pageStyles.card, width: "min(980px, 100%)" }}>
@@ -220,55 +283,130 @@ export default function ReceivedEstimates() {
         ) : estimates.length === 0 ? (
           <p>No estimates submitted yet.</p>
         ) : (
-          <table style={pageStyles.table}>
-            <thead>
-              <tr>
-                <th style={pageStyles.th}>Builder</th>
-                <th className="amount-header" style={pageStyles.th}>Grand Total</th>
-                <th style={pageStyles.th}>Status</th>
-                <th style={pageStyles.th}>Submitted At</th>
-                <th style={pageStyles.th}>Approve</th>
-              </tr>
-            </thead>
-            <tbody>
-              {estimates.map((e, index) => (
-                <tr
-                  key={e.estimate_id || `${e.builder_name}-${e.submitted_at}-${index}`}
-                  style={index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}
-                >
-                  <td style={pageStyles.td}>{e.builder_name}</td>
+          <>
+            <div style={{ marginBottom: "0.75rem", color: "#0f766e", fontWeight: 500 }}>
+              Select two or more estimates to compare them side by side.
+            </div>
 
-                  <td
-                    className="amount-cell"
-                    style={{
-                      ...pageStyles.td,
-                      fontWeight: getGrandTotal(e) === lowest ? "bold" : "normal",
-                      color: getGrandTotal(e) === lowest ? "#16A34A" : "inherit",
-                    }}
+            <table style={pageStyles.table}>
+              <thead>
+                <tr>
+                  <th style={pageStyles.th}>Compare</th>
+                  <th style={pageStyles.th}>Builder</th>
+                  <th className="amount-header" style={pageStyles.th}>Grand Total</th>
+                  <th style={pageStyles.th}>Status</th>
+                  <th style={pageStyles.th}>Submitted At</th>
+                  <th style={pageStyles.th}>Approve</th>
+                </tr>
+              </thead>
+              <tbody>
+                {estimates.map((e, index) => (
+                  <tr
+                    key={e.estimate_id || `${e.builder_name}-${e.submitted_at}-${index}`}
+                    style={index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}
                   >
-                    ₹{getGrandTotal(e).toLocaleString()}
-                  </td>
+                    <td style={pageStyles.td}>
+                      <input
+                        type="checkbox"
+                        checked={selectedForCompare.includes(e.estimate_id)}
+                        onChange={() => toggleCompareSelection(e.estimate_id)}
+                      />
+                    </td>
+                    <td style={pageStyles.td}>{e.builder_name}</td>
 
-                  <td style={pageStyles.td}>{formatReviewStatus(e.latest_review_status)}</td>
-
-                  <td style={pageStyles.td}>{new Date(e.submitted_at).toLocaleString()}</td>
-
-                  <td style={pageStyles.td}>
-                    <button
-                      style={pageStyles.primaryBtn}
-                      onClick={() => {
-                        setSelectedEstimate(e);
-                        setReviewComment(e.latest_review_comment || "");
-                        fetchEstimateHistory(e.estimate_id);
+                    <td
+                      className="amount-cell"
+                      style={{
+                        ...pageStyles.td,
+                        fontWeight: getGrandTotal(e) === lowest ? "bold" : "normal",
+                        color: getGrandTotal(e) === lowest ? "#16A34A" : "inherit",
                       }}
                     >
-                      Review
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      ₹{getGrandTotal(e).toLocaleString()}
+                    </td>
+
+                    <td style={pageStyles.td}>{formatReviewStatus(e.latest_review_status)}</td>
+
+                    <td style={pageStyles.td}>{new Date(e.submitted_at).toLocaleString()}</td>
+
+                    <td style={pageStyles.td}>
+                      <button
+                        style={pageStyles.primaryBtn}
+                        onClick={() => toggleEstimateReview(e)}
+                      >
+                        {selectedEstimate?.estimate_id === e.estimate_id ? "Close Review" : "Review"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {selectedComparisonEstimates.length >= 2 && (
+              <div
+                style={{
+                  marginTop: "1.25rem",
+                  padding: "1rem",
+                  border: "1px solid #bfdbfe",
+                  borderRadius: "10px",
+                  background: "#f8fafc",
+                }}
+              >
+                <h3 style={{ ...pageStyles.subtitle, marginTop: 0, marginBottom: "0.5rem" }}>
+                  Estimate Comparison ({selectedComparisonEstimates.length} selected)
+                </h3>
+
+                <div style={{ overflowX: "auto" }}>
+                  <table style={pageStyles.table}>
+                    <thead>
+                      <tr>
+                        <th style={pageStyles.th}>Builder</th>
+                        <th className="amount-header" style={pageStyles.th}>Grand Total</th>
+                        <th style={pageStyles.th}>Submitted At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedComparisonEstimates.map((estimate, idx) => (
+                        <tr key={estimate.estimate_id} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                          <td style={pageStyles.td}>{estimate.builder_name}</td>
+                          <td className="amount-cell" style={pageStyles.td}>₹{getGrandTotal(estimate).toLocaleString()}</td>
+                          <td style={pageStyles.td}>{new Date(estimate.submitted_at).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ overflowX: "auto", marginTop: "0.75rem" }}>
+                  <table style={pageStyles.table}>
+                    <thead>
+                      <tr>
+                        <th style={pageStyles.th}>BOQ Item</th>
+                        {builderHeaders.map((header) => (
+                          <th key={header} className="amount-header" style={pageStyles.th}>{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.keys(comparisonItemsByName).map((itemName, idx) => (
+                        <tr key={itemName} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                          <td style={pageStyles.td}>{itemName}</td>
+                          {builderHeaders.map((header) => {
+                            const value = comparisonItemsByName[itemName]?.[header];
+                            return (
+                              <td key={`${itemName}-${header}`} className="amount-cell" style={pageStyles.td}>
+                                {value != null ? `₹${Number(value).toLocaleString()}` : "-"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {selectedEstimate && (

@@ -184,6 +184,10 @@ export default function BOQWorkspacePage() {
     n != null ? `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "—";
 
   const grandTotal = items.reduce((sum, i) => sum + (Number(i.computed_amount) || 0), 0);
+  const displaySections = sections.filter((section, index, arr) => {
+    if (section.name !== "Imported Architect BOQ") return true;
+    return arr.findIndex((s) => s.name === section.name) === index;
+  });
   const isRatePanelOpen = Boolean(rateResult || showTemplateSelector);
 
   if (loading) {
@@ -288,7 +292,7 @@ export default function BOQWorkspacePage() {
           </div>
 
           {/* Sections & Items */}
-          {sections.map((section, sIdx) => {
+          {displaySections.map((section, sIdx) => {
             const sectionItems = items.filter((i) => i.section_id === section.id);
             const sectionTotal = sectionItems.reduce((sum, i) => sum + (Number(i.computed_amount) || 0), 0);
 

@@ -175,7 +175,7 @@ export default function EstimationProjectsPage() {
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                         {p.name}
-                        {p.project_type === "invited" && (
+                        {p.project_type === "invited" && !!p.invitation_status && (
                           <span style={{
                             fontSize: 11,
                             fontWeight: 700,
@@ -223,4 +223,4 @@ export default function EstimationProjectsPage() {
       </div>
     </div>
   );
-}
+  }

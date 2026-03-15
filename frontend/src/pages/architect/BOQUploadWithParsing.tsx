@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import { apiUrl } from "../../services/api";
@@ -25,6 +25,7 @@ interface ParsedResult {
 
 const BOQUploadWithParsing = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const maxUploadSizeBytes = 3 * 1024 * 1024;
 
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -49,14 +50,22 @@ const BOQUploadWithParsing = () => {
 
         if (!res.ok) throw new Error("Failed to load projects");
         const data = await res.json();
-        setProjects(Array.isArray(data) ? data : data.projects ?? []);
+        const rows = Array.isArray(data) ? data : data.projects ?? [];
+        setProjects(rows);
+
+        const requestedProjectId = searchParams.get("projectId") || "";
+        const matchedProject = rows.find((project: ProjectRow) => project.id === requestedProjectId);
+        if (matchedProject) {
+          setSelectedProject(matchedProject.id);
+          await checkExistingBOQ(matchedProject.id);
+        }
       } catch (e: any) {
         setError(e.message || "Unable to load projects");
       }
     };
 
     loadProjects();
-  }, []);
+  }, [searchParams]);
 
   const checkExistingBOQ = async (projectId: string) => {
     try {
