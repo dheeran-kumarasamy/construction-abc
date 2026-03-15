@@ -381,3 +381,13 @@ export async function validatePlinthArea(req: Request, res: Response) {
     res.status(500).json({ error: err.message || "Validation failed" });
   }
 }
+
+export async function getFingerInAirEstimate(req: Request, res: Response) {
+  try {
+    const result = await service.getFingerInAirEstimate(req.body || {});
+    res.json(result);
+  } catch (err: any) {
+    console.error("getFingerInAirEstimate error:", err);
+    res.status(500).json({ error: err.message || "Quick estimate failed" });
+  }
+}
