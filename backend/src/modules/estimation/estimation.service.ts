@@ -881,3 +881,154 @@ export async function validatePlinthArea(projectId: string, userId: string, inpu
     flags,
   };
 }
+
+type FingerInAirInput = {
+  building_class?: string;
+  roof_type?: string;
+  plinth_area_sqm?: number;
+  num_floors?: number;
+  location_zone?: "normal" | "urban" | "metro" | "rural";
+  quality_grade?: "economy" | "standard" | "premium";
+  include_services?: boolean;
+  include_external_works?: boolean;
+  contingency_percent?: number;
+  escalation_percent?: number;
+};
+
+function toPositiveNumber(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function toPercentNumber(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export async function getFingerInAirEstimate(input: FingerInAirInput) {
+  const defaults = {
+    building_class: "A1",
+    roof_type: "RCC",
+    plinth_area_sqm: 111.48, // ~1200 sq.ft
+    num_floors: 2,
+    location_zone: "normal" as const,
+    quality_grade: "standard" as const,
+    include_services: true,
+    include_external_works: true,
+    contingency_percent: 5,
+    escalation_percent: 0,
+  };
+
+  const normalized = {
+    building_class: String(input.building_class || defaults.building_class).toUpperCase(),
+    roof_type: String(input.roof_type || defaults.roof_type),
+    plinth_area_sqm: toPositiveNumber(input.plinth_area_sqm, defaults.plinth_area_sqm),
+    num_floors: Math.max(1, Math.round(toPositiveNumber(input.num_floors, defaults.num_floors))),
+    location_zone: ["normal", "urban", "metro", "rural"].includes(String(input.location_zone || ""))
+      ? (input.location_zone as "normal" | "urban" | "metro" | "rural")
+      : defaults.location_zone,
+    quality_grade: ["economy", "standard", "premium"].includes(String(input.quality_grade || ""))
+      ? (input.quality_grade as "economy" | "standard" | "premium")
+      : defaults.quality_grade,
+    include_services:
+      typeof input.include_services === "boolean" ? input.include_services : defaults.include_services,
+    include_external_works:
+      typeof input.include_external_works === "boolean"
+        ? input.include_external_works
+        : defaults.include_external_works,
+    contingency_percent: toPercentNumber(input.contingency_percent, defaults.contingency_percent),
+    escalation_percent: toPercentNumber(input.escalation_percent, defaults.escalation_percent),
+  };
+
+  const { rows: plinthRates } = await pool.query(
+    `SELECT *
+     FROM plinth_area_rates
+     WHERE class_code = $1
+       AND ($2::text IS NULL OR roof_type ILIKE $2)
+     ORDER BY CASE WHEN floor = 'ground' THEN 0 ELSE 1 END, floor`,
+    [normalized.building_class, normalized.roof_type || null]
+  );
+
+  if (!plinthRates.length) {
+    return {
+      status: "no_benchmark",
+      message: `No PWD plinth rate found for class ${normalized.building_class}`,
+      inputs: normalized,
+      per_sqft_rate: null,
+      per_sqm_rate: null,
+      total_project_cost: null,
+      breakup: null,
+    };
+  }
+
+  const groundRate = plinthRates.find((r: any) => r.floor === "ground") || plinthRates[0];
+  const upperRate =
+    plinthRates.find((r: any) => r.floor === "upper") ||
+    plinthRates.find((r: any) => r.additional_floor_rate != null) ||
+    groundRate;
+
+  const groundRatePerSqm = Number(groundRate.rate_per_sqm || groundRate.rate || 0);
+  const upperRatePerSqm = Number(
+    upperRate.rate_per_sqm || upperRate.additional_floor_rate || upperRate.rate || groundRatePerSqm
+  );
+
+  const areaPerFloor = normalized.plinth_area_sqm;
+  const upperFloorCount = Math.max(0, normalized.num_floors - 1);
+
+  const baseCost =
+    areaPerFloor * groundRatePerSqm + areaPerFloor * upperFloorCount * upperRatePerSqm;
+
+  const locationMultiplierMap = {
+    normal: 1,
+    urban: 1.08,
+    metro: 1.15,
+    rural: 0.94,
+  } as const;
+
+  const qualityMultiplierMap = {
+    economy: 0.9,
+    standard: 1,
+    premium: 1.18,
+  } as const;
+
+  const adjustedBase =
+    baseCost * locationMultiplierMap[normalized.location_zone] * qualityMultiplierMap[normalized.quality_grade];
+
+  const servicesAmount = normalized.include_services ? adjustedBase * 0.12 : 0;
+  const externalWorksAmount = normalized.include_external_works ? adjustedBase * 0.08 : 0;
+  const contingencyAmount = (adjustedBase + servicesAmount + externalWorksAmount) * (normalized.contingency_percent / 100);
+  const escalationAmount =
+    (adjustedBase + servicesAmount + externalWorksAmount + contingencyAmount) *
+    (normalized.escalation_percent / 100);
+
+  const total = adjustedBase + servicesAmount + externalWorksAmount + contingencyAmount + escalationAmount;
+  const totalAreaSqm = areaPerFloor * normalized.num_floors;
+  const totalAreaSqft = totalAreaSqm * 10.7639;
+
+  const perSqm = totalAreaSqm > 0 ? total / totalAreaSqm : 0;
+  const perSqft = totalAreaSqft > 0 ? total / totalAreaSqft : 0;
+
+  return {
+    status: "ok",
+    message: "Finger-in-air estimate computed using PWD plinth area norms",
+    inputs: normalized,
+    applied_pwd_reference: {
+      building_class: normalized.building_class,
+      roof_type: normalized.roof_type,
+      ground_floor_rate_per_sqm: Math.round(groundRatePerSqm * 100) / 100,
+      upper_floor_rate_per_sqm: Math.round(upperRatePerSqm * 100) / 100,
+    },
+    total_area_sqm: Math.round(totalAreaSqm * 100) / 100,
+    total_area_sqft: Math.round(totalAreaSqft * 100) / 100,
+    per_sqm_rate: Math.round(perSqm * 100) / 100,
+    per_sqft_rate: Math.round(perSqft * 100) / 100,
+    total_project_cost: Math.round(total * 100) / 100,
+    breakup: {
+      base_cost: Math.round(adjustedBase * 100) / 100,
+      services_amount: Math.round(servicesAmount * 100) / 100,
+      external_works_amount: Math.round(externalWorksAmount * 100) / 100,
+      contingency_amount: Math.round(contingencyAmount * 100) / 100,
+      escalation_amount: Math.round(escalationAmount * 100) / 100,
+    },
+  };
+}
