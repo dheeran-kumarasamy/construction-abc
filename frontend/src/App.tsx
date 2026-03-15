@@ -6,7 +6,6 @@ import CreateProject from "./pages/architect/CreateProject";
 import BOQUpload from "./pages/architect/BOQUploadWithParsing";
 import BOQMapping from "./pages/architect/BOQMapping";
 import PricingEngine from "./pages/architect/PricingEngine";
-import ArchitectDashboard from "./pages/architect/ArchitectDashboard";
 import BuilderDashboard from "./pages/builder/BuilderDashboard";
 import BuilderBasePricing from "./pages/builder/BuilderBasePricing";
 import ApplyBasePricing from "./pages/builder/ApplyBasePricing";
@@ -120,100 +119,6 @@ function FlowBackgroundController() {
   return null;
 }
 
-function ArchitectWorkflowBar() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  if (!user || user.role !== "architect" || !location.pathname.startsWith("/architect")) {
-    return null;
-  }
-
-  const isArchitectHead = user.orgRole === "head";
-
-  const flowSteps = [
-    { label: "Create Project", path: "/architect/create", step: 1 },
-    { label: "Upload BOQ", path: "/architect/boq-upload", step: 2 },
-    { label: isArchitectHead ? "Invite Team & Builders" : "Invite Builders", path: "/architect/invite", step: 3 },
-    { label: "View Submitted Estimates", path: "/architect/received", step: 4 },
-    { label: "Compare Builder Estimates", path: "/architect/comparison", step: 5 },
-    { label: "View Projects", path: "/architect/projects", step: 6 },
-    { label: "View Audit Trail", path: "/architect/audit", step: 7 },
-  ];
-
-  const orgRoleLabel = user.orgRole === "head" ? "Architect Head" : "Architect Team";
-
-  return (
-    <div
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 900,
-        padding: "12px clamp(12px, 5vw, 32px)",
-        background: "rgba(255, 253, 248, 0.96)",
-        borderBottom: "1px solid #e5e7eb",
-        backdropFilter: "blur(4px)",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "6px" }}>
-        <span
-          style={{
-            background: "#ecfeff",
-            border: "1px solid #99f6e4",
-            color: "#0f766e",
-            borderRadius: "999px",
-            fontSize: "12px",
-            fontWeight: 700,
-            padding: "4px 10px",
-          }}
-        >
-          {orgRoleLabel}
-        </span>
-      </div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          overflowX: "auto",
-          paddingBottom: 4,
-        }}
-      >
-        {flowSteps.map((step, idx) => {
-          const isActive = location.pathname === step.path;
-          return (
-            <React.Fragment key={step.path}>
-              <button
-                type="button"
-                onClick={() => navigate(step.path)}
-                style={{
-                  ...pageStyles.primaryBtn,
-                  background: isActive ? "#0f766e" : "#115e59",
-                  opacity: isActive ? 1 : 0.9,
-                  height: "38px",
-                  padding: "0 12px",
-                  fontSize: "13px",
-                  borderRadius: "999px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-                aria-current={isActive ? "page" : undefined}
-              >
-                <span style={{ fontWeight: 700 }}>{step.step}.</span>
-                <span>{step.label}</span>
-              </button>
-              {idx < flowSteps.length - 1 && (
-                <span style={{ color: "#0f766e", fontWeight: 700 }}>→</span>
-              )}
-            </React.Fragment>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function BuilderWorkflowBar() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -316,7 +221,6 @@ export default function App() {
       <BrowserRouter>
         <FlowBackgroundController />
         <DashboardButton />
-        <ArchitectWorkflowBar />
         <BuilderWorkflowBar />
         <Routes>
           {/* Public */}
@@ -418,7 +322,7 @@ export default function App() {
             path="/architect"
             element={
               <RequireAuth role="architect">
-                <ArchitectDashboard />
+                <ProjectsList />
               </RequireAuth>
             }
           />

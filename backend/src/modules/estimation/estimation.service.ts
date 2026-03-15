@@ -252,13 +252,58 @@ export async function createProject(userId: string, data: {
 }
 
 export async function listProjects(userId: string) {
+  const userRes = await pool.query(`SELECT role FROM users WHERE id = $1`, [userId]);
+  const role = String(userRes.rows[0]?.role || "");
+
+  if (role === "architect") {
+    const architectProjects = await pool.query(
+      `SELECT p.id, p.name, p.description,
+              pr.site_address AS project_location
+       FROM projects p
+       LEFT JOIN LATERAL (
+         SELECT site_address
+         FROM project_revisions
+         WHERE project_id = p.id
+         ORDER BY revision_number DESC
+         LIMIT 1
+       ) pr ON true
+       WHERE p.architect_id = $1`,
+      [userId]
+    );
+
+    for (const project of architectProjects.rows) {
+      const marker = `source_project_id:${project.id}`;
+      const existing = await pool.query(
+        `SELECT id FROM boq_projects WHERE user_id = $1 AND notes = $2 LIMIT 1`,
+        [userId, marker]
+      );
+
+      if (!existing.rows.length) {
+        await pool.query(
+          `INSERT INTO boq_projects (
+             user_id, name, description, status, terrain, notes, project_location
+           )
+           VALUES ($1, $2, $3, 'in_progress', 'plains', $4, $5)`,
+          [
+            userId,
+            project.name,
+            project.description || null,
+            marker,
+            project.project_location || null,
+          ]
+        );
+      }
+    }
+  }
+
+  const sourceFilter = role === "builder" ? `AND (p.notes IS NULL OR p.notes NOT LIKE 'source_project_id:%')` : "";
   const { rows } = await pool.query(`
     SELECT p.*,
       (SELECT COUNT(*) FROM boq_items bi WHERE bi.project_id = p.id) as item_count,
       (SELECT COALESCE(SUM(bi.computed_amount), 0) FROM boq_items bi WHERE bi.project_id = p.id) as total_amount
     FROM boq_projects p
     WHERE p.user_id = $1
-      AND (p.notes IS NULL OR p.notes NOT LIKE 'source_project_id:%')
+      ${sourceFilter}
     ORDER BY p.updated_at DESC
   `, [userId]);
   return rows;
@@ -266,10 +311,11 @@ export async function listProjects(userId: string) {
 
 export async function listInvitedProjects(userId: string) {
   const userRes = await pool.query(
-    `SELECT organization_id, email FROM users WHERE id = $1`,
+    `SELECT organization_id, email, role FROM users WHERE id = $1`,
     [userId]
   );
   if (!userRes.rows.length) return [];
+  if (String(userRes.rows[0].role || "") !== "builder") return [];
   const organizationId = userRes.rows[0].organization_id;
   const userEmail = userRes.rows[0].email;
 
@@ -438,13 +484,28 @@ async function ensureInvitedProjectSeeded(projectId: string, userId: string) {
 
   if (normalizedRows.length === 0) return;
 
-  const sectionRes = await pool.query(
-    `INSERT INTO boq_sections (project_id, name, sort_order)
-     VALUES ($1, 'Imported Architect BOQ', 0)
-     RETURNING id`,
+  const existingSectionRes = await pool.query(
+    `SELECT id
+     FROM boq_sections
+     WHERE project_id = $1 AND name = 'Imported Architect BOQ'
+     ORDER BY sort_order ASC, created_at ASC
+     LIMIT 1`,
     [projectId]
   );
-  const sectionId = sectionRes.rows[0].id;
+
+  let sectionId = existingSectionRes.rows[0]?.id as string | undefined;
+
+  if (!sectionId) {
+    const sectionRes = await pool.query(
+      `INSERT INTO boq_sections (project_id, name, sort_order)
+       VALUES ($1, 'Imported Architect BOQ', 0)
+       RETURNING id`,
+      [projectId]
+    );
+    sectionId = sectionRes.rows[0].id;
+  }
+
+  if (!sectionId) return;
 
   for (let i = 0; i < normalizedRows.length; i += 1) {
     const row = normalizedRows[i];
