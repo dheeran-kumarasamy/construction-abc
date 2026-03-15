@@ -33,10 +33,10 @@ export default function FingerInAirEstimator() {
   const [error, setError] = React.useState("");
   const [result, setResult] = React.useState<EstimateResult | null>(null);
 
-  const [buildingClass, setBuildingClass] = React.useState("");
-  const [roofType, setRoofType] = React.useState("");
+  const [buildingClass, setBuildingClass] = React.useState("I-A");
+  const [roofType, setRoofType] = React.useState("RCC Slab");
   const [plinthAreaSqm, setPlinthAreaSqm] = React.useState("");
-  const [numFloors, setNumFloors] = React.useState("");
+  const [numFloors, setNumFloors] = React.useState("2");
   const [locationZone, setLocationZone] = React.useState("");
   const [qualityGrade, setQualityGrade] = React.useState("");
   const [includeServices, setIncludeServices] = React.useState(true);
@@ -98,17 +98,44 @@ export default function FingerInAirEstimator() {
       }}
     >
       <div>
-        <h3 style={{ margin: 0, fontSize: 20, color: "#0f172a" }}>Finger-in-the-Air Estimate</h3>
+        <h3 style={{ margin: 0, fontSize: 20, color: "#0f172a" }}>Quick Estimate</h3>
         <p style={{ margin: "6px 0 0", color: "#475569", fontSize: 14 }}>
           Quick PWD-based per sq.ft and total project cost estimate from high-level inputs.
         </p>
       </div>
 
       <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-        <input style={pageStyles.input} placeholder="Building class (default A1)" value={buildingClass} onChange={(e) => setBuildingClass(e.target.value)} />
-        <input style={pageStyles.input} placeholder="Roof type (default RCC)" value={roofType} onChange={(e) => setRoofType(e.target.value)} />
+        <select style={pageStyles.select} value={buildingClass} onChange={(e) => setBuildingClass(e.target.value)}>
+          <option value="I-A">Building class: I-A (RCC Framed)</option>
+          <option value="I-B">Building class: I-B (RCC + Mangalore Tile)</option>
+          <option value="II-A">Building class: II-A (Load Bearing RCC)</option>
+          <option value="II-B">Building class: II-B (Load Bearing AC Sheet)</option>
+          <option value="II-C">Building class: II-C (Load Bearing Mangalore Tile)</option>
+          <option value="III-A">Building class: III-A (Semi-permanent Tiled)</option>
+          <option value="III-B">Building class: III-B (Semi-permanent GI Sheet)</option>
+          <option value="IV-A">Building class: IV-A (Temporary Thatched)</option>
+          <option value="IV-B">Building class: IV-B (Temporary Tin Sheet)</option>
+        </select>
+
+        <select style={pageStyles.select} value={roofType} onChange={(e) => setRoofType(e.target.value)}>
+          <option value="RCC Slab">Roof type: RCC Slab</option>
+          <option value="Mangalore Tile">Roof type: Mangalore Tile</option>
+          <option value="AC Sheet">Roof type: AC Sheet</option>
+          <option value="Country Tile">Roof type: Country Tile</option>
+          <option value="GI Sheet">Roof type: GI Sheet</option>
+          <option value="Thatch">Roof type: Thatch</option>
+          <option value="Tin Sheet">Roof type: Tin Sheet</option>
+        </select>
+
         <input style={pageStyles.input} type="number" placeholder="Plinth area sqm (default 111.48)" value={plinthAreaSqm} onChange={(e) => setPlinthAreaSqm(e.target.value)} />
-        <input style={pageStyles.input} type="number" placeholder="Floors (default 2)" value={numFloors} onChange={(e) => setNumFloors(e.target.value)} />
+
+        <select style={pageStyles.select} value={numFloors} onChange={(e) => setNumFloors(e.target.value)}>
+          <option value="1">Floors: 1</option>
+          <option value="2">Floors: 2</option>
+          <option value="3">Floors: 3</option>
+          <option value="4">Floors: 4</option>
+          <option value="5">Floors: 5</option>
+        </select>
 
         <select style={pageStyles.select} value={locationZone} onChange={(e) => setLocationZone(e.target.value)}>
           <option value="">Location zone (default normal)</option>
