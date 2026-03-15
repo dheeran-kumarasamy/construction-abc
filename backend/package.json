@@ -2,11 +2,11 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "Construction Tender SaaS Backend",
-  "main": "dist/server.js",
+  "main": "dist/src/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "migrate": "node migrate.js",
     "seed:admin": "ts-node-dev --transpile-only src/scripts/seedAdmin.ts",
     "seed:prices": "ts-node-dev --transpile-only src/scripts/seed.ts",

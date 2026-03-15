@@ -1,5 +1,6 @@
 import { pageStyles } from "../../layouts/pageStyles";
 import { useNavigate } from "react-router-dom";
+import FingerInAirEstimator from "../../components/FingerInAirEstimator";
 
 export default function BuilderDashboard() {
   const navigate = useNavigate();
@@ -33,6 +34,10 @@ export default function BuilderDashboard() {
           >
             Rate Analysis & BOQ
           </button>
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <FingerInAirEstimator />
         </div>
       </div>
     </div>

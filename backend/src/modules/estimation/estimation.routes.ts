@@ -42,6 +42,8 @@ import {
   exportProject,
   // Plinth Area Validation
   validatePlinthArea,
+  // Quick Estimate
+  getFingerInAirEstimate,
 } from "./estimation.controller";
 
 const router = Router();
@@ -95,5 +97,8 @@ router.get("/projects/:projectId/export", authenticate, exportProject);
 
 // ── Plinth Area Validation ─────────────────────
 router.post("/projects/:projectId/validate-plinth", authenticate, validatePlinthArea);
+
+// ── Quick Finger-In-Air Estimate ───────────────
+router.post("/quick/finger-in-air", authenticate, getFingerInAirEstimate);
 
 export default router;

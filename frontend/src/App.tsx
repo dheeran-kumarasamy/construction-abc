@@ -33,6 +33,7 @@ import AdminAuditPage from "./pages/admin/AdminAuditPage";
 import AdminBOQsPage from "./pages/admin/AdminBOQsPage";
 import AdminEstimationProjectsPage from "./pages/admin/AdminEstimationProjectsPage";
 import AdminEstimatesPage from "./pages/admin/AdminEstimatesPage";
+import FingerInAirEstimator from "./components/FingerInAirEstimator";
 
 // Auth
 import LoginPage from "./pages/Login";
@@ -43,9 +44,12 @@ import { pageStyles } from "./layouts/pageStyles";
 // --- Client View ---
 function ClientView() {
   return (
-    <div style={styles.page}>
-      <h1>Client View</h1>
-      <p>View approved estimates, summaries, and downloadable reports.</p>
+    <div style={pageStyles.page}>
+      <div style={{ ...pageStyles.card, width: "min(960px, 100%)" }}>
+        <h1 style={pageStyles.title}>Client Dashboard</h1>
+        <p style={pageStyles.subtitle}>View approved estimates and run quick order-of-magnitude project pricing.</p>
+        <FingerInAirEstimator />
+      </div>
     </div>
   );
 }
@@ -575,33 +579,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-
-// --- Inline styles (temporary) ---
-const styles: Record<string, React.CSSProperties> = {
-  centered: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#F8F9FB",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "24px",
-    width: "720px",
-  },
-  card: {
-    background: "#FFFFFF",
-    borderRadius: "16px",
-    padding: "40px",
-    fontSize: "20px",
-    fontWeight: 600,
-    border: "1px solid #E5E7EB",
-    cursor: "pointer",
-  },
-  page: {
-    padding: "40px",
-    fontFamily: "Inter, sans-serif",
-  },
-};
