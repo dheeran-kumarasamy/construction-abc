@@ -1,5 +1,16 @@
 const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
 
+function normalizeConfiguredApiUrl(value: string) {
+  const trimmed = value.trim().replace(/\/$/, "");
+
+  if (!trimmed) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("//")) return `https:${trimmed}`;
+
+  // Treat bare hostnames as HTTPS endpoints in production.
+  return `https://${trimmed}`;
+}
+
 function isLocalHost(hostname: string) {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
@@ -13,7 +24,7 @@ function getHostedApiHost(currentHost: string) {
 export function getApiBaseUrl() {
   // Priority 1: Use explicit VITE_API_URL if provided
   if (configuredApiUrl) {
-    return configuredApiUrl.replace(/\/$/, "");
+    return normalizeConfiguredApiUrl(configuredApiUrl);
   }
 
   // Priority 2: Auto-detect for local development
