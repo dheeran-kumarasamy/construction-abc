@@ -48,7 +48,7 @@ export default function BOQMapping() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(600px, 100%)" }}>
+      <div style={pageStyles.card}>
         <h2 style={pageStyles.title}>BOQ Column Mapping</h2>
         <p style={pageStyles.subtext}>Match your spreadsheet columns to the required BOQ fields.</p>
 

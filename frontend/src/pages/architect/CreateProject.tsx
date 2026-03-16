@@ -83,7 +83,7 @@ export default function CreateProject() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(520px, 100%)" }}>
+      <div style={pageStyles.card}>
         <h2 style={pageStyles.title}>Create Project</h2>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>

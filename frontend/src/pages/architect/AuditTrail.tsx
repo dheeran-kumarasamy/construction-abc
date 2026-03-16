@@ -34,7 +34,7 @@ export default function AuditTrail() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(980px, 100%)" }}>
+      <div style={pageStyles.card}>
         <h2 style={pageStyles.title}>Audit Trail</h2>
 
         {entries.length === 0 ? (

@@ -125,7 +125,11 @@ export function AdminCard({ children }: { children: React.ReactNode }) {
 }
 
 export function AdminTable({ children }: { children: React.ReactNode }) {
-  return <div className="table-wrapper">{children}</div>;
+  return (
+    <div className="table-wrapper" style={{ color: "#0f172a" }}>
+      {children}
+    </div>
+  );
 }
 
 export function StatusPill({ label, tone = "neutral" }: { label: string; tone?: "neutral" | "success" | "danger" | "warning" }) {

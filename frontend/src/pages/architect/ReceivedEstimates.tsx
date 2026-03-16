@@ -235,7 +235,7 @@ export default function ReceivedEstimates() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(980px, 100%)" }}>
+      <div style={pageStyles.card}>
         <div
           style={{
             display: "flex",

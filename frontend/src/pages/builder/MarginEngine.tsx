@@ -105,7 +105,7 @@ export default function MarginEngine() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(720px, 100%)" }}>
+      <div style={pageStyles.card}>
         <h2 style={pageStyles.title}>Margin & Uplift Engine</h2>
 
         <div style={pageStyles.controls}>

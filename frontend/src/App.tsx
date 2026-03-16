@@ -45,7 +45,7 @@ import { pageStyles } from "./layouts/pageStyles";
 function ClientView() {
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(960px, 100%)" }}>
+      <div style={pageStyles.card}>
         <h1 style={pageStyles.title}>Client Dashboard</h1>
         <p style={pageStyles.subtitle}>View approved estimates and run quick order-of-magnitude project pricing.</p>
         <FingerInAirEstimator />
@@ -58,69 +58,175 @@ function DashboardButton() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const hasWorkflowBar =
-    location.pathname.startsWith("/architect") ||
-    location.pathname.startsWith("/builder");
+  const onArchitectScreen = location.pathname.startsWith("/architect");
+  const onBuilderScreen = location.pathname.startsWith("/builder");
+
+  const dashboardPath = onArchitectScreen
+    ? "/architect"
+    : onBuilderScreen
+    ? "/builder"
+    : null;
+
+  const showBackToDashboard = !!dashboardPath && location.pathname !== dashboardPath;
 
   if (!user || location.pathname === "/login") {
     return null;
   }
 
   return (
-    <button
-      type="button"
+    <div
       style={{
-        ...pageStyles.secondaryBtn,
         position: "fixed",
-        top: hasWorkflowBar ? 72 : 16,
+        top: onArchitectScreen || onBuilderScreen ? 78 : 16,
         right: 16,
-        zIndex: 1000,
-        height: "40px",
-      }}
-      onClick={() => {
-        logout();
-        localStorage.removeItem("token");
-        localStorage.removeItem("role");
-        navigate("/login");
+        zIndex: 1200,
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+        flexWrap: "wrap",
+        background: "rgba(2, 6, 23, 0.72)",
+        border: "1px solid rgba(148, 163, 184, 0.5)",
+        borderRadius: "12px",
+        padding: "8px",
+        boxShadow: "0 8px 22px rgba(2, 6, 23, 0.35)",
       }}
     >
-      Logout
-    </button>
+      {showBackToDashboard ? (
+        <button
+          type="button"
+          style={{
+            ...pageStyles.primaryBtn,
+            height: "38px",
+            padding: "0 14px",
+            fontSize: "13px",
+            background: "#0f766e",
+          }}
+          onClick={() => navigate(dashboardPath)}
+        >
+          Back to Dashboard
+        </button>
+      ) : null}
+
+      <button
+        type="button"
+        style={{
+          ...pageStyles.primaryBtn,
+          height: "38px",
+          padding: "0 14px",
+          fontSize: "13px",
+          background: "#b91c1c",
+          boxShadow: "0 6px 16px rgba(127, 29, 29, 0.45)",
+        }}
+        onClick={() => {
+          logout();
+          localStorage.removeItem("token");
+          localStorage.removeItem("role");
+          navigate("/login");
+        }}
+      >
+        Logout
+      </button>
+    </div>
   );
 }
 
 function FlowBackgroundController() {
+  return null;
+}
+
+function ArchitectWorkflowBar() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
 
-  React.useEffect(() => {
-    const root = document.documentElement;
+  if (!user || user.role !== "architect" || !location.pathname.startsWith("/architect")) {
+    return null;
+  }
 
-    const isArchitectFlow =
-      location.pathname.startsWith("/architect") && user?.role === "architect";
-    const isBuilderFlow =
-      location.pathname.startsWith("/builder") && user?.role === "builder";
+  const flowSteps = [
+    { label: "Projects", path: "/architect", step: 1 },
+    { label: "Create Project", path: "/architect/create", step: 2 },
+    { label: "Upload BOQ", path: "/architect/boq-upload", step: 3 },
+    { label: "Invite Builders", path: "/architect/invite", step: 4 },
+    { label: "Received Estimates", path: "/architect/received", step: 5 },
+    { label: "Material Rates", path: "/architect/prices", step: 6 },
+  ];
 
-    if (isArchitectFlow) {
-      root.style.setProperty(
-        "--flowBackgroundImage",
-        'url("https://assets.architecturaldigest.in/photos/6937ed0db1937d5a47ba2aa1/master/w_1600,c_limit/DSC_6900-HDR.jpg")'
-      );
-      return;
-    }
+  const roleLabel = "Architect";
 
-    if (isBuilderFlow) {
-      root.style.setProperty(
-        "--flowBackgroundImage",
-        'url("https://plus.unsplash.com/premium_photo-1661915661139-5b6a4e4a6fcc?q=80&w=967&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D")'
-      );
-      return;
-    }
+  return (
+    <div
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 900,
+        padding: "12px clamp(12px, 5vw, 32px)",
+        background: "rgba(255, 253, 248, 0.96)",
+        borderBottom: "1px solid #e5e7eb",
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "6px" }}>
+        <span
+          style={{
+            background: "#ecfeff",
+            border: "1px solid #99f6e4",
+            color: "#0f766e",
+            borderRadius: "999px",
+            fontSize: "12px",
+            fontWeight: 700,
+            padding: "4px 10px",
+          }}
+        >
+          {roleLabel}
+        </span>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          overflowX: "auto",
+          paddingBottom: 4,
+        }}
+      >
+        {flowSteps.map((step, idx) => {
+          const isProjectsRoute =
+            step.path === "/architect" &&
+            (location.pathname === "/architect" || location.pathname === "/architect/projects");
+          const isActive = isProjectsRoute || location.pathname === step.path;
 
-    root.style.removeProperty("--flowBackgroundImage");
-  }, [location.pathname, user?.role]);
-
-  return null;
+          return (
+            <React.Fragment key={step.path}>
+              <button
+                type="button"
+                onClick={() => navigate(step.path)}
+                style={{
+                  ...pageStyles.primaryBtn,
+                  background: isActive ? "#0f766e" : "#115e59",
+                  opacity: isActive ? 1 : 0.9,
+                  height: "38px",
+                  padding: "0 12px",
+                  fontSize: "13px",
+                  borderRadius: "999px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+                aria-current={isActive ? "page" : undefined}
+              >
+                <span style={{ fontWeight: 700 }}>{step.step}.</span>
+                <span>{step.label}</span>
+              </button>
+              {idx < flowSteps.length - 1 && (
+                <span style={{ color: "#0f766e", fontWeight: 700 }}>→</span>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function BuilderWorkflowBar() {
@@ -225,6 +331,7 @@ export default function App() {
       <BrowserRouter>
         <FlowBackgroundController />
         <DashboardButton />
+        <ArchitectWorkflowBar />
         <BuilderWorkflowBar />
         <Routes>
           {/* Public */}

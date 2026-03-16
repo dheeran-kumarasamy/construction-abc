@@ -1009,7 +1009,7 @@ export default function ApplyBasePricing() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(1200px, 100%)" }}>
+      <div style={pageStyles.card}>
         <div
           style={{
             display: "flex",
