@@ -69,7 +69,7 @@ export default function PricingEngine() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(640px, 100%)" }}>
+      <div style={pageStyles.card}>
         <h2 style={pageStyles.title}>Pricing Summary</h2>
 
         <div style={pageStyles.marginRow}>

@@ -109,7 +109,7 @@ export default function SubmitEstimate() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(1320px, 100%)" }}>
+      <div style={pageStyles.card}>
         <h2 style={pageStyles.title}>View Submission</h2>
 
         {loading ? (
