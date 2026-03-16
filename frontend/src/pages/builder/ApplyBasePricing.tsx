@@ -1,9 +1,10 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import TableWrapper from "../../components/TableWrapper";
 import { getBasePricing } from "../../services/basePricingStore";
 import { apiUrl } from "../../services/api";
+import { useLocation } from "react-router-dom";
 
 interface Project {
   id: string;
@@ -21,6 +22,7 @@ interface BOQItem {
   rate: number;
   total: number;
   category?: string;
+  rateSource?: string;
 }
 
 interface BasePriceItem {
@@ -28,6 +30,13 @@ interface BasePriceItem {
   rate: number;
   uom: string;
   category: string;
+}
+
+interface MarketRateItem {
+  materialName: string;
+  unit: string;
+  price: number;
+  source: string;
 }
 
 interface MarginConfig {
@@ -92,12 +101,22 @@ const STANDARD_GUARDRAILS = [
   },
 ] as const;
 
-export default function ApplyBasePricing() {
+export default function ApplyBasePricing({
+  initialProjectId,
+  embedded = false,
+  onSubmitted,
+}: {
+  initialProjectId?: string;
+  embedded?: boolean;
+  onSubmitted?: () => void;
+}) {
+  const location = useLocation();
   const [projects, setProjects] = useState<Project[]>([]);
   const [basePricing, setBasePricing] = useState<BasePriceItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [boqItems, setBoqItems] = useState<BOQItem[]>([]);
   const [pricedItems, setPricedItems] = useState<BOQItem[]>([]);
+  const [marketRates, setMarketRates] = useState<MarketRateItem[]>([]);
   const [marginConfig, setMarginConfig] = useState<MarginConfig>({
     overallMargin: 10,
     laborUplift: 5,
@@ -116,6 +135,16 @@ export default function ApplyBasePricing() {
   const [isLandscapeWide, setIsLandscapeWide] = useState(false);
   const [isFloatingBreakdownCollapsed, setIsFloatingBreakdownCollapsed] = useState(false);
   const suggestionsContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) || null,
+    [projects, selectedProjectId]
+  );
+  const queryProjectId = useMemo(
+    () => new URLSearchParams(location.search).get("projectId") || "",
+    [location.search]
+  );
+  const preferredProjectId = initialProjectId || queryProjectId;
 
   function getPriorityRank(priority: OptimizerSuggestion["priority"]) {
     if (priority === "zero_rate_fill") return 0;
@@ -224,7 +253,18 @@ export default function ApplyBasePricing() {
     if (selectedProjectId && boqItems.length > 0) {
       autoMatchPricing(boqItems, basePricing);
     }
-  }, [basePricing, boqItems, selectedProjectId]);
+  }, [basePricing, boqItems, selectedProjectId, marketRates]);
+
+  useEffect(() => {
+    if (!preferredProjectId || !projects.length || selectedProjectId === preferredProjectId) {
+      return;
+    }
+
+    const exists = projects.some((project) => project.id === preferredProjectId);
+    if (exists) {
+      handleProjectChange(preferredProjectId);
+    }
+  }, [preferredProjectId, projects]);
 
   async function fetchProjects() {
     try {
@@ -286,6 +326,7 @@ export default function ApplyBasePricing() {
     if (!projectId) {
       setBoqItems([]);
       setPricedItems([]);
+      setMarketRates([]);
       return;
     }
 
@@ -302,10 +343,12 @@ export default function ApplyBasePricing() {
       if (!response.ok) throw new Error("Failed to fetch BOQ items");
 
       const items = await response.json();
+      const loadedMarketRates = await loadMarketRatesForProject(projectId);
+      setMarketRates(loadedMarketRates);
       setBoqItems(items);
 
       // Auto-match pricing
-      autoMatchPricing(items, basePricing);
+      autoMatchPricing(items, basePricing, loadedMarketRates);
     } catch (err) {
       console.error("Fetch BOQ error:", err);
       alert(err instanceof Error ? err.message : "Failed to fetch BOQ");
@@ -322,46 +365,139 @@ export default function ApplyBasePricing() {
       .trim();
   }
 
-  function autoMatchPricing(items: BOQItem[], pricingSource: BasePriceItem[] = basePricing) {
-    const matched = items.map((item) => {
-      // Try to find exact match or partial match in base pricing
-      const normalizedItemName = normalizeText(item.item);
-      const normalizedItemUom = normalizeText(item.uom);
-      
-      let match = pricingSource.find(
-        (bp) =>
-          normalizeText(bp.item) === normalizedItemName &&
-          (!normalizedItemUom || normalizeText(bp.uom) === normalizedItemUom)
+  function resolveRateLabel(source: string) {
+    const s = normalizeText(source);
+    if (!s) return "Scraped";
+    if (s.includes("dealer")) return "Scraped (Dealer)";
+    if (s.includes("pwd")) return "PWD";
+    return "Scraped";
+  }
+
+  function findBestMatch<T extends { item?: string; materialName?: string; uom?: string; unit?: string }>(
+    itemName: string,
+    itemUom: string,
+    source: T[]
+  ) {
+    const normalizedItemName = normalizeText(itemName);
+    const normalizedItemUom = normalizeText(itemUom);
+
+    let match = source.find((entry) => {
+      const candidateName = normalizeText((entry as any).item || (entry as any).materialName || "");
+      const candidateUom = normalizeText((entry as any).uom || (entry as any).unit || "");
+      return candidateName === normalizedItemName && (!normalizedItemUom || candidateUom === normalizedItemUom);
+    });
+
+    if (!match) {
+      match = source.find((entry) => {
+        const candidateName = normalizeText((entry as any).item || (entry as any).materialName || "");
+        return candidateName === normalizedItemName;
+      });
+    }
+
+    if (!match) {
+      match = source.find((entry) => {
+        const candidateName = normalizeText((entry as any).item || (entry as any).materialName || "");
+        return normalizedItemName.includes(candidateName) || candidateName.includes(normalizedItemName);
+      });
+    }
+
+    return match || null;
+  }
+
+  async function loadMarketRatesForProject(projectId: string): Promise<MarketRateItem[]> {
+    const project = projects.find((entry) => entry.id === projectId);
+    const siteAddress = String(project?.site_address || "").trim();
+
+    if (!siteAddress) {
+      return [];
+    }
+
+    try {
+      const [districtsRes, categoriesRes] = await Promise.all([
+        fetch(apiUrl("/api/prices/districts")),
+        fetch(apiUrl("/api/prices/categories")),
+      ]);
+
+      if (!districtsRes.ok || !categoriesRes.ok) {
+        return [];
+      }
+
+      const districts = await districtsRes.json();
+      const categories = await categoriesRes.json();
+
+      const normalizedSite = normalizeText(siteAddress);
+      const district = (districts || []).find((entry: any) =>
+        normalizedSite.includes(normalizeText(String(entry?.name || "")))
       );
 
-      if (!match) {
-        // Try exact item match ignoring UOM
-        match = pricingSource.find(
-          (bp) => normalizeText(bp.item) === normalizedItemName
-        );
+      if (!district?.id) {
+        return [];
       }
 
-      if (!match) {
-        // Try partial match on item name
-        match = pricingSource.find((bp) => {
-          const normalizedBaseItem = normalizeText(bp.item);
-          return (
-            normalizedItemName.includes(normalizedBaseItem) ||
-            normalizedBaseItem.includes(normalizedItemName)
+      const categoryNames = (categories || []).map((entry: any) => String(entry?.name || "")).filter(Boolean);
+      const rows: MarketRateItem[] = [];
+
+      await Promise.all(
+        categoryNames.map(async (categoryName: string) => {
+          const response = await fetch(
+            apiUrl(`/api/prices/district/${district.id}?category=${encodeURIComponent(categoryName)}`)
           );
-        }
-        );
+          if (!response.ok) return;
+          const data = await response.json();
+          const prices = Array.isArray(data?.prices) ? data.prices : [];
+
+          prices.forEach((entry: any) => {
+            const price = Number(entry?.price || 0);
+            if (!Number.isFinite(price) || price <= 0) return;
+            rows.push({
+              materialName: String(entry?.materialName || "").trim(),
+              unit: String(entry?.unit || "").trim(),
+              price,
+              source: String(entry?.source || "scraped").trim(),
+            });
+          });
+        })
+      );
+
+      return rows;
+    } catch {
+      return [];
+    }
+  }
+
+  function autoMatchPricing(
+    items: BOQItem[],
+    pricingSource: BasePriceItem[] = basePricing,
+    marketSource: MarketRateItem[] = marketRates
+  ) {
+    const matched = items.map((item) => {
+      const manualMatch = findBestMatch(item.item, item.uom, pricingSource);
+      const marketMatch = manualMatch ? null : findBestMatch(item.item, item.uom, marketSource);
+
+      let rate = 0;
+      let category = "Material";
+      let rateSource = "PWD";
+
+      if (manualMatch) {
+        rate = Number((manualMatch as BasePriceItem).rate || 0);
+        category = (manualMatch as BasePriceItem).category || "Material";
+        rateSource = "Manual";
+      } else if (marketMatch) {
+        rate = Number((marketMatch as MarketRateItem).price || 0);
+        rateSource = resolveRateLabel((marketMatch as MarketRateItem).source || "scraped");
+      } else if (Number(item.rate || 0) > 0) {
+        rate = Number(item.rate || 0);
+        rateSource = "PWD";
       }
 
-      const rate = match ? match.rate : 0;
       const total = item.qty * rate;
-      const category = match ? match.category : "Material";
 
       return {
         ...item,
         rate,
         total,
         category,
+        rateSource,
       };
     });
 
@@ -372,6 +508,7 @@ export default function ApplyBasePricing() {
     const updated = [...pricedItems];
     updated[index].rate = newRate;
     updated[index].total = updated[index].qty * newRate;
+    updated[index].rateSource = "Manual Override";
     setPricedItems(updated);
   }
 
@@ -759,6 +896,7 @@ export default function ApplyBasePricing() {
 
       // Refresh projects to update status
       fetchProjects();
+      onSubmitted?.();
       
       // Clear form
       setSelectedProjectId("");
@@ -877,6 +1015,20 @@ export default function ApplyBasePricing() {
   const activeRecommendation = activeRecommendationId
     ? optimizerSuggestions.find((suggestion) => suggestion.suggestionId === activeRecommendationId) || null
     : null;
+
+  useEffect(() => {
+    if (!activeRecommendationId) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setActiveRecommendationId(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeRecommendationId]);
+
   const laborMarginAmount = totals.laborWithUplift - totals.laborTotal;
   const machineryMarginAmount = totals.machineryWithUplift - totals.machineryTotal;
 
@@ -1007,22 +1159,38 @@ export default function ApplyBasePricing() {
     </div>
   );
 
+  const outerStyle = embedded ? { display: "block" as const } : pageStyles.page;
+  const cardStyle = embedded ? { ...pageStyles.card, padding: "0" } : pageStyles.card;
+
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "2rem",
-          }}
-        >
-          <h2 style={pageStyles.title}>Apply Base Pricing to Project</h2>
-          <div style={{ width: "120px", opacity: 0.7 }}>
-            <ConstructionIllustration type="blueprint" />
+    <div style={outerStyle}>
+      <div style={cardStyle}>
+        {!embedded ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: "2rem",
+            }}
+          >
+            <h2 style={pageStyles.title}>Apply Base Pricing to Project</h2>
+            <div style={{ width: "120px", opacity: 0.7 }}>
+              <ConstructionIllustration type="blueprint" />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ marginBottom: "1rem" }}>
+            <h3 style={{ ...pageStyles.title, fontSize: "clamp(18px, 3vw, 24px)" }}>Apply Pricing & Review</h3>
+            {selectedProject ? (
+              <p style={pageStyles.subtitle}>
+                Selected project: {selectedProject.name} ({selectedProject.site_address || "No location"})
+              </p>
+            ) : (
+              <p style={pageStyles.subtitle}>Select a project from the dashboard status board below.</p>
+            )}
+          </div>
+        )}
 
         {/* Project Selection */}
         <div style={{ marginBottom: "2rem" }}>
@@ -1356,6 +1524,7 @@ export default function ApplyBasePricing() {
                         <th className="num-header" style={pageStyles.th}>Quantity</th>
                         <th style={pageStyles.th}>UOM</th>
                         <th className="amount-header" style={pageStyles.th}>Rate (₹)</th>
+                        <th style={pageStyles.th}>Rate Source</th>
                         <th className="amount-header" style={pageStyles.th}>Total (₹)</th>
                       </tr>
                     </thead>
@@ -1384,12 +1553,13 @@ export default function ApplyBasePricing() {
                                   }}
                                 />
                               </td>
+                              <td style={pageStyles.td}>{item.rateSource || "PWD"}</td>
                               <td className="amount-cell" style={pageStyles.td}>{item.total.toFixed(2)}</td>
                             </tr>
 
                             {llmSuggestion && (
                               <tr style={index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
-                                <td style={pageStyles.td} colSpan={6}>
+                                <td style={pageStyles.td} colSpan={7}>
                                   <div
                                     style={{
                                       border: "1px solid #99f6e4",
@@ -1549,9 +1719,19 @@ export default function ApplyBasePricing() {
                     <button
                       type="button"
                       onClick={() => setActiveRecommendationId(null)}
-                      style={pageStyles.secondaryBtn}
+                      aria-label="Close recommendation"
+                      style={{
+                        ...pageStyles.secondaryBtn,
+                        minWidth: 34,
+                        width: 34,
+                        height: 34,
+                        padding: 0,
+                        borderRadius: 999,
+                        fontSize: 18,
+                        lineHeight: 1,
+                      }}
                     >
-                      Close
+                      ×
                     </button>
                   </div>
 

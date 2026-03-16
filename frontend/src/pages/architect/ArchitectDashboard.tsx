@@ -10,13 +10,11 @@ export default function ArchitectDashboard() {
         <div style={pageStyles.header}>
           <div>
             <h2 style={pageStyles.title}>Architect Dashboard</h2>
-            <p style={pageStyles.subtitle}>
-              Use the workflow bar at the top to navigate each step in one click.
-            </p>
+            <p style={pageStyles.subtitle}>Manage projects, pricing analysis, and tender comparisons.</p>
           </div>
         </div>
         <div style={pageStyles.result}>
-          Select any step from the top workflow to continue.
+          Open the next workspace from the actions below.
         </div>
         <div style={pageStyles.buttonRow}>
           <button

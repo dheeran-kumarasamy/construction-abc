@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Material, District } from "./types";
 
 interface Props {
@@ -13,6 +13,19 @@ export default function AlertDialog({ open, materials, district, onClose, onSave
   const [materialId, setMaterialId] = useState<string>("");
   const [condition, setCondition] = useState<"above" | "below">("above");
   const [threshold, setThreshold] = useState<string>("");
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
 
   if (!open || !district) return null;
 
@@ -33,8 +46,27 @@ export default function AlertDialog({ open, materials, district, onClose, onSave
 
   return (
     <div className="pt-modal-backdrop" onClick={onClose}>
-      <div className="pt-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Create Price Alert</h3>
+      <div className="pt-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <h3 style={{ margin: 0 }}>Create Price Alert</h3>
+          <button
+            type="button"
+            aria-label="Close alert dialog"
+            onClick={onClose}
+            style={{
+              border: "1px solid #cbd5e1",
+              background: "#ffffff",
+              borderRadius: 999,
+              width: 32,
+              height: 32,
+              cursor: "pointer",
+              fontSize: 18,
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
         <p>{district.name}</p>
 
         <label>Material</label>
