@@ -149,7 +149,7 @@ export default function InviteBuilders() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(760px, 100%)" }}>
+      <div style={pageStyles.card}>
         <div style={pageStyles.header}>
           <div>
             <h2 style={pageStyles.title}>{isArchitectHead ? "Invite Team & Builders" : "Invite Builders"}</h2>

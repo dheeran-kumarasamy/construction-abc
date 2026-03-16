@@ -93,7 +93,7 @@ export default function ProjectsList() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(1400px, 100%)" }}>
+      <div style={pageStyles.card}>
         <div style={pageStyles.header}>
           <div>
             <h2 style={pageStyles.title}>View Projects</h2>

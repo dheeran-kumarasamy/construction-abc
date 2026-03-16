@@ -7,7 +7,7 @@ export default function BuilderDashboard() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(860px, 100%)" }}>
+      <div style={pageStyles.card}>
         <div style={pageStyles.header}>
           <div>
             <h2 style={pageStyles.title}>Builder Dashboard</h2>
