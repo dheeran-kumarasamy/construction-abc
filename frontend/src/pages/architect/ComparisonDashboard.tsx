@@ -96,7 +96,7 @@ export default function ComparisonDashboard() {
 
   return (
     <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, width: "min(820px, 100%)" }}>
+      <div style={pageStyles.card}>
         <div
           style={{
             display: "flex",

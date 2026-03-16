@@ -1,7 +1,25 @@
 .pt-page {
+  min-height: 100vh;
   max-width: 1280px;
   margin: 0 auto;
   padding: 20px;
+  background-image:
+    radial-gradient(900px 420px at 15% 10%, rgba(248, 250, 252, 0.48) 0%, rgba(248, 250, 252, 0.4) 45%, rgba(241, 245, 249, 0.38) 100%),
+    url("https://assets.architecturaldigest.in/photos/6937ed0db1937d5a47ba2aa1/master/w_1600,c_limit/DSC_6900-HDR.jpg");
+  background-size: cover, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+  color: #ffffff;
+}
+
+.pt-page h1 {
+  color: #ffffff;
+  text-shadow: 0 2px 14px rgba(15, 23, 42, 0.55);
+}
+
+.pt-card,
+.pt-map-wrap {
+  color: #0f172a;
 }
 
 .pt-a2hs-banner {

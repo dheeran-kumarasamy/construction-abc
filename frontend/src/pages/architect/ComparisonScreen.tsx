@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "../../services/api";
+import { pageStyles } from "../../layouts/pageStyles";
 
 interface ComparisonRow {
   builder_org_id: string;
@@ -70,65 +71,70 @@ export default function ComparisonScreen({ projectId }: { projectId: string }) {
 
   if (loading) {
     return (
-      <div className="p-8 text-gray-600 text-lg">Loading comparison…</div>
+      <div style={pageStyles.page}>
+        <p style={{ color: "var(--muted)", fontSize: "18px" }}>Loading comparison…</p>
+      </div>
     );
   }
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-semibold mb-6">Builder Comparison</h1>
+    <div style={pageStyles.page}>
+      <div style={pageStyles.card}>
+        <h2 style={pageStyles.title}>Builder Comparison</h2>
 
-      <div className="bg-white rounded-2xl shadow border overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="p-4">Rank</th>
-              <th className="p-4">Builder</th>
-              <th className="p-4">Revision</th>
-              <th className="p-4">Margin %</th>
-              <th className="p-4">Grand Total</th>
-              <th className="p-4">Action</th>
-            </tr>
-          </thead>
+        <div style={{ overflowX: "auto" }}>
+          <table style={pageStyles.table}>
+            <thead>
+              <tr>
+                <th style={pageStyles.th}>Rank</th>
+                <th style={pageStyles.th}>Builder</th>
+                <th style={pageStyles.th}>Revision</th>
+                <th style={pageStyles.th}>Margin %</th>
+                <th style={pageStyles.th}>Grand Total</th>
+                <th style={pageStyles.th}>Action</th>
+              </tr>
+            </thead>
 
-          <tbody>
-            {data.map((row) => {
-              const isLowest = row.rank === 1;
+            <tbody>
+              {data.map((row, idx) => {
+                const isLowest = row.rank === 1;
 
-              return (
-                <tr
-                  key={row.revision_id}
-                  className={`border-b last:border-0 ${
-                    isLowest ? "bg-green-50" : ""
-                  }`}
-                >
-                  <td className="p-4 font-semibold">#{row.rank}</td>
-                  <td className="p-4">{row.builder_org_id}</td>
-                  <td className="p-4">Rev {row.revision_number}</td>
-                  <td className="p-4">{row.margin_percent}%</td>
-                  <td className="p-4 font-medium">
-                    ₹ {row.grand_total.toLocaleString()}
-                  </td>
-                  <td className="p-4">
-                    <button
-                      disabled={awarding !== null}
-                      onClick={() => handleAward(row.revision_id)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                        isLowest
-                          ? "bg-green-600 text-white hover:bg-green-700"
-                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                      }`}
-                    >
-                      {awarding === row.revision_id
-                        ? "Awarding…"
-                        : "Award"}
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                return (
+                  <tr
+                    key={row.revision_id}
+                    style={{
+                      ...(idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd),
+                      ...(isLowest ? { backgroundColor: "#f0fdfa" } : {}),
+                    }}
+                  >
+                    <td style={{ ...pageStyles.td, fontWeight: 600 }}>#{row.rank}</td>
+                    <td style={pageStyles.td}>{row.builder_org_id}</td>
+                    <td style={pageStyles.td}>Rev {row.revision_number}</td>
+                    <td style={pageStyles.td}>{row.margin_percent}%</td>
+                    <td style={{ ...pageStyles.td, fontWeight: 500 }}>
+                      ₹ {row.grand_total.toLocaleString()}
+                    </td>
+                    <td style={pageStyles.td}>
+                      <button
+                        disabled={awarding !== null}
+                        onClick={() => handleAward(row.revision_id)}
+                        style={{
+                          ...(isLowest ? pageStyles.primaryBtn : pageStyles.secondaryBtn),
+                          height: "36px",
+                          fontSize: "13px",
+                        }}
+                      >
+                        {awarding === row.revision_id
+                          ? "Awarding…"
+                          : "Award"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
