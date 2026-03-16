@@ -2,7 +2,6 @@ import { Fragment, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
-import FingerInAirEstimator from "../../components/FingerInAirEstimator";
 import { apiUrl } from "../../services/api";
 
 interface ProjectRow {
@@ -114,11 +113,6 @@ export default function ProjectsList() {
           <button type="button" style={pageStyles.secondaryBtn} onClick={() => navigate("/architect/estimation")}>Rate Analysis & BOQ Estimation</button>
           <button type="button" style={pageStyles.secondaryBtn} onClick={() => navigate("/architect/prices")}>Material Rates</button>
         </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <FingerInAirEstimator />
-        </div>
-
         {loading && <div>Loading projects...</div>}
         {error && <div style={pageStyles.error}>{error}</div>}
 

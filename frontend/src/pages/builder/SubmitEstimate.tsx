@@ -19,7 +19,7 @@ interface Estimate {
   latest_review_comment?: string | null;
 }
 
-export default function SubmitEstimate() {
+export default function SubmitEstimate({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate();
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +31,19 @@ export default function SubmitEstimate() {
   useEffect(() => {
     fetchSubmittedEstimates();
   }, []);
+
+  useEffect(() => {
+    if (!selectedRevision) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedRevision(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedRevision]);
 
   async function fetchSubmittedEstimates() {
     setLoading(true);
@@ -107,9 +120,12 @@ export default function SubmitEstimate() {
     maxWidth: "260px",
   };
 
+  const outerStyle = embedded ? { display: "block" as const } : pageStyles.page;
+  const cardStyle = embedded ? { ...pageStyles.card, padding: "0" } : pageStyles.card;
+
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div style={outerStyle}>
+      <div style={cardStyle}>
         <h2 style={pageStyles.title}>View Submission</h2>
 
         {loading ? (
@@ -136,6 +152,7 @@ export default function SubmitEstimate() {
                   <th className="amount-header" style={noWrapHeaderStyle}>Grand Total</th>
                   <th style={noWrapHeaderStyle}>Submitted At</th>
                   <th style={noWrapHeaderStyle}>Notes</th>
+                  <th style={noWrapHeaderStyle}>Apply Pricing to BOQ</th>
                   <th style={noWrapHeaderStyle}>History</th>
                 </tr>
               </thead>
@@ -153,6 +170,14 @@ export default function SubmitEstimate() {
                         : "-"}
                     </td>
                     <td style={wrapCellStyle}>{estimate.notes || "-"}</td>
+                    <td style={noWrapCellStyle}>
+                      <button
+                        style={pageStyles.secondaryBtn}
+                        onClick={() => navigate(`/builder/apply-pricing?projectId=${encodeURIComponent(estimate.project_id)}`)}
+                      >
+                        Open Pricing
+                      </button>
+                    </td>
                     <td style={noWrapCellStyle}>
                       <button
                         style={pageStyles.secondaryBtn}
@@ -251,6 +276,8 @@ export default function SubmitEstimate() {
 
         {selectedRevision && (
           <div
+            role="dialog"
+            aria-modal="true"
             onClick={() => setSelectedRevision(null)}
             style={{
               position: "fixed",
@@ -277,7 +304,22 @@ export default function SubmitEstimate() {
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
                 <h3 style={{ margin: 0, color: "#0f172a" }}>Revision Details - Rev {selectedRevision.revision_number}</h3>
-                <button style={pageStyles.secondaryBtn} onClick={() => setSelectedRevision(null)}>Close</button>
+                <button
+                  aria-label="Close revision details"
+                  style={{
+                    ...pageStyles.secondaryBtn,
+                    minWidth: 34,
+                    width: 34,
+                    height: 34,
+                    padding: 0,
+                    borderRadius: 999,
+                    fontSize: 18,
+                    lineHeight: 1,
+                  }}
+                  onClick={() => setSelectedRevision(null)}
+                >
+                  ×
+                </button>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>

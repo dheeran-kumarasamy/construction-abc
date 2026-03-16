@@ -19,6 +19,28 @@ type EstimateResult = {
   };
 };
 
+const formRowStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+};
+
+const fieldStackStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+};
+
+const fieldLabelStyle: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#0f172a",
+  letterSpacing: "0.2px",
+};
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <label style={fieldLabelStyle}>{children}</label>;
+}
+
 function formatINR(value: number | null | undefined) {
   if (value == null) return "-";
   return new Intl.NumberFormat("en-IN", {
@@ -104,71 +126,149 @@ export default function FingerInAirEstimator() {
         </p>
       </div>
 
-      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-        <select style={pageStyles.select} value={buildingClass} onChange={(e) => setBuildingClass(e.target.value)}>
-          <option value="I-A">Building class: I-A (RCC Framed)</option>
-          <option value="I-B">Building class: I-B (RCC + Mangalore Tile)</option>
-          <option value="II-A">Building class: II-A (Load Bearing RCC)</option>
-          <option value="II-B">Building class: II-B (Load Bearing AC Sheet)</option>
-          <option value="II-C">Building class: II-C (Load Bearing Mangalore Tile)</option>
-          <option value="III-A">Building class: III-A (Semi-permanent Tiled)</option>
-          <option value="III-B">Building class: III-B (Semi-permanent GI Sheet)</option>
-          <option value="IV-A">Building class: IV-A (Temporary Thatched)</option>
-          <option value="IV-B">Building class: IV-B (Temporary Tin Sheet)</option>
-        </select>
+      <div style={{ display: "grid", gap: 12 }}>
+        <div style={formRowStyle}>
+          <div style={fieldStackStyle}>
+            <FieldLabel>Building Class</FieldLabel>
+            <select style={pageStyles.select} value={buildingClass} onChange={(e) => setBuildingClass(e.target.value)}>
+              <option value="I-A">I-A (RCC Framed)</option>
+              <option value="I-B">I-B (RCC + Mangalore Tile)</option>
+              <option value="II-A">II-A (Load Bearing RCC)</option>
+              <option value="II-B">II-B (Load Bearing AC Sheet)</option>
+              <option value="II-C">II-C (Load Bearing Mangalore Tile)</option>
+              <option value="III-A">III-A (Semi-permanent Tiled)</option>
+              <option value="III-B">III-B (Semi-permanent GI Sheet)</option>
+              <option value="IV-A">IV-A (Temporary Thatched)</option>
+              <option value="IV-B">IV-B (Temporary Tin Sheet)</option>
+            </select>
+          </div>
 
-        <select style={pageStyles.select} value={roofType} onChange={(e) => setRoofType(e.target.value)}>
-          <option value="RCC Slab">Roof type: RCC Slab</option>
-          <option value="Mangalore Tile">Roof type: Mangalore Tile</option>
-          <option value="AC Sheet">Roof type: AC Sheet</option>
-          <option value="Country Tile">Roof type: Country Tile</option>
-          <option value="GI Sheet">Roof type: GI Sheet</option>
-          <option value="Thatch">Roof type: Thatch</option>
-          <option value="Tin Sheet">Roof type: Tin Sheet</option>
-        </select>
+          <div style={fieldStackStyle}>
+            <FieldLabel>Roof Type</FieldLabel>
+            <select style={pageStyles.select} value={roofType} onChange={(e) => setRoofType(e.target.value)}>
+              <option value="RCC Slab">RCC Slab</option>
+              <option value="Mangalore Tile">Mangalore Tile</option>
+              <option value="AC Sheet">AC Sheet</option>
+              <option value="Country Tile">Country Tile</option>
+              <option value="GI Sheet">GI Sheet</option>
+              <option value="Thatch">Thatch</option>
+              <option value="Tin Sheet">Tin Sheet</option>
+            </select>
+          </div>
 
-        <input style={pageStyles.input} type="number" placeholder="Plinth area sqm (default 111.48)" value={plinthAreaSqm} onChange={(e) => setPlinthAreaSqm(e.target.value)} />
+          <div style={fieldStackStyle}>
+            <FieldLabel>Plinth Area (sqm)</FieldLabel>
+            <input
+              style={pageStyles.input}
+              type="number"
+              placeholder="111.48"
+              value={plinthAreaSqm}
+              onChange={(e) => setPlinthAreaSqm(e.target.value)}
+            />
+          </div>
+        </div>
 
-        <select style={pageStyles.select} value={numFloors} onChange={(e) => setNumFloors(e.target.value)}>
-          <option value="1">Floors: 1</option>
-          <option value="2">Floors: 2</option>
-          <option value="3">Floors: 3</option>
-          <option value="4">Floors: 4</option>
-          <option value="5">Floors: 5</option>
-        </select>
+        <div style={formRowStyle}>
+          <div style={fieldStackStyle}>
+            <FieldLabel>Floors</FieldLabel>
+            <select style={pageStyles.select} value={numFloors} onChange={(e) => setNumFloors(e.target.value)}>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </div>
 
-        <select style={pageStyles.select} value={locationZone} onChange={(e) => setLocationZone(e.target.value)}>
-          <option value="">Location zone (default normal)</option>
-          <option value="normal">Normal</option>
-          <option value="urban">Urban</option>
-          <option value="metro">Metro</option>
-          <option value="rural">Rural</option>
-        </select>
+          <div style={fieldStackStyle}>
+            <FieldLabel>Location Zone</FieldLabel>
+            <select style={pageStyles.select} value={locationZone} onChange={(e) => setLocationZone(e.target.value)}>
+              <option value="">Normal</option>
+              <option value="normal">Normal</option>
+              <option value="urban">Urban</option>
+              <option value="metro">Metro</option>
+              <option value="rural">Rural</option>
+            </select>
+          </div>
 
-        <select style={pageStyles.select} value={qualityGrade} onChange={(e) => setQualityGrade(e.target.value)}>
-          <option value="">Quality grade (default standard)</option>
-          <option value="economy">Economy</option>
-          <option value="standard">Standard</option>
-          <option value="premium">Premium</option>
-        </select>
+          <div style={fieldStackStyle}>
+            <FieldLabel>Quality Grade</FieldLabel>
+            <select style={pageStyles.select} value={qualityGrade} onChange={(e) => setQualityGrade(e.target.value)}>
+              <option value="">Standard</option>
+              <option value="economy">Economy</option>
+              <option value="standard">Standard</option>
+              <option value="premium">Premium</option>
+            </select>
+          </div>
+        </div>
 
-        <input style={pageStyles.input} type="number" placeholder="Contingency % (default 5)" value={contingencyPercent} onChange={(e) => setContingencyPercent(e.target.value)} />
-        <input style={pageStyles.input} type="number" placeholder="Escalation % (default 0)" value={escalationPercent} onChange={(e) => setEscalationPercent(e.target.value)} />
-      </div>
+        <div style={formRowStyle}>
+          <div style={fieldStackStyle}>
+            <FieldLabel>Contingency (%)</FieldLabel>
+            <input
+              style={pageStyles.input}
+              type="number"
+              placeholder="5"
+              value={contingencyPercent}
+              onChange={(e) => setContingencyPercent(e.target.value)}
+            />
+          </div>
 
-      <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-        <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#0f172a" }}>
-          <input type="checkbox" checked={includeServices} onChange={(e) => setIncludeServices(e.target.checked)} />
-          Include services
-        </label>
-        <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#0f172a" }}>
-          <input type="checkbox" checked={includeExternalWorks} onChange={(e) => setIncludeExternalWorks(e.target.checked)} />
-          Include external works
-        </label>
+          <div style={fieldStackStyle}>
+            <FieldLabel>Escalation (%)</FieldLabel>
+            <input
+              style={pageStyles.input}
+              type="number"
+              placeholder="0"
+              value={escalationPercent}
+              onChange={(e) => setEscalationPercent(e.target.value)}
+            />
+          </div>
+
+          <div style={{ ...fieldStackStyle, alignContent: "end" }}>
+            <FieldLabel>Options</FieldLabel>
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                minHeight: 42,
+                alignContent: "center",
+                padding: "10px 12px",
+                border: "1px solid #cbd5e1",
+                borderRadius: 10,
+                background: "#ffffff",
+              }}
+            >
+              <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#0f172a", fontSize: 13 }}>
+                <input type="checkbox" checked={includeServices} onChange={(e) => setIncludeServices(e.target.checked)} />
+                Include services
+              </label>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#0f172a", fontSize: 13 }}>
+                <input type="checkbox" checked={includeExternalWorks} onChange={(e) => setIncludeExternalWorks(e.target.checked)} />
+                Include external works
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button type="button" style={pageStyles.primaryBtn} onClick={runEstimate} disabled={loading}>
+        <button
+          type="button"
+          style={{
+            ...pageStyles.primaryBtn,
+            background: "#0f172a",
+            color: "#ffffff",
+            fontWeight: 800,
+            minHeight: 44,
+            minWidth: 220,
+            padding: "0 18px",
+            border: "1px solid #0f172a",
+            boxShadow: "0 10px 24px rgba(15, 23, 42, 0.22)",
+          }}
+          onClick={runEstimate}
+          disabled={loading}
+        >
           {loading ? "Calculating..." : "Get Quick Estimate"}
         </button>
       </div>

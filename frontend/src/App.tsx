@@ -47,8 +47,7 @@ function ClientView() {
     <div style={pageStyles.page}>
       <div style={pageStyles.card}>
         <h1 style={pageStyles.title}>Client Dashboard</h1>
-        <p style={pageStyles.subtitle}>View approved estimates and run quick order-of-magnitude project pricing.</p>
-        <FingerInAirEstimator />
+        <p style={pageStyles.subtitle}>View approved estimates and project updates.</p>
       </div>
     </div>
   );
@@ -58,8 +57,10 @@ function DashboardButton() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [quickEstimateOpen, setQuickEstimateOpen] = React.useState(false);
   const onArchitectScreen = location.pathname.startsWith("/architect");
   const onBuilderScreen = location.pathname.startsWith("/builder");
+  const roleLabel = String(user?.role || "").toUpperCase();
 
   const dashboardPath = onArchitectScreen
     ? "/architect"
@@ -68,254 +69,199 @@ function DashboardButton() {
     : null;
 
   const showBackToDashboard = !!dashboardPath && location.pathname !== dashboardPath;
+  const canOpenQuickEstimate = user?.role === "architect" || user?.role === "builder" || user?.role === "client";
+
+  React.useEffect(() => {
+    if (!quickEstimateOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setQuickEstimateOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [quickEstimateOpen]);
 
   if (!user || location.pathname === "/login") {
     return null;
   }
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: onArchitectScreen || onBuilderScreen ? 78 : 16,
-        right: 16,
-        zIndex: 1200,
-        display: "flex",
-        gap: 8,
-        alignItems: "center",
-        flexWrap: "wrap",
-        background: "rgba(2, 6, 23, 0.72)",
-        border: "1px solid rgba(148, 163, 184, 0.5)",
-        borderRadius: "12px",
-        padding: "8px",
-        boxShadow: "0 8px 22px rgba(2, 6, 23, 0.35)",
-      }}
-    >
-      {showBackToDashboard ? (
+    <>
+      <div
+        style={{
+          position: "fixed",
+          top: 16,
+          right: 16,
+          zIndex: 1200,
+          pointerEvents: "none",
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          alignItems: "stretch",
+          background: "rgba(2, 6, 23, 0.72)",
+          border: "1px solid rgba(148, 163, 184, 0.5)",
+          borderRadius: "12px",
+          padding: "8px",
+          boxShadow: "0 8px 22px rgba(2, 6, 23, 0.35)",
+          width: "fit-content",
+          maxWidth: "min(220px, calc(100vw - 24px))",
+        }}
+      >
+        {roleLabel ? (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "38px",
+              padding: "0 12px",
+              borderRadius: "999px",
+              border: "1px solid #cbd5e1",
+              background: "#e2e8f0",
+              color: "#334155",
+              fontSize: "12px",
+              fontWeight: 800,
+              letterSpacing: "0.4px",
+              cursor: "default",
+              userSelect: "none",
+              marginBottom: "4px",
+              pointerEvents: "auto",
+            }}
+          >
+            {roleLabel}
+          </span>
+        ) : null}
+
+        {showBackToDashboard ? (
+          <button
+            type="button"
+            style={{
+              ...pageStyles.primaryBtn,
+              height: "36px",
+              padding: "0 14px",
+              fontSize: "12px",
+              fontWeight: 800,
+              letterSpacing: "0.2px",
+              background: "#0f766e",
+              border: "1px solid rgba(255, 255, 255, 0.22)",
+              width: "100%",
+              pointerEvents: "auto",
+            }}
+            onClick={() => navigate(dashboardPath)}
+          >
+            Dashboard
+          </button>
+        ) : null}
+
+        {canOpenQuickEstimate ? (
+          <button
+            type="button"
+            style={{
+              ...pageStyles.primaryBtn,
+              height: "36px",
+              padding: "0 14px",
+              fontSize: "12px",
+              fontWeight: 800,
+              letterSpacing: "0.2px",
+              background: "#1d4ed8",
+              color: "#ffffff",
+              border: "1px solid #1e40af",
+              boxShadow: "0 8px 18px rgba(30, 64, 175, 0.28)",
+              width: "100%",
+              pointerEvents: "auto",
+            }}
+            onClick={() => setQuickEstimateOpen(true)}
+          >
+            Quick Estimate
+          </button>
+        ) : null}
+
         <button
           type="button"
           style={{
             ...pageStyles.primaryBtn,
-            height: "38px",
+            height: "36px",
             padding: "0 14px",
-            fontSize: "13px",
-            background: "#0f766e",
+            fontSize: "12px",
+            fontWeight: 800,
+            letterSpacing: "0.2px",
+            background: "#b91c1c",
+            border: "1px solid rgba(255, 255, 255, 0.25)",
+            boxShadow: "0 6px 16px rgba(127, 29, 29, 0.45)",
+            width: "100%",
+            pointerEvents: "auto",
           }}
-          onClick={() => navigate(dashboardPath)}
+          onClick={() => {
+            logout();
+            localStorage.removeItem("token");
+            localStorage.removeItem("role");
+            navigate("/login");
+          }}
         >
-          Back to Dashboard
+          Logout
         </button>
-      ) : null}
+      </div>
 
-      <button
-        type="button"
-        style={{
-          ...pageStyles.primaryBtn,
-          height: "38px",
-          padding: "0 14px",
-          fontSize: "13px",
-          background: "#b91c1c",
-          boxShadow: "0 6px 16px rgba(127, 29, 29, 0.45)",
-        }}
-        onClick={() => {
-          logout();
-          localStorage.removeItem("token");
-          localStorage.removeItem("role");
-          navigate("/login");
-        }}
-      >
-        Logout
-      </button>
-    </div>
+      {quickEstimateOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(2, 6, 23, 0.6)",
+            zIndex: 1300,
+            display: "grid",
+            placeItems: "center",
+            padding: "16px",
+          }}
+          onClick={() => setQuickEstimateOpen(false)}
+        >
+          <div
+            style={{
+              width: "min(980px, 100%)",
+              maxHeight: "92vh",
+              overflow: "auto",
+              background: "#ffffff",
+              borderRadius: "14px",
+              border: "1px solid #cbd5e1",
+              padding: "14px",
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <h3 style={{ margin: 0, color: "#0f172a" }}>Quick Estimate</h3>
+              <button
+                type="button"
+                aria-label="Close quick estimate"
+                style={{
+                  ...pageStyles.secondaryBtn,
+                  minWidth: 36,
+                  width: 36,
+                  height: 36,
+                  padding: 0,
+                  borderRadius: 999,
+                  fontSize: 18,
+                  lineHeight: 1,
+                }}
+                onClick={() => setQuickEstimateOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <FingerInAirEstimator />
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
 function FlowBackgroundController() {
   return null;
-}
-
-function ArchitectWorkflowBar() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  if (!user || user.role !== "architect" || !location.pathname.startsWith("/architect")) {
-    return null;
-  }
-
-  const flowSteps = [
-    { label: "Projects", path: "/architect", step: 1 },
-    { label: "Create Project", path: "/architect/create", step: 2 },
-    { label: "Upload BOQ", path: "/architect/boq-upload", step: 3 },
-    { label: "Invite Builders", path: "/architect/invite", step: 4 },
-    { label: "Received Estimates", path: "/architect/received", step: 5 },
-    { label: "Material Rates", path: "/architect/prices", step: 6 },
-  ];
-
-  const roleLabel = "Architect";
-
-  return (
-    <div
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 900,
-        padding: "12px clamp(12px, 5vw, 32px)",
-        background: "rgba(255, 253, 248, 0.96)",
-        borderBottom: "1px solid #e5e7eb",
-        backdropFilter: "blur(4px)",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "6px" }}>
-        <span
-          style={{
-            background: "#ecfeff",
-            border: "1px solid #99f6e4",
-            color: "#0f766e",
-            borderRadius: "999px",
-            fontSize: "12px",
-            fontWeight: 700,
-            padding: "4px 10px",
-          }}
-        >
-          {roleLabel}
-        </span>
-      </div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          overflowX: "auto",
-          paddingBottom: 4,
-        }}
-      >
-        {flowSteps.map((step, idx) => {
-          const isProjectsRoute =
-            step.path === "/architect" &&
-            (location.pathname === "/architect" || location.pathname === "/architect/projects");
-          const isActive = isProjectsRoute || location.pathname === step.path;
-
-          return (
-            <React.Fragment key={step.path}>
-              <button
-                type="button"
-                onClick={() => navigate(step.path)}
-                style={{
-                  ...pageStyles.primaryBtn,
-                  background: isActive ? "#0f766e" : "#115e59",
-                  opacity: isActive ? 1 : 0.9,
-                  height: "38px",
-                  padding: "0 12px",
-                  fontSize: "13px",
-                  borderRadius: "999px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-                aria-current={isActive ? "page" : undefined}
-              >
-                <span style={{ fontWeight: 700 }}>{step.step}.</span>
-                <span>{step.label}</span>
-              </button>
-              {idx < flowSteps.length - 1 && (
-                <span style={{ color: "#0f766e", fontWeight: 700 }}>→</span>
-              )}
-            </React.Fragment>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function BuilderWorkflowBar() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  if (!user || user.role !== "builder" || !location.pathname.startsWith("/builder")) {
-    return null;
-  }
-
-  const flowSteps = [
-    { label: "Manage Base Pricing", path: "/builder/base-pricing", step: 1 },
-    { label: "Apply Pricing to BOQ", path: "/builder/apply-pricing", step: 2 },
-    { label: "Configure Margins & Uplifts", path: "/builder/margins", step: 3 },
-    { label: "View Submission", path: "/builder/submit", step: 4 },
-  ];
-
-  const roleLabel = "Builder";
-
-  return (
-    <div
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 900,
-        padding: "12px clamp(12px, 5vw, 32px)",
-        background: "rgba(255, 253, 248, 0.96)",
-        borderBottom: "1px solid #e5e7eb",
-        backdropFilter: "blur(4px)",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "6px" }}>
-        <span
-          style={{
-            background: "#ecfeff",
-            border: "1px solid #99f6e4",
-            color: "#0f766e",
-            borderRadius: "999px",
-            fontSize: "12px",
-            fontWeight: 700,
-            padding: "4px 10px",
-          }}
-        >
-          {roleLabel}
-        </span>
-      </div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          overflowX: "auto",
-          paddingBottom: 4,
-        }}
-      >
-        {flowSteps.map((step, idx) => {
-          const isActive = location.pathname === step.path;
-          return (
-            <React.Fragment key={step.path}>
-              <button
-                type="button"
-                onClick={() => navigate(step.path)}
-                style={{
-                  ...pageStyles.primaryBtn,
-                  background: isActive ? "#0f766e" : "#115e59",
-                  opacity: isActive ? 1 : 0.9,
-                  height: "38px",
-                  padding: "0 12px",
-                  fontSize: "13px",
-                  borderRadius: "999px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-                aria-current={isActive ? "page" : undefined}
-              >
-                <span style={{ fontWeight: 700 }}>{step.step}.</span>
-                <span>{step.label}</span>
-              </button>
-              {idx < flowSteps.length - 1 && (
-                <span style={{ color: "#0f766e", fontWeight: 700 }}>→</span>
-              )}
-            </React.Fragment>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 // Wrapper to extract projectId route param and pass to ComparisonScreen
@@ -331,8 +277,6 @@ export default function App() {
       <BrowserRouter>
         <FlowBackgroundController />
         <DashboardButton />
-        <ArchitectWorkflowBar />
-        <BuilderWorkflowBar />
         <Routes>
           {/* Public */}
           <Route path="/" element={<Navigate to="/login" />} />

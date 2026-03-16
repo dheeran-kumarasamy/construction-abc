@@ -54,6 +54,25 @@ export default function TemplateEditorPage() {
     })();
   }, [loadTemplates]);
 
+  useEffect(() => {
+    if (!showCreate && !showAddLine) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (showAddLine) {
+        setShowAddLine(false);
+        setResourceSearch("");
+        return;
+      }
+      if (showCreate) {
+        setShowCreate(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showCreate, showAddLine]);
+
   async function handleSelect(t: RateTemplate) {
     try {
       const detail = await api.fetchTemplateDetail(t.id);
@@ -402,9 +421,28 @@ export default function TemplateEditorPage() {
 
       {/* Create Template Modal */}
       {showCreate && (
-        <div style={modalOverlay}>
-          <div style={{ ...pageStyles.card, width: 480, padding: 24 }}>
-            <h3 style={{ margin: "0 0 16px" }}>New Template</h3>
+        <div style={modalOverlay} onClick={() => setShowCreate(false)}>
+          <div style={{ ...pageStyles.card, width: 480, padding: 24 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "0 0 16px" }}>
+              <h3 style={{ margin: 0 }}>New Template</h3>
+              <button
+                type="button"
+                aria-label="Close new template modal"
+                onClick={() => setShowCreate(false)}
+                style={{
+                  ...pageStyles.secondaryBtn,
+                  minWidth: 34,
+                  width: 34,
+                  height: 34,
+                  padding: 0,
+                  borderRadius: 999,
+                  fontSize: 18,
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <div style={{ ...pageStyles.field, flex: "0 0 120px" }}>
                 <label style={pageStyles.label}>Code</label>
@@ -453,9 +491,28 @@ export default function TemplateEditorPage() {
 
       {/* Add Line Item Modal */}
       {showAddLine && selected && (
-        <div style={modalOverlay}>
-          <div style={{ ...pageStyles.card, width: 520, padding: 24 }}>
-            <h3 style={{ margin: "0 0 12px" }}>Add Resource to {selected.code}</h3>
+        <div style={modalOverlay} onClick={() => { setShowAddLine(false); setResourceSearch(""); }}>
+          <div style={{ ...pageStyles.card, width: 520, padding: 24 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "0 0 12px" }}>
+              <h3 style={{ margin: 0 }}>Add Resource to {selected.code}</h3>
+              <button
+                type="button"
+                aria-label="Close add line item modal"
+                onClick={() => { setShowAddLine(false); setResourceSearch(""); }}
+                style={{
+                  ...pageStyles.secondaryBtn,
+                  minWidth: 34,
+                  width: 34,
+                  height: 34,
+                  padding: 0,
+                  borderRadius: 999,
+                  fontSize: 18,
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
             <input
               style={{ ...pageStyles.input, marginBottom: 8 }}
               placeholder="Search resources..."
