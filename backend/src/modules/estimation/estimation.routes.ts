@@ -99,6 +99,6 @@ router.get("/projects/:projectId/export", authenticate, exportProject);
 router.post("/projects/:projectId/validate-plinth", authenticate, validatePlinthArea);
 
 // ── Quick Finger-In-Air Estimate ───────────────
-router.post("/quick/finger-in-air", authenticate, getFingerInAirEstimate);
+router.post("/quick/finger-in-air", getFingerInAirEstimate);
 
 export default router;

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { pageStyles } from "../layouts/pageStyles";
 import { apiUrl } from "../services/api";
+import FingerInAirEstimator from "../components/FingerInAirEstimator";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,8 +14,10 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [organizationName, setOrganizationName] = useState("");
+  const [architectPhoneNumber, setArchitectPhoneNumber] = useState("");
   const [shopName, setShopName] = useState("");
   const [city, setCity] = useState("");
+  const [quickEstimateOpen, setQuickEstimateOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -78,6 +81,7 @@ export default function Login() {
 
       if (registerRole === "architect") {
         payload.organizationName = organizationName.trim();
+        payload.phoneNumber = architectPhoneNumber.trim() || undefined;
       } else {
         payload.dealerData = {
           shopName: shopName.trim(),
@@ -155,6 +159,28 @@ export default function Login() {
       >
         <h2 style={pageStyles.title}>{mode === "login" ? "Login" : mode === "register" ? "Register" : "Reset Password"}</h2>
 
+        <div style={{ ...pageStyles.card, background: "#f8fafc", border: "1px solid #cbd5e1", padding: "10px 12px", marginBottom: 6 }}>
+          <p style={{ margin: "0 0 8px", fontSize: 13, color: "#334155", fontWeight: 600 }}>
+            Try tools before login
+          </p>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              style={pageStyles.secondaryBtn}
+              onClick={() => setQuickEstimateOpen(true)}
+            >
+              Quick Estimate
+            </button>
+            <button
+              type="button"
+              style={pageStyles.secondaryBtn}
+              onClick={() => navigate("/market-prices")}
+            >
+              Material Prices
+            </button>
+          </div>
+        </div>
+
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button
             type="button"
@@ -223,14 +249,23 @@ export default function Login() {
             </div>
 
             {registerRole === "architect" ? (
-              <input
-                style={pageStyles.input}
-                type="text"
-                placeholder="Organization Name"
-                value={organizationName}
-                onChange={(e) => setOrganizationName(e.target.value)}
-                required
-              />
+              <>
+                <input
+                  style={pageStyles.input}
+                  type="text"
+                  placeholder="Organization Name"
+                  value={organizationName}
+                  onChange={(e) => setOrganizationName(e.target.value)}
+                  required
+                />
+                <input
+                  style={pageStyles.input}
+                  type="tel"
+                  placeholder="Head Phone Number for SMS (optional)"
+                  value={architectPhoneNumber}
+                  onChange={(e) => setArchitectPhoneNumber(e.target.value)}
+                />
+              </>
             ) : (
               <>
                 <input
@@ -283,6 +318,58 @@ export default function Login() {
             : "Reset Password"}
         </button>
       </form>
+
+      {quickEstimateOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(2, 6, 23, 0.6)",
+            zIndex: 1300,
+            display: "grid",
+            placeItems: "center",
+            padding: "16px",
+          }}
+          onClick={() => setQuickEstimateOpen(false)}
+        >
+          <div
+            style={{
+              width: "min(980px, 100%)",
+              maxHeight: "92vh",
+              overflow: "auto",
+              background: "#ffffff",
+              borderRadius: "14px",
+              border: "1px solid #cbd5e1",
+              padding: "14px",
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <h3 style={{ margin: 0, color: "#0f172a" }}>Quick Estimate</h3>
+              <button
+                type="button"
+                aria-label="Close quick estimate"
+                style={{
+                  ...pageStyles.secondaryBtn,
+                  minWidth: 36,
+                  width: 36,
+                  height: 36,
+                  padding: 0,
+                  borderRadius: 999,
+                  fontSize: 18,
+                  lineHeight: 1,
+                }}
+                onClick={() => setQuickEstimateOpen(false)}
+              >
+                x
+              </button>
+            </div>
+            <FingerInAirEstimator />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, usePa
 
 // Existing pages (kept for compatibility)
 import CreateProject from "./pages/architect/CreateProject";
-import BOQUpload from "./pages/architect/BOQUploadWithParsing";
 import BOQMapping from "./pages/architect/BOQMapping";
 import PricingEngine from "./pages/architect/PricingEngine";
 import BuilderDashboard from "./pages/builder/BuilderDashboard";
@@ -16,6 +15,7 @@ import SubmitEstimate from "./pages/builder/SubmitEstimate";
 import ReceivedEstimates from "./pages/architect/ReceivedEstimates";
 import AuditTrail from "./pages/architect/AuditTrail";
 import ProjectsList from "./pages/architect/ProjectsList";
+import ProjectDetailsPage from "./pages/architect/ProjectDetailsPage";
 import ComparisonScreen from "./pages/architect/ComparisonScreen";
 import AcceptInvite from "./pages/auth/AcceptInvite";
 import PriceTrackerPage from "./pages/PriceTracker/PriceTrackerPage";
@@ -390,12 +390,7 @@ export default function App() {
             }
           />
           <Route
-            path="/architect/boq-upload"
-            element={
-              <RequireAuth role="architect">
-                <BOQUpload />
-              </RequireAuth>
-            }
+            // Removed BOQ upload route for architects
           />
           <Route
             path="/architect/boq-mapping"
@@ -451,6 +446,15 @@ export default function App() {
             element={
               <RequireAuth role="architect">
                 <ProjectsList />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/architect/project/:id"
+            element={
+              <RequireAuth role="architect">
+                <ProjectDetailsPage />
               </RequireAuth>
             }
           />
@@ -525,11 +529,7 @@ export default function App() {
           />
           <Route
             path="/market-prices"
-            element={
-              <RequireAuth>
-                <PriceTrackerPage />
-              </RequireAuth>
-            }
+            element={<PriceTrackerPage />}
           />
 
           {/* Client */}

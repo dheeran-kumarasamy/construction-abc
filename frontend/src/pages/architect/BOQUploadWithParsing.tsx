@@ -1,3 +1,4 @@
+// This file is deprecated. BOQ upload is no longer supported for architects.
 import { useEffect, useState } from "react";
 import type { ChangeEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";

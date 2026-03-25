@@ -42,6 +42,7 @@ export default function PriceTrackerPage() {
   const [categories, setCategories] = useState<MaterialCategory[]>([]);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [selectedDistrictId, setSelectedDistrictId] = useState<string | null>(null);
+  const [selectedState, setSelectedState] = useState<string>("all");
   const [compareMode, setCompareMode] = useState(false);
   const [compareDistrictIds, setCompareDistrictIds] = useState<string[]>([]);
 
@@ -68,6 +69,26 @@ export default function PriceTrackerPage() {
     () => districts.find((district) => district.id === selectedDistrictId) || null,
     [districts, selectedDistrictId]
   );
+
+  const availableStates = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        districts.map((district) => {
+          const raw = String(district.state || "").trim();
+          return raw || "Tamil Nadu";
+        })
+      )
+    );
+    return values.sort((a, b) => a.localeCompare(b));
+  }, [districts]);
+
+  const filteredDistricts = useMemo(() => {
+    if (selectedState === "all") return districts;
+    return districts.filter((district) => {
+      const districtState = String(district.state || "Tamil Nadu").trim();
+      return districtState === selectedState;
+    });
+  }, [districts, selectedState]);
 
   const activeCategory = useMemo(
     () => categories.find((category) => category.id === activeCategoryId) || null,
@@ -127,6 +148,32 @@ export default function PriceTrackerPage() {
   }, [compareMode, compareDistrictIds, activeCategory?.name]);
 
   useEffect(() => {
+    if (!districts.length) return;
+    if (selectedState === "all") return;
+
+    const isSelectedDistrictInState = districts.some((district) => {
+      const districtState = String(district.state || "Tamil Nadu").trim();
+      return district.id === selectedDistrictId && districtState === selectedState;
+    });
+
+    if (!isSelectedDistrictInState) {
+      setSelectedDistrictId(null);
+      setPrices([]);
+      setHistoryMaterialId(null);
+      setHistoryData([]);
+    }
+
+    setCompareDistrictIds((prev) =>
+      prev.filter((districtId) =>
+        districts.some((district) => {
+          const districtState = String(district.state || "Tamil Nadu").trim();
+          return district.id === districtId && districtState === selectedState;
+        })
+      )
+    );
+  }, [districts, selectedState, selectedDistrictId]);
+
+  useEffect(() => {
     if (!isDealer) return;
 
     fetchDealerOwnPrices()
@@ -157,6 +204,23 @@ export default function PriceTrackerPage() {
       if (prev.length >= 4) return prev;
       return [...prev, districtId];
     });
+  };
+
+  const onDistrictDropdownChange = (value: string) => {
+    if (value === "map") {
+      setSelectedDistrictId(null);
+      setHistoryMaterialId(null);
+      setHistoryData([]);
+      if (!compareMode) {
+        setPrices([]);
+      }
+      return;
+    }
+
+    setSelectedDistrictId(value);
+    if (compareMode) {
+      setCompareDistrictIds((prev) => (prev.includes(value) ? prev : [...prev, value].slice(-4)));
+    }
   };
 
   const toggleBookmark = async () => {
@@ -405,22 +469,55 @@ export default function PriceTrackerPage() {
       />
 
       <div className="pt-controls">
-        <label>
-          <input
-            type="checkbox"
-            checked={compareMode}
-            onChange={(e) => {
-              setCompareMode(e.target.checked);
-              setCompareDistrictIds([]);
-            }}
-          />
-          Compare Mode
-        </label>
+        <div className="pt-selector-grid">
+          <label>
+            State
+            <select
+              value={selectedState}
+              onChange={(e) => setSelectedState(e.target.value)}
+            >
+              <option value="all">All States</option>
+              {availableStates.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            District
+            <select
+              value={selectedDistrictId || "map"}
+              onChange={(e) => onDistrictDropdownChange(e.target.value)}
+              disabled={compareMode}
+            >
+              <option value="map">Select on map</option>
+              {filteredDistricts.map((district) => (
+                <option key={district.id} value={district.id}>
+                  {district.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="pt-compare-toggle">
+            <input
+              type="checkbox"
+              checked={compareMode}
+              onChange={(e) => {
+                setCompareMode(e.target.checked);
+                setCompareDistrictIds([]);
+              }}
+            />
+            Compare Mode
+          </label>
+        </div>
       </div>
 
       <div className="pt-main-grid">
         <TamilNaduMap
-          districts={districts}
+          districts={filteredDistricts}
           selectedDistrictId={selectedDistrictId}
           compareMode={compareMode}
           compareDistrictIds={compareDistrictIds}

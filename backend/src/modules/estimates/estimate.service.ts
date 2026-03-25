@@ -1,4 +1,5 @@
 import { pool } from "../../config/db";
+import { sendSmsNotification } from "../../services/alerts/sms.service";
 
 type ReviewStatus = "commented" | "changes_requested" | "approved";
 
@@ -14,25 +15,69 @@ function getReviewAction(status: ReviewStatus) {
   return "ESTIMATE_REVIEW_COMMENT";
 }
 
-async function assertArchitectHeadForProject(
+type ReviewerProjectAccess = {
+  actorOrgRole: "head" | "member" | null;
+  actorEmail: string;
+  actorOrganizationId: string | null;
+  projectName: string;
+  headUserId: string | null;
+  headEmail: string | null;
+  headPhoneNumber: string | null;
+};
+
+async function assertArchitectReviewerForProject(
   client: { query: (sql: string, params?: any[]) => Promise<any> },
   projectId: string,
   userId: string
-) {
+) : Promise<ReviewerProjectAccess> {
   const access = await client.query(
-    `SELECT p.id
+    `SELECT
+       actor.org_role AS actor_org_role,
+       actor.email AS actor_email,
+       actor.organization_id AS actor_organization_id,
+       p.name AS project_name,
+       head.id AS head_user_id,
+       head.email AS head_email,
+       head.phone_number AS head_phone_number
      FROM projects p
-     JOIN users u ON u.id = $2
+     JOIN users project_architect ON project_architect.id = p.architect_id
+     JOIN users actor ON actor.id = $2
+     LEFT JOIN users head
+       ON head.organization_id = project_architect.organization_id
+      AND head.role = 'architect'
+      AND head.org_role = 'head'
      WHERE p.id = $1
-       AND p.architect_id = $2
-       AND u.role = 'architect'
+       AND actor.role = 'architect'
+       AND (
+         actor.id = p.architect_id
+         OR (
+           actor.organization_id IS NOT NULL
+           AND actor.organization_id = project_architect.organization_id
+         )
+       )
      LIMIT 1`,
     [projectId, userId]
   );
 
   if (!access.rows.length) {
-    throw new Error("Only the head architect of this organization can approve or select a builder");
+    throw new Error("Only architect users in this organization can review and approve estimates");
   }
+
+  const row = access.rows[0];
+  const actorOrgRoleRaw = String(row.actor_org_role || "").toLowerCase();
+  const actorOrgRole = actorOrgRoleRaw === "head" || actorOrgRoleRaw === "member"
+    ? (actorOrgRoleRaw as "head" | "member")
+    : null;
+
+  return {
+    actorOrgRole,
+    actorEmail: String(row.actor_email || ""),
+    actorOrganizationId: row.actor_organization_id || null,
+    projectName: String(row.project_name || "Project"),
+    headUserId: row.head_user_id || null,
+    headEmail: row.head_email || null,
+    headPhoneNumber: row.head_phone_number || null,
+  };
 }
 
 export async function createDraft(projectId: string, userId: string | null) {
@@ -234,11 +279,23 @@ export async function addReviewComment(
   revisionId?: string | null
 ) {
   const client = await pool.connect();
+  let notifyContext: {
+    projectId: string;
+    estimateId: string;
+    actorUserId: string;
+    actorEmail: string;
+    projectName: string;
+    headUserId: string | null;
+    headPhoneNumber: string | null;
+  } | null = null;
+
   try {
     await client.query("BEGIN");
 
+    let reviewerAccess: ReviewerProjectAccess | null = null;
+
     if (status === "approved") {
-      await assertArchitectHeadForProject(client, projectId, architectUserId);
+      reviewerAccess = await assertArchitectReviewerForProject(client, projectId, architectUserId);
     }
 
     const estimateRes = await client.query(
@@ -266,6 +323,7 @@ export async function addReviewComment(
       revisionId: revisionId || null,
       status,
       comment: cleanedComment || null,
+      reviewerOrgRole: reviewerAccess?.actorOrgRole || null,
     };
 
     await client.query(
@@ -276,11 +334,58 @@ export async function addReviewComment(
 
     if (status === "approved") {
       await client.query(`UPDATE estimates SET status = 'awarded' WHERE id = $1`, [estimateId]);
+
+      if (
+        reviewerAccess &&
+        reviewerAccess.actorOrgRole === "member" &&
+        reviewerAccess.headUserId &&
+        reviewerAccess.headUserId !== architectUserId
+      ) {
+        notifyContext = {
+          projectId,
+          estimateId,
+          actorUserId: architectUserId,
+          actorEmail: reviewerAccess.actorEmail,
+          projectName: reviewerAccess.projectName,
+          headUserId: reviewerAccess.headUserId,
+          headPhoneNumber: reviewerAccess.headPhoneNumber,
+        };
+      }
     } else {
       await client.query(`UPDATE estimates SET status = 'submitted' WHERE id = $1`, [estimateId]);
     }
 
     await client.query("COMMIT");
+
+    if (notifyContext) {
+      const smsMessage = `Team member ${notifyContext.actorEmail} approved estimate ${notifyContext.estimateId} for project ${notifyContext.projectName}.`;
+      const smsResult = await sendSmsNotification({
+        to: notifyContext.headPhoneNumber,
+        message: smsMessage,
+        metadata: {
+          projectId: notifyContext.projectId,
+          estimateId: notifyContext.estimateId,
+          actorUserId: notifyContext.actorUserId,
+          headUserId: notifyContext.headUserId,
+        },
+      });
+
+      await pool.query(
+        `INSERT INTO audit_logs (project_id, user_id, action, metadata)
+         VALUES ($1, $2, 'ESTIMATE_APPROVAL_HEAD_NOTIFY', $3)`,
+        [
+          notifyContext.projectId,
+          notifyContext.actorUserId,
+          JSON.stringify({
+            estimateId: notifyContext.estimateId,
+            headUserId: notifyContext.headUserId,
+            smsSent: smsResult.sent,
+            smsProvider: smsResult.provider,
+            smsReason: smsResult.reason || null,
+          }),
+        ]
+      );
+    }
 
     return {
       ok: true,
@@ -295,6 +400,68 @@ export async function addReviewComment(
   } finally {
     client.release();
   }
+}
+
+export async function getTeamApprovalLog(headUserId: string, projectId?: string) {
+  const requesterRes = await pool.query(
+    `SELECT id, role, org_role, organization_id
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
+    [headUserId]
+  );
+
+  const requester = requesterRes.rows[0];
+  if (!requester) {
+    throw new Error("Requester not found");
+  }
+
+  const isArchitectHead =
+    String(requester.role || "").toLowerCase() === "architect" &&
+    String(requester.org_role || "").toLowerCase() === "head";
+
+  if (!isArchitectHead || !requester.organization_id) {
+    throw new Error("Only architect head can view team approval logs");
+  }
+
+  const result = await pool.query(
+    `SELECT
+       al.id,
+       al.project_id,
+       p.name AS project_name,
+       (al.metadata->>'estimateId') AS estimate_id,
+       COALESCE(al.metadata->>'comment', '') AS comment,
+       reviewer.id AS reviewer_user_id,
+       reviewer.email AS reviewer_email,
+       COALESCE(reviewer.org_role, 'member') AS reviewer_org_role,
+       al.created_at AS approved_at,
+       COALESCE((notify.metadata->>'smsSent')::boolean, false) AS head_sms_sent,
+       notify.metadata->>'smsReason' AS head_sms_reason
+     FROM audit_logs al
+     JOIN users reviewer ON reviewer.id = al.user_id
+     JOIN projects p ON p.id = al.project_id
+     JOIN users project_architect ON project_architect.id = p.architect_id
+     LEFT JOIN LATERAL (
+       SELECT metadata
+       FROM audit_logs n
+       WHERE n.project_id = al.project_id
+         AND n.user_id = al.user_id
+         AND n.action = 'ESTIMATE_APPROVAL_HEAD_NOTIFY'
+         AND (n.metadata->>'estimateId') = (al.metadata->>'estimateId')
+       ORDER BY n.created_at DESC
+       LIMIT 1
+     ) notify ON true
+     WHERE al.action = 'ESTIMATE_REVIEW_APPROVED'
+       AND reviewer.role = 'architect'
+       AND reviewer.organization_id = $1
+       AND reviewer.id <> $2
+       AND project_architect.organization_id = $1
+       AND ($3::uuid IS NULL OR al.project_id = $3::uuid)
+     ORDER BY al.created_at DESC`,
+    [requester.organization_id, headUserId, projectId || null]
+  );
+
+  return result.rows;
 }
 
 export async function getEstimateHistory(projectId: string, estimateId: string) {

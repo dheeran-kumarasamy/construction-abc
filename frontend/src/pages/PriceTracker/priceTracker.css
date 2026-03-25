@@ -57,6 +57,37 @@
   margin-bottom: 10px;
 }
 
+.pt-selector-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(220px, 320px) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.pt-selector-grid label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.pt-selector-grid select {
+  min-height: 40px;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #ffffff;
+}
+
+.pt-compare-toggle {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
+
 .pt-dealer-form-wrap {
   margin-bottom: 14px;
 }
@@ -303,6 +334,10 @@
   }
 
   .pt-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pt-selector-grid {
     grid-template-columns: 1fr;
   }
 

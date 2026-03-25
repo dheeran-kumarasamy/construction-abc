@@ -71,7 +71,7 @@ export async function getProjects(architectId: string | null) {
   }
 
   const requesterRes = await pool.query(
-    `SELECT id, role, organization_id
+    `SELECT id, role, organization_id, org_role
      FROM users
      WHERE id = $1
      LIMIT 1`,
@@ -109,37 +109,84 @@ export async function getProjects(architectId: string | null) {
       );
 
       requester.organization_id = inferredOrgId;
+      requester.org_role = 'member';
     }
   }
 
   if (String(requester.role || "").toLowerCase() === "architect" && requester.organization_id) {
-    const orgRes = await pool.query(
-      `SELECT
-         p.id,
-         p.name,
-         p.description,
-         p.created_at,
-         p.architect_id,
-         p.boq_id,
-         pr.site_address,
-         pr.tentative_start_date,
-         pr.duration_months
-       FROM projects p
-       JOIN users project_architect ON project_architect.id = p.architect_id
-       LEFT JOIN LATERAL (
-         SELECT site_address, tentative_start_date, duration_months
-         FROM project_revisions
-         WHERE project_id = p.id
-         ORDER BY revision_number DESC
-         LIMIT 1
-       ) pr ON true
-       WHERE project_architect.organization_id = $1
-          OR p.architect_id = $2
-       ORDER BY p.created_at DESC`,
-      [requester.organization_id, architectId]
-    );
+    const isHead = String(requester.org_role || "").toLowerCase() === "head";
+    
+    // If architect head: show all org projects
+    // If architect member: show only assigned projects + own created projects
+    if (isHead) {
+      const orgRes = await pool.query(
+        `SELECT
+           p.id,
+           p.name,
+           p.description,
+           p.created_at,
+           p.architect_id,
+           p.boq_id,
+           pr.site_address,
+           pr.tentative_start_date,
+           pr.duration_months
+         FROM projects p
+         JOIN users project_architect ON project_architect.id = p.architect_id
+         LEFT JOIN LATERAL (
+           SELECT site_address, tentative_start_date, duration_months
+           FROM project_revisions
+           WHERE project_id = p.id
+           ORDER BY revision_number DESC
+           LIMIT 1
+         ) pr ON true
+         WHERE project_architect.organization_id = $1
+            OR p.architect_id = $2
+         ORDER BY p.created_at DESC`,
+        [requester.organization_id, architectId]
+      );
 
-    return orgRes.rows;
+      return orgRes.rows;
+    } else {
+      // Member: show only projects they've been assigned to via invites + own created projects
+      const memberRes = await pool.query(
+        `SELECT DISTINCT
+           p.id,
+           p.name,
+           p.description,
+           p.created_at,
+           p.architect_id,
+           p.boq_id,
+           pr.site_address,
+           pr.tentative_start_date,
+           pr.duration_months
+         FROM projects p
+         LEFT JOIN LATERAL (
+           SELECT site_address, tentative_start_date, duration_months
+           FROM project_revisions
+           WHERE project_id = p.id
+           ORDER BY revision_number DESC
+           LIMIT 1
+         ) pr ON true
+         WHERE (
+           -- Project they created
+           p.architect_id = $1
+           OR
+           -- Project explicitly assigned to them via invite
+           EXISTS (
+             SELECT 1
+             FROM user_invites ui
+             WHERE ui.project_id = p.id
+               AND ui.user_id = $1
+               AND ui.role = 'architect'
+               AND ui.accepted_at IS NOT NULL
+           )
+         )
+         ORDER BY p.created_at DESC`,
+        [architectId]
+      );
+
+      return memberRes.rows;
+    }
   }
 
   const res = await pool.query(

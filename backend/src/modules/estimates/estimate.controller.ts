@@ -113,7 +113,30 @@ export async function postEstimateReview(req: Request, res: Response) {
     return res.json(result);
   } catch (err: any) {
     const message = String(err?.message || "Failed to post estimate review");
-    if (/only the head architect/i.test(message) || /unauthorized/i.test(message)) {
+    if (/only architect users|only the head architect|unauthorized/i.test(message)) {
+      return res.status(403).json({ error: message });
+    }
+    return res.status(400).json({ error: message });
+  }
+}
+
+export async function getTeamApprovalLog(req: Request, res: Response) {
+  try {
+    const authUser = (req as any).user || {};
+    const userId = authUser.userId || authUser.id || authUser.sub || null;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const projectIdRaw = req.query.projectId;
+    const projectId = typeof projectIdRaw === "string" ? projectIdRaw : undefined;
+
+    const result = await service.getTeamApprovalLog(userId, projectId);
+    return res.json(result);
+  } catch (err: any) {
+    const message = String(err?.message || "Failed to fetch team approval logs");
+    if (/only architect head/i.test(message) || /unauthorized/i.test(message)) {
       return res.status(403).json({ error: message });
     }
     return res.status(400).json({ error: message });

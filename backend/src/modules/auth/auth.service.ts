@@ -43,6 +43,7 @@ export async function registerUser(input: {
   password: string;
   role: "architect" | "builder" | "dealer" | "admin";
   organizationName?: string;
+  phoneNumber?: string;
   dealerData?: {
     shopName: string;
     location?: string;
@@ -55,6 +56,8 @@ export async function registerUser(input: {
   const password = String(input.password || "");
   const requestedRole = String(input.role || "").trim().toLowerCase();
   const organizationName = String(input.organizationName || "").trim();
+  const phoneNumberRaw = String(input.phoneNumber || "").trim();
+  const phoneNumber = phoneNumberRaw || null;
   const dealerData = input.dealerData;
   const hasDealerProfile = Boolean(String(dealerData?.shopName || "").trim());
 
@@ -85,6 +88,10 @@ export async function registerUser(input: {
 
   if (role === "architect" && !organizationName) {
     throw new Error("organizationName is required for architect registration");
+  }
+
+  if (role === "architect" && phoneNumber && !/^\+?[0-9]{8,15}$/.test(phoneNumber)) {
+    throw new Error("phoneNumber must be 8-15 digits and may start with +");
   }
 
   if (role === "dealer" && !dealerData?.shopName) {
@@ -133,17 +140,18 @@ export async function registerUser(input: {
            SET password_hash = $1,
                role = 'architect',
                organization_id = $2,
-               org_role = $3
-           WHERE id = $4
+               org_role = $3,
+               phone_number = $4
+           WHERE id = $5
            RETURNING id, role, organization_id, org_role`,
-          [passwordHash, organizationId, orgRole, existing.rows[0].id]
+          [passwordHash, organizationId, orgRole, phoneNumber, existing.rows[0].id]
         );
       } else {
         userRes = await client.query(
-          `INSERT INTO users (email, password_hash, role, organization_id, org_role)
-           VALUES ($1, $2, 'architect', $3, $4)
+          `INSERT INTO users (email, password_hash, role, organization_id, org_role, phone_number)
+           VALUES ($1, $2, 'architect', $3, $4, $5)
            RETURNING id, role, organization_id, org_role`,
-          [email, passwordHash, organizationId, orgRole]
+          [email, passwordHash, organizationId, orgRole, phoneNumber]
         );
       }
     } else if (role === "dealer") {
@@ -461,4 +469,67 @@ export async function listInvites(
     acceptedAt: row.accepted_at,
     inviteLink: buildInviteLink(row.token, filters?.referer),
   }));
+}
+
+export async function getMyProfile(userId: string) {
+  const { rows } = await pool.query(
+    `SELECT
+       id,
+       email,
+       role,
+       organization_id,
+       org_role,
+       phone_number
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
+    [userId]
+  );
+
+  if (!rows.length) {
+    throw new Error("User not found");
+  }
+
+  const row = rows[0];
+  return {
+    id: row.id,
+    email: row.email,
+    role: row.role,
+    organizationId: row.organization_id,
+    orgRole: row.org_role,
+    phoneNumber: row.phone_number || null,
+  };
+}
+
+export async function updateMyPhoneNumber(userId: string, phoneNumber: string) {
+  const normalized = String(phoneNumber || "").trim();
+  if (!normalized) {
+    throw new Error("phoneNumber is required");
+  }
+
+  if (!/^\+?[0-9]{8,15}$/.test(normalized)) {
+    throw new Error("phoneNumber must be 8-15 digits and may start with +");
+  }
+
+  const result = await pool.query(
+    `UPDATE users
+     SET phone_number = $1
+     WHERE id = $2
+     RETURNING id, email, role, organization_id, org_role, phone_number`,
+    [normalized, userId]
+  );
+
+  if (!result.rows.length) {
+    throw new Error("User not found");
+  }
+
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    email: row.email,
+    role: row.role,
+    organizationId: row.organization_id,
+    orgRole: row.org_role,
+    phoneNumber: row.phone_number || null,
+  };
 }
