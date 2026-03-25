@@ -169,6 +169,70 @@ export async function saveOrUpdateBOQ(
   file: Express.Multer.File,
   columnMapping?: Record<string, string>
 ) {
+  async function notifyInvitedBuildersOnBoqRevision(
+    tx: { query: (sql: string, params?: any[]) => Promise<any> },
+    targetProjectId: string,
+    actorUserId: string
+  ) {
+    const projectRes = await tx.query(
+      `SELECT id, name FROM projects WHERE id = $1 LIMIT 1`,
+      [targetProjectId]
+    );
+
+    const projectName = String(projectRes.rows[0]?.name || "Project");
+
+    const invitedBuildersRes = await tx.query(
+      `SELECT DISTINCT ui.user_id
+       FROM user_invites ui
+       JOIN users u ON u.id = ui.user_id
+       WHERE ui.project_id = $1
+         AND ui.role = 'builder'
+         AND ui.accepted_at IS NOT NULL
+         AND ui.user_id IS NOT NULL
+         AND COALESCE(u.is_active, true) = true`,
+      [targetProjectId]
+    );
+
+    if (!invitedBuildersRes.rows.length) {
+      return 0;
+    }
+
+    const notificationMessage = `BOQ has been revised for ${projectName}. Please review the update and resubmit your estimate.`;
+
+    for (const row of invitedBuildersRes.rows) {
+      await tx.query(
+        `INSERT INTO notifications (user_id, message, is_read, metadata, created_at)
+         VALUES ($1, $2, false, $3, now())`,
+        [
+          row.user_id,
+          notificationMessage,
+          JSON.stringify({
+            type: "BOQ_REVISED_RESUBMIT_ESTIMATE",
+            projectId: targetProjectId,
+            projectName,
+            triggeredBy: actorUserId,
+          }),
+        ]
+      );
+    }
+
+    await tx.query(
+      `INSERT INTO audit_logs (project_id, user_id, action, metadata)
+       VALUES ($1, $2, 'BOQ_REVISED_NOTIFY_BUILDERS', $3)`,
+      [
+        targetProjectId,
+        actorUserId,
+        JSON.stringify({
+          recipients: invitedBuildersRes.rows.length,
+          projectName,
+          reason: "request_estimate_resubmission",
+        }),
+      ]
+    );
+
+    return invitedBuildersRes.rows.length;
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -261,6 +325,8 @@ export async function saveOrUpdateBOQ(
           );
         }
       }
+
+      await notifyInvitedBuildersOnBoqRevision(client, projectId, userId);
 
       await client.query("COMMIT");
       return result.rows[0];
@@ -366,13 +432,113 @@ export async function saveOrUpdateBOQ(
 export async function getBOQByProject(projectId: string) {
   const result = await pool.query(
     `SELECT b.id, b.project_id, b.file_name, b.file_path, b.file_type, 
-            b.file_size, b.column_mapping, b.uploaded_at,
+            b.file_size, b.column_mapping, b.parsed_data, b.uploaded_at,
             COALESCE(u.email, '') as uploaded_by_name
      FROM boqs b
      LEFT JOIN users u ON b.uploaded_by = u.id
      WHERE b.project_id = $1`,
     [projectId]
   );
+  return result.rows[0];
+}
+
+export async function saveJsonBOQ(
+  projectId: string,
+  userId: string,
+  items: Array<{ item: string; qty: number | string; uom: string }>
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const existing = await client.query(
+      "SELECT id FROM boqs WHERE project_id = $1",
+      [projectId]
+    );
+
+    let boqId: string;
+
+    if (existing.rows.length > 0) {
+      // Update parsed_data on the existing row
+      const updated = await client.query(
+        `UPDATE boqs
+         SET parsed_data = $1,
+             uploaded_by = $2,
+             uploaded_at = CURRENT_TIMESTAMP
+         WHERE project_id = $3
+         RETURNING id`,
+        [JSON.stringify(items), userId, projectId]
+      );
+      boqId = updated.rows[0].id;
+    } else {
+      // Insert a new BOQ row (no physical file)
+      await client.query("SAVEPOINT boq_json_insert");
+      let inserted;
+      try {
+        inserted = await client.query(
+          `INSERT INTO boqs (project_id, uploaded_by, file_name, file_path, file_type, file_size, parsed_data)
+           VALUES ($1, $2, 'manual-entry', '', 'application/json', 0, $3)
+           RETURNING id`,
+          [projectId, userId, JSON.stringify(items)]
+        );
+        await client.query("RELEASE SAVEPOINT boq_json_insert");
+      } catch (insertErr: any) {
+        if (insertErr?.code !== "42703") throw insertErr;
+        // parsed_data column may not exist yet — fall back without it
+        await client.query("ROLLBACK TO SAVEPOINT boq_json_insert");
+        inserted = await client.query(
+          `INSERT INTO boqs (project_id, uploaded_by, file_name, file_path, file_type, file_size)
+           VALUES ($1, $2, 'manual-entry', '', 'application/json', 0)
+           RETURNING id`,
+          [projectId, userId]
+        );
+      }
+      boqId = inserted.rows[0].id;
+    }
+
+    // Always update the project's boq_id reference
+    await client.query("SAVEPOINT update_project_boq_id");
+    try {
+      await client.query(
+        "UPDATE projects SET boq_id = $1 WHERE id = $2",
+        [boqId, projectId]
+      );
+      await client.query("RELEASE SAVEPOINT update_project_boq_id");
+    } catch (updateErr: any) {
+      // boq_id column might not exist in older schema versions
+      if (updateErr?.code !== "42703") throw updateErr;
+      await client.query("ROLLBACK TO SAVEPOINT update_project_boq_id");
+    }
+
+    await client.query("COMMIT");
+    return { id: boqId, project_id: projectId, items };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateBOQItems(
+  projectId: string,
+  userId: string,
+  items: Array<{ item: string; qty: number | string; uom: string }>
+) {
+  const result = await pool.query(
+    `UPDATE boqs
+     SET parsed_data = $1,
+         uploaded_by = $2,
+         uploaded_at = CURRENT_TIMESTAMP
+     WHERE project_id = $3
+     RETURNING *`,
+    [JSON.stringify(items), userId, projectId]
+  );
+
+  if (!result.rows.length) {
+    throw new Error("BOQ not found");
+  }
+
   return result.rows[0];
 }
 

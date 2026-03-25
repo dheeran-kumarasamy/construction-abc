@@ -1,6 +1,7 @@
 export interface District {
   id: string;
   name: string;
+  state?: string;
   region: "north" | "south" | "west" | "central";
   lat: number;
   lng: number;

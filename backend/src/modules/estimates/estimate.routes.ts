@@ -6,6 +6,7 @@ import {
   getProjectEstimates,
   postEstimateReview,
   getEstimateHistory,
+  getTeamApprovalLog,
 } from "./estimate.controller";
 
 const router = Router();
@@ -16,5 +17,6 @@ router.get("/projects/:projectId/my-estimate", getMyEstimate);
 router.get("/projects/:projectId/estimates", getProjectEstimates);
 router.post("/projects/:projectId/estimates/:estimateId/review", postEstimateReview);
 router.get("/projects/:projectId/estimates/:estimateId/history", getEstimateHistory);
+router.get("/architect/team-approvals", getTeamApprovalLog);
 
 export default router

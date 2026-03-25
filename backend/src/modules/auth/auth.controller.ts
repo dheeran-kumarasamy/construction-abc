@@ -61,13 +61,14 @@ async function getRequesterProfile(req: Request) {
 
 export async function register(req: Request, res: Response) {
   try {
-    const { email, password, role, organizationName, dealerData } = req.body || {};
+    const { email, password, role, organizationName, phoneNumber, dealerData } = req.body || {};
 
     const result = await service.registerUser({
       email,
       password,
       role,
       organizationName,
+      phoneNumber,
       dealerData,
     });
 
@@ -164,7 +165,24 @@ export async function inviteUser(req: Request, res: Response) {
       return res.status(403).json({ error: "Only Architect Head can invite architect team members" });
     }
 
-    const result = await service.createInvite(email, "architect", orgId, null, "member", referer);
+    // For architect invites, projectId is optional - allows assigning specific projects to team members
+    if (projectId) {
+      const projectAccess = await pool.query(
+        `SELECT p.id
+         FROM projects p
+         JOIN users architect_user ON architect_user.id = p.architect_id
+         WHERE p.id = $1
+           AND architect_user.organization_id = $2
+         LIMIT 1`,
+        [projectId, orgId]
+      );
+
+      if (!projectAccess.rows.length) {
+        return res.status(403).json({ error: "You can only assign projects from your architect organization" });
+      }
+    }
+
+    const result = await service.createInvite(email, "architect", orgId, projectId || null, "member", referer);
 
     res.json(result);
   } catch (err: any) {
@@ -202,5 +220,45 @@ export async function getInvites(req: Request, res: Response) {
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
+  }
+}
+
+export async function getMyProfile(req: Request, res: Response) {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const profile = await service.getMyProfile(userId);
+    return res.json(profile);
+  } catch (err: any) {
+    const message = String(err?.message || "Failed to fetch profile");
+    if (/user not found/i.test(message)) {
+      return res.status(404).json({ error: message });
+    }
+    return res.status(400).json({ error: message });
+  }
+}
+
+export async function updateMyPhoneNumber(req: Request, res: Response) {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const phoneNumber = String(req.body?.phoneNumber || "");
+    const profile = await service.updateMyPhoneNumber(userId, phoneNumber);
+    return res.json(profile);
+  } catch (err: any) {
+    const message = String(err?.message || "Failed to update phone number");
+    if (/phoneNumber/i.test(message)) {
+      return res.status(400).json({ error: message });
+    }
+    if (/user not found/i.test(message)) {
+      return res.status(404).json({ error: message });
+    }
+    return res.status(400).json({ error: message });
   }
 }

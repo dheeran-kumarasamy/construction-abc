@@ -111,9 +111,9 @@ export async function getBOQ(req: Request, res: Response) {
       return res.status(404).json({ error: "BOQ not found" });
     }
 
-    let items: any[] = [];
+    let items: any[] = Array.isArray(result.parsed_data) ? result.parsed_data : [];
     try {
-      if (result.file_path && result.column_mapping) {
+      if (items.length === 0 && result.file_path && result.column_mapping) {
         const mapping = typeof result.column_mapping === 'string' 
           ? JSON.parse(result.column_mapping) 
           : result.column_mapping;
@@ -127,6 +127,92 @@ export async function getBOQ(req: Request, res: Response) {
 
     res.json({
       ...result,
+      items,
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+}
+
+export async function submitBOQItems(req: Request, res: Response) {
+  try {
+    let { projectId } = req.params;
+    const user = (req as any).user || {};
+    const userId = user.userId || user.id || user.sub;
+
+    if (Array.isArray(projectId)) {
+      projectId = projectId[0];
+    }
+
+    if (!projectId) {
+      return res.status(400).json({ error: "Project ID is required" });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized user" });
+    }
+
+    const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    const items = rawItems
+      .map((row: any) => ({
+        item: String(row?.item || "").trim(),
+        qty: row?.qty,
+        uom: String(row?.uom || "").trim(),
+      }))
+      .filter((row: { item: string; qty: number | string; uom: string }) =>
+        row.item && row.uom && String(row.qty).trim()
+      );
+
+    if (!items.length) {
+      return res.status(400).json({ error: "At least one BOQ item with quantity is required" });
+    }
+
+    const result = await service.saveJsonBOQ(projectId, userId, items);
+    res.json({
+      message: "BOQ submitted successfully",
+      boq: result,
+    });
+  } catch (err: any) {
+    console.error("submitBOQItems error:", err);
+    res.status(500).json({ error: err.message || "Failed to submit BOQ" });
+  }
+}
+
+export async function updateBOQItems(req: Request, res: Response) {
+  try {
+    let { projectId } = req.params;
+    const user = (req as any).user || {};
+    const userId = user.userId || user.id || user.sub;
+
+    if (Array.isArray(projectId)) {
+      projectId = projectId[0];
+    }
+
+    if (!projectId) {
+      return res.status(400).json({ error: "Project ID is required" });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized user" });
+    }
+
+    const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    const items = rawItems
+      .map((row: any) => ({
+        item: String(row?.item || "").trim(),
+        qty: row?.qty,
+        uom: String(row?.uom || "").trim(),
+      }))
+      .filter((row: { item: string; qty: number | string; uom: string }) => row.item && row.uom && String(row.qty).trim());
+
+    if (!items.length) {
+      return res.status(400).json({ error: "At least one BOQ item is required" });
+    }
+
+    const result = await service.updateBOQItems(projectId, userId, items);
+    res.json({
+      message: "BOQ updated successfully",
+      boq: result,
       items,
     });
   } catch (err: any) {

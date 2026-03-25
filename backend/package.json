@@ -9,6 +9,7 @@
     "start": "node dist/src/server.js",
     "migrate": "node migrate.js",
     "seed:admin": "ts-node-dev --transpile-only src/scripts/seedAdmin.ts",
+    "seed:client": "ts-node-dev --transpile-only src/scripts/seedClient.ts",
     "seed:prices": "ts-node-dev --transpile-only src/scripts/seed.ts",
     "seed:sor": "ts-node-dev --transpile-only src/scripts/seedSOR.ts"
   },

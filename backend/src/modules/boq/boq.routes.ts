@@ -76,8 +76,8 @@ router.post(
 );
 
 async function checkProjectOwnership(req: Request, res: Response, next: NextFunction) {
-  let projectId = req.params.projectId;
-  if (Array.isArray(projectId)) projectId = projectId[0];
+  let incomingProjectId = req.params.projectId;
+  if (Array.isArray(incomingProjectId)) incomingProjectId = incomingProjectId[0];
   const user = (req as any).user || {};
   const userId = user.userId || user.id || user.sub;
 
@@ -85,12 +85,14 @@ async function checkProjectOwnership(req: Request, res: Response, next: NextFunc
     return res.status(401).json({ message: "Unauthorized user." });
   }
 
-  if (!projectId) {
+  if (!incomingProjectId) {
     return res.status(400).json({ message: "Project ID is required." });
   }
 
   try {
-    const result = await pool.query(
+    let resolvedProjectId: string | null = null;
+
+    const projectResult = await pool.query(
       `SELECT p.id
        FROM projects p
        JOIN users requester ON requester.id = $2
@@ -105,11 +107,49 @@ async function checkProjectOwnership(req: Request, res: Response, next: NextFunc
            )
          )
        LIMIT 1`,
-      [projectId, userId]
+      [incomingProjectId, userId]
     );
-    if (result.rows.length === 0) {
+
+    if (projectResult.rows.length > 0) {
+      resolvedProjectId = projectResult.rows[0].id;
+    } else {
+      const mappedResult = await pool.query(
+        `SELECT p.id
+         FROM boq_projects bp
+         JOIN users requester ON requester.id = $2
+         JOIN projects p ON p.id = COALESCE(
+           bp.source_project_id,
+           CASE
+             WHEN bp.notes ~ 'source_project_id:[0-9a-fA-F-]{36}'
+             THEN substring(bp.notes from 'source_project_id:([0-9a-fA-F-]{36})')::uuid
+             ELSE NULL
+           END
+         )
+         JOIN users project_architect ON project_architect.id = p.architect_id
+         WHERE bp.id = $1
+           AND bp.user_id = requester.id
+           AND requester.role = 'architect'
+           AND (
+             p.architect_id = requester.id
+             OR (
+               requester.organization_id IS NOT NULL
+               AND requester.organization_id = project_architect.organization_id
+             )
+           )
+         LIMIT 1`,
+        [incomingProjectId, userId]
+      );
+
+      if (mappedResult.rows.length > 0) {
+        resolvedProjectId = mappedResult.rows[0].id;
+      }
+    }
+
+    if (!resolvedProjectId) {
       return res.status(403).json({ message: "You do not have access to this project." });
     }
+
+    req.params.projectId = resolvedProjectId;
     next();
   } catch (err) {
     return res.status(500).json({ message: "Error checking project ownership", error: err } );
@@ -125,6 +165,10 @@ router.post(
 );
 
 router.get("/:projectId/check", authenticateToken, controller.checkBOQ);
+
+router.post("/:projectId/items", authenticateToken, checkProjectOwnership, controller.submitBOQItems);
+
+router.patch("/:projectId/items", authenticateToken, checkProjectOwnership, controller.updateBOQItems);
 
 router.get("/:projectId", authenticateToken, controller.getBOQ);
 

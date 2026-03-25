@@ -151,6 +151,116 @@ export async function fetchPlinthAreaRates(): Promise<PlinthAreaRate[]> {
   return json<PlinthAreaRate[]>(res);
 }
 
+export interface BasicMaterialRate {
+  sourceKey: string;
+  item: string;
+  rate: number;
+  uom: string;
+  category: string;
+}
+
+export async function fetchBasicMaterialRates(): Promise<BasicMaterialRate[]> {
+  const res = await fetch(apiUrl("/api/base-pricing/template"), {
+    headers: authHeaders(),
+  });
+  const payload = await json<{ rows?: BasicMaterialRate[] }>(res);
+  return Array.isArray(payload.rows) ? payload.rows : [];
+}
+
+export interface MarketDistrict {
+  id: string;
+  name: string;
+}
+
+export interface MarketCategory {
+  id: string;
+  name: string;
+}
+
+export interface MarketPriceRow {
+  materialId: string;
+  materialName: string;
+  unit: string;
+  price: number;
+  source: string;
+  lastUpdated: string;
+}
+
+export interface SubmittedBOQItem {
+  item: string;
+  qty: number | string;
+  uom: string;
+}
+
+export interface SubmittedBOQResponse {
+  id: string;
+  project_id: string;
+  file_name?: string;
+  uploaded_at?: string;
+  uploaded_by_name?: string;
+  items: SubmittedBOQItem[];
+}
+
+export async function fetchMarketDistricts(): Promise<MarketDistrict[]> {
+  const res = await fetch(apiUrl("/api/prices/districts"), {
+    headers: authHeaders(),
+  });
+  return json<MarketDistrict[]>(res);
+}
+
+export async function fetchMarketCategories(): Promise<MarketCategory[]> {
+  const res = await fetch(apiUrl("/api/prices/categories"), {
+    headers: authHeaders(),
+  });
+  return json<MarketCategory[]>(res);
+}
+
+export async function fetchMarketDistrictCategoryPrices(
+  districtId: string,
+  categoryName: string
+): Promise<MarketPriceRow[]> {
+  const res = await fetch(
+    apiUrl(`/api/prices/district/${districtId}?category=${encodeURIComponent(categoryName)}`),
+    {
+      headers: authHeaders(),
+    }
+  );
+
+  const payload = await json<{ prices?: MarketPriceRow[] }>(res);
+  return Array.isArray(payload.prices) ? payload.prices : [];
+}
+
+export async function fetchSubmittedBOQ(projectId: string): Promise<SubmittedBOQResponse> {
+  const res = await fetch(apiUrl(`/api/boq/${projectId}`), {
+    headers: authHeaders(),
+  });
+  return json<SubmittedBOQResponse>(res);
+}
+
+export async function submitNewBOQ(
+  projectId: string,
+  items: SubmittedBOQItem[]
+): Promise<{ message: string; boq: SubmittedBOQResponse }> {
+  const res = await fetch(apiUrl(`/api/boq/${projectId}/items`), {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ items }),
+  });
+  return json<{ message: string; boq: SubmittedBOQResponse }>(res);
+}
+
+export async function updateSubmittedBOQ(
+  projectId: string,
+  items: SubmittedBOQItem[]
+): Promise<{ message: string; boq: SubmittedBOQResponse; items: SubmittedBOQItem[] }> {
+  const res = await fetch(apiUrl(`/api/boq/${projectId}/items`), {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ items }),
+  });
+  return json<{ message: string; boq: SubmittedBOQResponse; items: SubmittedBOQItem[] }>(res);
+}
+
 // ── Rate Computation ──────────────────────────
 
 export async function computeRate(input: {
