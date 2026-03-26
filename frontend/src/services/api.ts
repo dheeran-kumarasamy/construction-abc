@@ -15,12 +15,6 @@ function isLocalHost(hostname: string) {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
 
-function getHostedApiHost(currentHost: string) {
-  return currentHost
-    .replace("-frontend-", "-backend-")
-    .replace("-frontend.", "-backend.");
-}
-
 export function getApiBaseUrl() {
   // Priority 1: Use explicit VITE_API_URL if provided
   if (configuredApiUrl) {
@@ -36,10 +30,9 @@ export function getApiBaseUrl() {
       return `${protocol}//${hostname}:4000`;
     }
 
-    // Priority 3: Try hostname replacement for Vercel previews
-    if (protocol === "https:") {
-      return `https://${getHostedApiHost(hostname)}`;
-    }
+    // Hosted deployments should provide VITE_API_URL (Railway backend URL).
+    // Fallback to same-origin to avoid DNS failures from stale hardcoded hosts.
+    return `${protocol}//${hostname}`;
   }
 
   return "http://localhost:4000";
