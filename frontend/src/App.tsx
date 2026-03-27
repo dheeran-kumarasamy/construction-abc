@@ -37,7 +37,9 @@ import FingerInAirEstimator from "./components/FingerInAirEstimator";
 
 // Auth
 import LoginPage from "./pages/Login";
-import { RequireAuth, useAuth } from "./auth/AuthContext";
+import { RequireAuth, RequireBuilderProfile, useAuth } from "./auth/AuthContext";
+import BuilderProfileSetupPage from "./pages/builder/BuilderProfileSetupPage";
+import ArchitectBuilderDirectory from "./pages/architect/ArchitectBuilderDirectory";
 import { AuthProvider } from "./auth/AuthContext";
 import { pageStyles } from "./layouts/pageStyles";
 
@@ -460,11 +462,32 @@ export default function App() {
           />
 
           {/* Builder */}
+          {/* Builder — profile setup is outside the profile gate */}
+          <Route
+            path="/builder/profile/setup"
+            element={
+              <RequireAuth role="builder">
+                <BuilderProfileSetupPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/builder/profile"
+            element={
+              <RequireAuth role="builder">
+                <BuilderProfileSetupPage />
+              </RequireAuth>
+            }
+          />
+
+          {/* Builder — all other routes require a completed profile */}
           <Route
             path="/builder"
             element={
               <RequireAuth role="builder">
-                <BuilderDashboard />
+                <RequireBuilderProfile>
+                  <BuilderDashboard />
+                </RequireBuilderProfile>
               </RequireAuth>
             }
           />
@@ -472,7 +495,9 @@ export default function App() {
             path="/builder/base-pricing"
             element={
               <RequireAuth role="builder">
-                <BuilderBasePricing />
+                <RequireBuilderProfile>
+                  <BuilderBasePricing />
+                </RequireBuilderProfile>
               </RequireAuth>
             }
           />
@@ -480,7 +505,9 @@ export default function App() {
             path="/builder/apply-pricing"
             element={
               <RequireAuth role="builder">
-                <ApplyBasePricing />
+                <RequireBuilderProfile>
+                  <ApplyBasePricing />
+                </RequireBuilderProfile>
               </RequireAuth>
             }
           />
@@ -488,7 +515,9 @@ export default function App() {
             path="/builder/margins"
             element={
               <RequireAuth role="builder">
-                <MarginEngine />
+                <RequireBuilderProfile>
+                  <MarginEngine />
+                </RequireBuilderProfile>
               </RequireAuth>
             }
           />
@@ -496,7 +525,9 @@ export default function App() {
             path="/builder/submit"
             element={
               <RequireAuth role="builder">
-                <SubmitEstimate />
+                <RequireBuilderProfile>
+                  <SubmitEstimate />
+                </RequireBuilderProfile>
               </RequireAuth>
             }
           />
@@ -514,7 +545,9 @@ export default function App() {
             path="/builder/prices"
             element={
               <RequireAuth role="builder">
-                <PriceTrackerPage />
+                <RequireBuilderProfile>
+                  <PriceTrackerPage />
+                </RequireBuilderProfile>
               </RequireAuth>
             }
           />
@@ -579,7 +612,9 @@ export default function App() {
             path="/builder/estimation"
             element={
               <RequireAuth role="builder">
-                <EstimationProjectsPage />
+                <RequireBuilderProfile>
+                  <EstimationProjectsPage />
+                </RequireBuilderProfile>
               </RequireAuth>
             }
           />
@@ -587,7 +622,9 @@ export default function App() {
             path="/builder/estimation/:projectId"
             element={
               <RequireAuth role="builder">
-                <BOQWorkspacePage />
+                <RequireBuilderProfile>
+                  <BOQWorkspacePage />
+                </RequireBuilderProfile>
               </RequireAuth>
             }
           />
@@ -613,7 +650,9 @@ export default function App() {
             path="/builder/estimation/templates"
             element={
               <RequireAuth role="builder">
-                <TemplateEditorPage />
+                <RequireBuilderProfile>
+                  <TemplateEditorPage />
+                </RequireBuilderProfile>
               </RequireAuth>
             }
           />
@@ -625,6 +664,14 @@ export default function App() {
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" />} />
+                  <Route
+                    path="/architect/builders"
+                    element={
+                      <RequireAuth role="architect">
+                        <ArchitectBuilderDirectory />
+                      </RequireAuth>
+                    }
+                  />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

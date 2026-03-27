@@ -83,3 +83,19 @@ export function RequireAuth({
 
   return children;
 }
+
+// --- Builder Profile Guard ---
+// Wraps routes that require a completed builder profile.
+// If the builder hasn't completed their profile, redirect to the setup page.
+export function RequireBuilderProfile({ children }: { children: JSX.Element }) {
+  const { user } = useAuth();
+
+  if (user?.role === "builder") {
+    const complete = localStorage.getItem("builder_profile_complete");
+    if (!complete || complete === "0") {
+      return <Navigate to="/builder/profile/setup" replace />;
+    }
+  }
+
+  return children;
+}
