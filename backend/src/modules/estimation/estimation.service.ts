@@ -251,9 +251,30 @@ export async function createProject(userId: string, data: {
   return rows[0];
 }
 
+let hasBoqSourceProjectIdColumnCache: boolean | null = null;
+
+async function hasBoqSourceProjectIdColumn() {
+  if (hasBoqSourceProjectIdColumnCache !== null) {
+    return hasBoqSourceProjectIdColumnCache;
+  }
+
+  const { rowCount } = await pool.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = 'boq_projects'
+       AND column_name = 'source_project_id'
+     LIMIT 1`
+  );
+
+  hasBoqSourceProjectIdColumnCache = (rowCount ?? 0) > 0;
+  return hasBoqSourceProjectIdColumnCache;
+}
+
 export async function listProjects(userId: string) {
   const userRes = await pool.query(`SELECT role FROM users WHERE id = $1`, [userId]);
   const role = String(userRes.rows[0]?.role || "");
+  const hasSourceProjectIdColumn = await hasBoqSourceProjectIdColumn();
 
   if (role === "architect") {
     const architectProjects = await pool.query(
@@ -274,12 +295,13 @@ export async function listProjects(userId: string) {
     for (const project of architectProjects.rows) {
       const marker = `source_project_id:${project.id}`;
       const existing = await pool.query(
-        `SELECT id, source_project_id FROM boq_projects WHERE user_id = $1 AND notes = $2 LIMIT 1`,
+        hasSourceProjectIdColumn
+          ? `SELECT id, source_project_id FROM boq_projects WHERE user_id = $1 AND notes = $2 LIMIT 1`
+          : `SELECT id, NULL AS source_project_id FROM boq_projects WHERE user_id = $1 AND notes = $2 LIMIT 1`,
         [userId, marker]
       );
 
       if (!existing.rows.length) {
-        await pool.query("SAVEPOINT boq_project_insert_source_project_id");
         try {
           await pool.query(
             `INSERT INTO boq_projects (
@@ -295,10 +317,8 @@ export async function listProjects(userId: string) {
               project.id,
             ]
           );
-          await pool.query("RELEASE SAVEPOINT boq_project_insert_source_project_id");
         } catch (insertErr: any) {
           if (insertErr?.code !== "42703") throw insertErr;
-          await pool.query("ROLLBACK TO SAVEPOINT boq_project_insert_source_project_id");
           await pool.query(
             `INSERT INTO boq_projects (
                user_id, name, description, status, terrain, notes, project_location
@@ -313,7 +333,7 @@ export async function listProjects(userId: string) {
             ]
           );
         }
-      } else if (!existing.rows[0].source_project_id) {
+      } else if (hasSourceProjectIdColumn && !existing.rows[0].source_project_id) {
         await pool.query(
           `UPDATE boq_projects
            SET source_project_id = $1
@@ -326,7 +346,8 @@ export async function listProjects(userId: string) {
   }
 
   const sourceFilter = role === "builder" ? `AND (p.notes IS NULL OR p.notes NOT LIKE 'source_project_id:%')` : "";
-  const { rows } = await pool.query(`
+  const projectListQuery = hasSourceProjectIdColumn
+    ? `
     SELECT p.*,
       (SELECT COUNT(*) FROM boq_items bi WHERE bi.project_id = p.id) as item_count,
       (SELECT COALESCE(SUM(bi.computed_amount), 0) FROM boq_items bi WHERE bi.project_id = p.id) as total_amount,
@@ -351,7 +372,29 @@ export async function listProjects(userId: string) {
     WHERE p.user_id = $1
       ${sourceFilter}
     ORDER BY p.updated_at DESC
-  `, [userId]);
+  `
+    : `
+    SELECT p.*,
+      (SELECT COUNT(*) FROM boq_items bi WHERE bi.project_id = p.id) as item_count,
+      (SELECT COALESCE(SUM(bi.computed_amount), 0) FROM boq_items bi WHERE bi.project_id = p.id) as total_amount,
+      pr.boq_id,
+      CASE
+        WHEN p.notes ~ 'source_project_id:[0-9a-fA-F-]{36}'
+        THEN substring(p.notes from 'source_project_id:([0-9a-fA-F-]{36})')::uuid
+        ELSE NULL
+      END AS resolved_source_project_id
+    FROM boq_projects p
+    LEFT JOIN projects pr ON pr.id = CASE
+      WHEN p.notes ~ 'source_project_id:[0-9a-fA-F-]{36}'
+      THEN substring(p.notes from 'source_project_id:([0-9a-fA-F-]{36})')::uuid
+      ELSE NULL
+    END
+    WHERE p.user_id = $1
+      ${sourceFilter}
+    ORDER BY p.updated_at DESC
+  `;
+
+  const { rows } = await pool.query(projectListQuery, [userId]);
   return rows;
 }
 
@@ -450,6 +493,8 @@ export async function listInvitedProjects(userId: string) {
 }
 
 export async function getProject(projectId: string, userId: string) {
+  const hasSourceProjectIdColumn = await hasBoqSourceProjectIdColumn();
+
   // 1) Direct lookup by boq_projects.id
   const directRes = await pool.query(
     `SELECT * FROM boq_projects WHERE id = $1 AND user_id = $2 LIMIT 1`,
@@ -464,16 +509,23 @@ export async function getProject(projectId: string, userId: string) {
   // 2) Resolve source project ID -> boq_projects row
   const sourceMarker = `source_project_id:${projectId}`;
   const sourceRes = await pool.query(
-    `SELECT *
-     FROM boq_projects
-     WHERE user_id = $1
-       AND (
-         source_project_id = $2
-         OR notes = $3
-       )
-     ORDER BY updated_at DESC
-     LIMIT 1`,
-    [userId, projectId, sourceMarker]
+    hasSourceProjectIdColumn
+      ? `SELECT *
+         FROM boq_projects
+         WHERE user_id = $1
+           AND (
+             source_project_id = $2
+             OR notes = $3
+           )
+         ORDER BY updated_at DESC
+         LIMIT 1`
+      : `SELECT *
+         FROM boq_projects
+         WHERE user_id = $1
+           AND notes = $2
+         ORDER BY updated_at DESC
+         LIMIT 1`,
+    hasSourceProjectIdColumn ? [userId, projectId, sourceMarker] : [userId, sourceMarker]
   );
 
   if (sourceRes.rows[0]) {
@@ -514,7 +566,6 @@ export async function getProject(projectId: string, userId: string) {
   }
 
   let insertedRow: any;
-  await pool.query("SAVEPOINT boq_project_seed_source");
   try {
     const inserted = await pool.query(
       `INSERT INTO boq_projects (
@@ -532,13 +583,11 @@ export async function getProject(projectId: string, userId: string) {
       ]
     );
     insertedRow = inserted.rows[0];
-    await pool.query("RELEASE SAVEPOINT boq_project_seed_source");
   } catch (seedErr: any) {
     if (seedErr?.code !== "42703") {
       throw seedErr;
     }
 
-    await pool.query("ROLLBACK TO SAVEPOINT boq_project_seed_source");
     const insertedFallback = await pool.query(
       `INSERT INTO boq_projects (
          user_id, name, description, status, terrain, notes, project_location
