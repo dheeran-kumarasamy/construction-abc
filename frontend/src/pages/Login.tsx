@@ -10,13 +10,17 @@ export default function Login() {
   const { login } = useAuth();
 
   const [mode, setMode] = useState<"login" | "register" | "reset">("login");
-  const [registerRole, setRegisterRole] = useState<"architect" | "dealer">("architect");
+  const [registerRole, setRegisterRole] = useState<"architect" | "dealer" | "builder">("architect");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [organizationName, setOrganizationName] = useState("");
   const [architectPhoneNumber, setArchitectPhoneNumber] = useState("");
   const [shopName, setShopName] = useState("");
   const [city, setCity] = useState("");
+  const [builderCompanyName, setBuilderCompanyName] = useState("");
+  const [builderPhone, setBuilderPhone] = useState("");
+  const [builderLocations, setBuilderLocations] = useState("");
+  const [builderSpecialties, setBuilderSpecialties] = useState("");
   const [quickEstimateOpen, setQuickEstimateOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -49,10 +53,16 @@ export default function Login() {
       login(normalizedEmail, data.role, data.orgRole || null);
       localStorage.setItem("token", data.token);
       localStorage.setItem("role", data.role);
+      if (data.role === "builder") {
+        localStorage.setItem("builder_profile_complete", data.profileComplete ? "1" : "0");
+      }
 
       // Redirect by role
       if (data.role === "architect") navigate("/architect");
-      else if (data.role === "builder") navigate("/builder");
+      else if (data.role === "builder") {
+        if (data.profileComplete) navigate("/builder");
+        else navigate("/builder/profile/setup");
+      }
       else if (data.role === "client") navigate("/client");
       else if (data.role === "dealer") navigate("/prices");
       else if (data.role === "admin") navigate("/admin");
@@ -82,6 +92,13 @@ export default function Login() {
       if (registerRole === "architect") {
         payload.organizationName = organizationName.trim();
         payload.phoneNumber = architectPhoneNumber.trim() || undefined;
+      } else if (registerRole === "builder") {
+        payload.builderData = {
+          companyName: builderCompanyName.trim(),
+          contactPhone: builderPhone.trim() || undefined,
+          serviceLocations: builderLocations.trim() || undefined,
+          specialties: builderSpecialties.trim() || undefined,
+        };
       } else {
         payload.dealerData = {
           shopName: shopName.trim(),
@@ -106,9 +123,15 @@ export default function Login() {
       login(normalizedEmail, data.role, data.orgRole || null);
       localStorage.setItem("token", data.token);
       localStorage.setItem("role", data.role);
+      if (data.role === "builder") {
+        localStorage.setItem("builder_profile_complete", data.profileComplete ? "1" : "0");
+      }
 
       if (data.role === "architect") navigate("/architect");
-      else if (data.role === "builder") navigate("/builder");
+      else if (data.role === "builder") {
+        if (data.profileComplete) navigate("/builder");
+        else navigate("/builder/profile/setup");
+      }
       else if (data.role === "dealer") navigate("/prices");
       else navigate("/");
     } catch (err: any) {
@@ -241,6 +264,13 @@ export default function Login() {
               </button>
               <button
                 type="button"
+                style={registerRole === "builder" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
+                onClick={() => setRegisterRole("builder")}
+              >
+                Builder
+              </button>
+              <button
+                type="button"
                 style={registerRole === "dealer" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
                 onClick={() => setRegisterRole("dealer")}
               >
@@ -264,6 +294,41 @@ export default function Login() {
                   placeholder="Head Phone Number for SMS (optional)"
                   value={architectPhoneNumber}
                   onChange={(e) => setArchitectPhoneNumber(e.target.value)}
+                />
+              </>
+            ) : registerRole === "builder" ? (
+              <>
+                <input
+                  style={pageStyles.input}
+                  type="text"
+                  placeholder="Company / Firm Name"
+                  value={builderCompanyName}
+                  onChange={(e) => setBuilderCompanyName(e.target.value)}
+                  required
+                />
+                <input
+                  style={pageStyles.input}
+                  type="tel"
+                  placeholder="Contact Phone"
+                  value={builderPhone}
+                  onChange={(e) => setBuilderPhone(e.target.value)}
+                  required
+                />
+                <input
+                  style={pageStyles.input}
+                  type="text"
+                  placeholder="Service Locations (e.g. Mumbai, Pune)"
+                  value={builderLocations}
+                  onChange={(e) => setBuilderLocations(e.target.value)}
+                  required
+                />
+                <input
+                  style={pageStyles.input}
+                  type="text"
+                  placeholder="Specialties (e.g. Residential, Interiors)"
+                  value={builderSpecialties}
+                  onChange={(e) => setBuilderSpecialties(e.target.value)}
+                  required
                 />
               </>
             ) : (

@@ -51,6 +51,12 @@ export async function registerUser(input: {
     city?: string;
     state?: string;
   };
+  builderData?: {
+    companyName?: string;
+    contactPhone?: string;
+    serviceLocations?: string;
+    specialties?: string;
+  };
 }) {
   const email = String(input.email || "").trim().toLowerCase();
   const password = String(input.password || "");
@@ -59,6 +65,7 @@ export async function registerUser(input: {
   const phoneNumberRaw = String(input.phoneNumber || "").trim();
   const phoneNumber = phoneNumberRaw || null;
   const dealerData = input.dealerData;
+  const builderData = input.builderData;
   const hasDealerProfile = Boolean(String(dealerData?.shopName || "").trim());
 
   // Backward-compatible normalization for older clients that may still send role=builder.
@@ -82,8 +89,8 @@ export async function registerUser(input: {
     throw new Error("Password must be at least 6 characters");
   }
 
-  if (role === "builder") {
-    throw new Error("Builder self-registration is disabled. Builder accounts are created via invite links only");
+  if (role === "builder" && !String(builderData?.companyName || "").trim()) {
+    throw new Error("companyName is required for builder registration");
   }
 
   if (role === "architect" && !organizationName) {
@@ -98,8 +105,8 @@ export async function registerUser(input: {
     throw new Error("shopName is required for dealer registration");
   }
 
-  if (role !== "architect" && role !== "dealer") {
-    throw new Error("Invalid role. Supported roles are: architect, dealer");
+  if (role !== "architect" && role !== "dealer" && role !== "builder") {
+    throw new Error("Invalid role. Supported roles are: architect, builder, dealer");
   }
 
   const existing = await pool.query(
@@ -154,6 +161,34 @@ export async function registerUser(input: {
           [email, passwordHash, organizationId, orgRole, phoneNumber]
         );
       }
+    } else if (role === "builder") {
+      if (existing.rows.length > 0) {
+        throw new Error("User already exists with this email");
+      }
+
+      userRes = await client.query(
+        `INSERT INTO users (email, password_hash, role)
+         VALUES ($1, $2, 'builder')
+         RETURNING id, role`,
+        [email, passwordHash]
+      );
+
+      const newBuilderId = userRes.rows[0].id;
+
+      // Create builder profile row (may be partially filled at signup)
+      await client.query(
+        `INSERT INTO builder_profiles
+           (user_id, company_name, contact_phone, service_locations, specialties)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (user_id) DO NOTHING`,
+        [
+          newBuilderId,
+          String(builderData?.companyName || "").trim() || null,
+          String(builderData?.contactPhone || "").trim() || null,
+          String(builderData?.serviceLocations || "").trim() || null,
+          String(builderData?.specialties || "").trim() || null,
+        ]
+      );
     } else if (role === "dealer") {
       if (existing.rows.length > 0) {
         throw new Error("User already exists with this email");
@@ -267,7 +302,28 @@ export async function loginUser(email: string, password: string) {
       { expiresIn: "7d" }
     );
 
-    return { token, role: user.role, organizationId: user.organization_id, orgRole: user.org_role };
+    let profileComplete: boolean | undefined;
+    if (user.role === "builder") {
+      try {
+        const profileRes = await pool.query(
+          `SELECT company_name, contact_phone, service_locations, specialties
+           FROM builder_profiles WHERE user_id = $1 LIMIT 1`,
+          [user.id]
+        );
+        const p = profileRes.rows[0];
+        profileComplete = Boolean(
+          p &&
+          String(p.company_name || "").trim() &&
+          String(p.contact_phone || "").trim() &&
+          String(p.service_locations || "").trim() &&
+          String(p.specialties || "").trim()
+        );
+      } catch {
+        profileComplete = false;
+      }
+    }
+
+    return { token, role: user.role, organizationId: user.organization_id, orgRole: user.org_role, profileComplete };
   } catch (err: any) {
     if (err.message === "Invalid credentials" || err.message === "User not activated" || err.message === "Email and password required") {
       throw err;
@@ -373,6 +429,20 @@ export async function acceptInvite(token: string, password: string) {
     [userId, invite.id]
   );
 
+  // Seed blank builder_profiles row if accepting a builder invite
+  if (user.role === "builder") {
+    try {
+      await pool.query(
+        `INSERT INTO builder_profiles (user_id)
+         VALUES ($1)
+         ON CONFLICT (user_id) DO NOTHING`,
+        [userId]
+      );
+    } catch {
+      // Ignore if migration 017 has not yet been applied
+    }
+  }
+
   const jwtToken = jwt.sign(
     {
       userId: user.id,
@@ -384,7 +454,7 @@ export async function acceptInvite(token: string, password: string) {
     { expiresIn: "7d" }
   );
 
-  return { token: jwtToken, role: user.role, organizationId: user.organization_id, orgRole: user.org_role };
+  return { token: jwtToken, role: user.role, organizationId: user.organization_id, orgRole: user.org_role, profileComplete: false };
 }
 
 export async function createInvite(

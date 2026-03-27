@@ -1684,3 +1684,209 @@ export async function getBuilderEstimateHistory(builderOrgId: string, estimateId
     reviews,
   };
 }
+
+// ─────────────────────────────────────────────────
+// BUILDER PROFILE
+// ─────────────────────────────────────────────────
+
+export interface BuilderProfileData {
+  companyName?: string | null;
+  contactPhone?: string | null;
+  serviceLocations?: string | null;
+  specialties?: string | null;
+  pastProjects?: string | null;
+  portfolioLinks?: string | null;
+  teamSize?: number | null;
+  minProjectBudget?: number | null;
+  isVisibleToArchitects?: boolean;
+}
+
+function isProfileComplete(row: any): boolean {
+  return Boolean(
+    row &&
+    String(row.company_name || "").trim() &&
+    String(row.contact_phone || "").trim() &&
+    String(row.service_locations || "").trim() &&
+    String(row.specialties || "").trim()
+  );
+}
+
+export async function getBuilderProfile(userId: string) {
+  const res = await pool.query(
+    `SELECT * FROM builder_profiles WHERE user_id = $1 LIMIT 1`,
+    [userId]
+  );
+  const row = res.rows[0] || null;
+  return row
+    ? {
+        id: row.id,
+        userId: row.user_id,
+        companyName: row.company_name,
+        contactPhone: row.contact_phone,
+        serviceLocations: row.service_locations,
+        specialties: row.specialties,
+        pastProjects: row.past_projects,
+        portfolioLinks: row.portfolio_links,
+        teamSize: row.team_size,
+        minProjectBudget: row.min_project_budget,
+        isVisibleToArchitects: row.is_visible_to_architects,
+        profileComplete: isProfileComplete(row),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }
+    : null;
+}
+
+export async function upsertBuilderProfile(userId: string, data: BuilderProfileData) {
+  const existing = await pool.query(
+    `SELECT id FROM builder_profiles WHERE user_id = $1 LIMIT 1`,
+    [userId]
+  );
+
+  let row: any;
+
+  if (existing.rows.length === 0) {
+    const res = await pool.query(
+      `INSERT INTO builder_profiles
+         (user_id, company_name, contact_phone, service_locations, specialties,
+          past_projects, portfolio_links, team_size, min_project_budget, is_visible_to_architects)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING *`,
+      [
+        userId,
+        data.companyName ?? null,
+        data.contactPhone ?? null,
+        data.serviceLocations ?? null,
+        data.specialties ?? null,
+        data.pastProjects ?? null,
+        data.portfolioLinks ?? null,
+        data.teamSize ?? null,
+        data.minProjectBudget ?? null,
+        data.isVisibleToArchitects ?? false,
+      ]
+    );
+    row = res.rows[0];
+  } else {
+    const fields: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+
+    const mapping: Array<[keyof BuilderProfileData, string]> = [
+      ["companyName", "company_name"],
+      ["contactPhone", "contact_phone"],
+      ["serviceLocations", "service_locations"],
+      ["specialties", "specialties"],
+      ["pastProjects", "past_projects"],
+      ["portfolioLinks", "portfolio_links"],
+      ["teamSize", "team_size"],
+      ["minProjectBudget", "min_project_budget"],
+      ["isVisibleToArchitects", "is_visible_to_architects"],
+    ];
+
+    for (const [key, col] of mapping) {
+      if (data[key] !== undefined) {
+        fields.push(`${col} = $${idx++}`);
+        params.push(data[key] ?? null);
+      }
+    }
+
+    if (fields.length === 0) {
+      const unchanged = await pool.query(
+        `SELECT * FROM builder_profiles WHERE user_id = $1 LIMIT 1`,
+        [userId]
+      );
+      row = unchanged.rows[0];
+    } else {
+      fields.push(`updated_at = NOW()`);
+      params.push(userId);
+      const res = await pool.query(
+        `UPDATE builder_profiles SET ${fields.join(", ")} WHERE user_id = $${idx} RETURNING *`,
+        params
+      );
+      row = res.rows[0];
+    }
+  }
+
+  return {
+    id: row.id,
+    userId: row.user_id,
+    companyName: row.company_name,
+    contactPhone: row.contact_phone,
+    serviceLocations: row.service_locations,
+    specialties: row.specialties,
+    pastProjects: row.past_projects,
+    portfolioLinks: row.portfolio_links,
+    teamSize: row.team_size,
+    minProjectBudget: row.min_project_budget,
+    isVisibleToArchitects: row.is_visible_to_architects,
+    profileComplete: isProfileComplete(row),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Lists builder profiles visible to an architect's organization.
+ * Returns builders who have is_visible_to_architects = true and belong to
+ * organizations that have an accepted invite relationship to the architect's org.
+ */
+export async function listBuilderProfilesForOrg(architectOrgId: string) {
+  const res = await pool.query(
+    `SELECT
+       u.id AS user_id,
+       u.email,
+       bp.id,
+       bp.company_name,
+       bp.contact_phone,
+       bp.service_locations,
+       bp.specialties,
+       bp.past_projects,
+       bp.portfolio_links,
+       bp.team_size,
+       bp.min_project_budget,
+       bp.updated_at
+     FROM builder_profiles bp
+     JOIN users u ON u.id = bp.user_id
+     WHERE bp.is_visible_to_architects = true
+       AND (
+         -- builders who accepted an invite from this organization
+         u.id IN (
+           SELECT ui.user_id
+           FROM user_invites ui
+           WHERE ui.organization_id = $1
+             AND ui.role = 'builder'
+             AND ui.accepted_at IS NOT NULL
+             AND ui.user_id IS NOT NULL
+         )
+         OR
+         -- builders whose org was invited via builder_invitations
+         u.organization_id IN (
+           SELECT bi.builder_org_id
+           FROM builder_invitations bi
+           WHERE bi.status = 'accepted'
+             AND bi.project_id IN (
+               SELECT id FROM projects WHERE architect_id IN (
+                 SELECT id FROM users WHERE organization_id = $1 AND role = 'architect'
+               )
+             )
+         )
+       )
+     ORDER BY bp.updated_at DESC`,
+    [architectOrgId]
+  );
+
+  return res.rows.map((row: any) => ({
+    id: row.id,
+    userId: row.user_id,
+    email: row.email,
+    companyName: row.company_name,
+    contactPhone: row.contact_phone,
+    serviceLocations: row.service_locations,
+    specialties: row.specialties,
+    pastProjects: row.past_projects,
+    portfolioLinks: row.portfolio_links,
+    teamSize: row.team_size,
+    minProjectBudget: row.min_project_budget,
+    updatedAt: row.updated_at,
+  }));
+}

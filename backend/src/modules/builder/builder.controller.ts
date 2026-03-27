@@ -272,3 +272,65 @@ export async function optimizeEstimateTarget(req: Request, res: Response) {
     return res.status(500).json({ error: message, code: "OPTIMIZER_INTERNAL_ERROR" });
   }
 }
+
+// ── Builder Profile ────────────────────────────────────────
+
+export async function getMyBuilderProfile(req: Request, res: Response) {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const profile = await service.getBuilderProfile(userId);
+    return res.json(profile || { profileComplete: false });
+  } catch (err: any) {
+    console.error("getMyBuilderProfile error:", err);
+    return res.status(500).json({ error: "Failed to fetch profile" });
+  }
+}
+
+export async function updateMyBuilderProfile(req: Request, res: Response) {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const {
+      companyName,
+      contactPhone,
+      serviceLocations,
+      specialties,
+      pastProjects,
+      portfolioLinks,
+      teamSize,
+      minProjectBudget,
+      isVisibleToArchitects,
+    } = req.body;
+
+    const profile = await service.upsertBuilderProfile(userId, {
+      companyName,
+      contactPhone,
+      serviceLocations,
+      specialties,
+      pastProjects,
+      portfolioLinks,
+      teamSize: teamSize !== undefined ? Number(teamSize) : undefined,
+      minProjectBudget: minProjectBudget !== undefined ? Number(minProjectBudget) : undefined,
+      isVisibleToArchitects,
+    });
+    return res.json(profile);
+  } catch (err: any) {
+    console.error("updateMyBuilderProfile error:", err);
+    return res.status(500).json({ error: "Failed to save profile" });
+  }
+}
+
+export async function listBuildersForArchitect(req: Request, res: Response) {
+  try {
+    const user = (req as any).user;
+    const organizationId = user?.organizationId;
+    if (!organizationId) return res.status(400).json({ error: "No organization associated with this account" });
+    const builders = await service.listBuilderProfilesForOrg(organizationId);
+    return res.json(builders);
+  } catch (err: any) {
+    console.error("listBuildersForArchitect error:", err);
+    return res.status(500).json({ error: "Failed to fetch builder directory" });
+  }
+}

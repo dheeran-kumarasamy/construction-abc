@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authenticate } from "../auth/auth.middleware";
 import {
   getAvailableProjects,
   getProjectBOQItems,
@@ -7,9 +8,19 @@ import {
   getSubmittedEstimates,
   getSubmittedEstimateHistory,
   optimizeEstimateTarget,
+  getMyBuilderProfile,
+  updateMyBuilderProfile,
+  listBuildersForArchitect,
 } from "./builder.controller";
 
 const router = Router();
+
+// ── Builder Profile ────────────────────────────────────────
+router.get("/profile", authenticate, getMyBuilderProfile);
+router.put("/profile", authenticate, updateMyBuilderProfile);
+
+// ── Architect Builder Directory (architect-only) ───────────
+router.get("/directory", authenticate, listBuildersForArchitect);
 
 // Get projects available for builder to submit estimates
 router.get("/available-projects", getAvailableProjects);
