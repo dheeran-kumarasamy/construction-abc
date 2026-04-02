@@ -265,7 +265,7 @@ export default function BuilderBasePricing() {
     <div style={pageStyles.page}>
       <div style={pageStyles.card}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem" }}>
-          <h2 style={pageStyles.title}>Builder Base Pricing</h2>
+          <h2 style={pageStyles.title}>Builder Base Pricing Overrides</h2>
           <div style={{ width: "120px", opacity: 0.7 }}>
             <ConstructionIllustration type="tools" />
           </div>

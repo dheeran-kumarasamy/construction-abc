@@ -1,16 +1,29 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
+import { formatINR } from "../../services/currency";
+import { formatDate } from "../../services/dateTime";
 import * as api from "./estimation.api";
 import type { BOQProject } from "./types";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "#6b7280",
   in_progress: "#d97706",
+  WIP: "#d97706",
   completed: "#059669",
   submitted: "#2563eb",
   estimated: "#8b5cf6",
 };
+
+function toStatusLabel(status: string) {
+  if (status === "in_progress") return "WIP";
+  return status.replace("_", " ");
+}
+
+function toStatusColorKey(status: string) {
+  if (status === "in_progress") return "WIP";
+  return status;
+}
 
 interface ProjectWithType extends BOQProject {
   project_type?: "own" | "invited";
@@ -78,7 +91,7 @@ export default function EstimationProjectsPage() {
     }
   }
 
-  const fmt = (n?: number) => (n != null ? `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—");
+  const fmt = (n?: number) => (n != null ? formatINR(n, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : "—");
 
   return (
     <div style={{ ...pageStyles.page, alignItems: "flex-start", paddingTop: 32 }}>
@@ -192,17 +205,24 @@ export default function EstimationProjectsPage() {
                     </td>
                     <td style={pageStyles.td}>{p.project_location || "—"}</td>
                     <td style={pageStyles.td}>
+                      {(() => {
+                        const statusLabel = toStatusLabel(p.status);
+                        const statusColorKey = toStatusColorKey(p.status);
+                        return (
                       <span style={{
                         padding: "3px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600,
-                        background: `${STATUS_COLORS[p.status]}15`, color: STATUS_COLORS[p.status],
+                        background: `${STATUS_COLORS[statusColorKey] || "#64748b"}15`,
+                        color: STATUS_COLORS[statusColorKey] || "#64748b",
                       }}>
-                        {p.status.replace("_", " ")}
+                        {statusLabel}
                       </span>
+                        );
+                      })()}
                     </td>
                     <td style={{ ...pageStyles.td, textAlign: "center" }}>{p.item_count ?? 0}</td>
                     <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace" }}>{fmt(p.total_amount)}</td>
                     <td style={{ ...pageStyles.td, fontSize: 13, color: "var(--muted)" }}>
-                      {new Date(p.updated_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      {formatDate(p.updated_at)}
                     </td>
                     <td style={pageStyles.td}>
                       <div style={{ display: "flex", gap: 8 }}>

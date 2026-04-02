@@ -5,12 +5,14 @@ export interface DealerProfile {
   id: string;
   userId: string;
   organizationId: string | null;
+  productCategoryId: string | null;
   shopName: string;
   location: string | null;
   contactNumber: string | null;
   email: string;
   city: string | null;
   state: string | null;
+  productCategoryName?: string | null;
   isApproved: boolean;
   approvalDate: string | null;
   approvedBy: string | null;
@@ -52,18 +54,29 @@ export async function createDealerProfile(
   contactNumber?: string,
   city?: string,
   state?: string,
-  organizationId?: string
+  organizationId?: string,
+  productCategoryId?: string
 ): Promise<DealerProfile> {
   const { rows } = await pool.query(
     `
       INSERT INTO dealers (
-        user_id, shop_name, email, location, contact_number, city, state, organization_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        user_id, shop_name, email, location, contact_number, city, state, organization_id, product_category_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING 
-        id, user_id, organization_id, shop_name, location, contact_number, email,
+        id, user_id, organization_id, product_category_id, shop_name, location, contact_number, email,
         city, state, is_approved, approval_date, approved_by, created_at, updated_at
     `,
-    [userId, shopName, email, location || null, contactNumber || null, city || null, state || null, organizationId || null]
+    [
+      userId,
+      shopName,
+      email,
+      location || null,
+      contactNumber || null,
+      city || null,
+      state || null,
+      organizationId || null,
+      productCategoryId || null,
+    ]
   );
 
   return formatDealerProfile(rows[0]);
@@ -73,7 +86,7 @@ export async function getDealerById(dealerId: string): Promise<DealerProfile | n
   const { rows } = await pool.query(
     `
       SELECT 
-        id, user_id, organization_id, shop_name, location, contact_number, email,
+        id, user_id, organization_id, product_category_id, shop_name, location, contact_number, email,
         city, state, is_approved, approval_date, approved_by, created_at, updated_at
       FROM dealers
       WHERE id = $1
@@ -88,7 +101,7 @@ export async function getDealerByUserId(userId: string): Promise<DealerProfile |
   const { rows } = await pool.query(
     `
       SELECT 
-        id, user_id, organization_id, shop_name, location, contact_number, email,
+        id, user_id, organization_id, product_category_id, shop_name, location, contact_number, email,
         city, state, is_approved, approval_date, approved_by, created_at, updated_at
       FROM dealers
       WHERE user_id = $1
@@ -103,11 +116,13 @@ export async function getAllApprovedDealers(): Promise<DealerProfile[]> {
   const { rows } = await pool.query(
     `
       SELECT 
-        id, user_id, organization_id, shop_name, location, contact_number, email,
-        city, state, is_approved, approval_date, approved_by, created_at, updated_at
-      FROM dealers
-      WHERE is_approved = true
-      ORDER BY shop_name ASC
+        d.id, d.user_id, d.organization_id, d.product_category_id, d.shop_name, d.location, d.contact_number, d.email,
+        d.city, d.state, d.is_approved, d.approval_date, d.approved_by, d.created_at, d.updated_at,
+        mc.name as product_category_name
+      FROM dealers d
+      LEFT JOIN material_categories mc ON mc.id = d.product_category_id
+      WHERE d.is_approved = true
+      ORDER BY d.shop_name ASC
     `
   );
 
@@ -118,11 +133,13 @@ export async function getDealersByCity(city: string): Promise<DealerProfile[]> {
   const { rows } = await pool.query(
     `
       SELECT 
-        id, user_id, organization_id, shop_name, location, contact_number, email,
-        city, state, is_approved, approval_date, approved_by, created_at, updated_at
-      FROM dealers
-      WHERE city = $1 AND is_approved = true
-      ORDER BY shop_name ASC
+        d.id, d.user_id, d.organization_id, d.product_category_id, d.shop_name, d.location, d.contact_number, d.email,
+        d.city, d.state, d.is_approved, d.approval_date, d.approved_by, d.created_at, d.updated_at,
+        mc.name as product_category_name
+      FROM dealers d
+      LEFT JOIN material_categories mc ON mc.id = d.product_category_id
+      WHERE d.city = $1 AND d.is_approved = true
+      ORDER BY d.shop_name ASC
     `,
     [city]
   );
@@ -139,6 +156,7 @@ export async function updateDealerProfile(
     email: string;
     city: string;
     state: string;
+    productCategoryId: string;
   }>
 ): Promise<DealerProfile> {
   const fields: string[] = [];
@@ -169,6 +187,10 @@ export async function updateDealerProfile(
     fields.push(`state = $${paramIndex++}`);
     values.push(updates.state);
   }
+  if (updates.productCategoryId !== undefined) {
+    fields.push(`product_category_id = $${paramIndex++}`);
+    values.push(updates.productCategoryId || null);
+  }
 
   fields.push(`updated_at = now()`);
   values.push(dealerId);
@@ -179,7 +201,7 @@ export async function updateDealerProfile(
       SET ${fields.join(", ")}
       WHERE id = $${paramIndex}
       RETURNING 
-        id, user_id, organization_id, shop_name, location, contact_number, email,
+        id, user_id, organization_id, product_category_id, shop_name, location, contact_number, email,
         city, state, is_approved, approval_date, approved_by, created_at, updated_at
     `,
     values
@@ -199,7 +221,7 @@ export async function approveDealerProfile(dealerId: string, approvedByUserId: s
       SET is_approved = true, approval_date = now(), approved_by = $2, updated_at = now()
       WHERE id = $1
       RETURNING 
-        id, user_id, organization_id, shop_name, location, contact_number, email,
+        id, user_id, organization_id, product_category_id, shop_name, location, contact_number, email,
         city, state, is_approved, approval_date, approved_by, created_at, updated_at
     `,
     [dealerId, approvedByUserId]
@@ -221,6 +243,58 @@ export async function setDealerPrice(
   unitOfSale?: string,
   notes?: string
 ): Promise<DealerPrice> {
+  const allowedCategory = await pool.query(
+    `
+      SELECT
+        d.product_category_id,
+        mc.name AS category_name,
+        COALESCE(
+          ARRAY_AGG(DISTINCT dpc.category_id) FILTER (WHERE dpc.category_id IS NOT NULL),
+          ARRAY[]::uuid[]
+        ) AS selected_category_ids,
+        COALESCE(
+          ARRAY_AGG(DISTINCT mcs.name) FILTER (WHERE mcs.name IS NOT NULL),
+          ARRAY[]::text[]
+        ) AS selected_category_names
+      FROM dealers d
+      LEFT JOIN material_categories mc ON mc.id = d.product_category_id
+      LEFT JOIN dealer_product_categories dpc ON dpc.dealer_id = d.id
+      LEFT JOIN material_categories mcs ON mcs.id = dpc.category_id
+      WHERE d.id = $1
+      GROUP BY d.product_category_id, mc.name
+      LIMIT 1
+    `,
+    [dealerId]
+  );
+
+  if (!allowedCategory.rows.length) {
+    throw new Error("Dealer profile not found");
+  }
+
+  const selectedCategoryIds = (allowedCategory.rows[0].selected_category_ids || []) as string[];
+  const fallbackCategoryId = (allowedCategory.rows[0].product_category_id || null) as string | null;
+  const categoryIds = selectedCategoryIds.length > 0
+    ? selectedCategoryIds
+    : (fallbackCategoryId ? [fallbackCategoryId] : []);
+
+  if (categoryIds.length === 0) {
+    throw new Error("Dealer product category is not set");
+  }
+
+  const materialAllowed = await pool.query(
+    `SELECT 1 FROM materials WHERE id = $1 AND category_id = ANY($2::uuid[]) LIMIT 1`,
+    [materialId, categoryIds]
+  );
+  if (!materialAllowed.rows.length) {
+    const selectedCategoryNames = ((allowedCategory.rows[0].selected_category_names || []) as string[])
+      .filter(Boolean);
+    const fallbackCategoryName = String(allowedCategory.rows[0].category_name || "").trim();
+    const categoryLabel = selectedCategoryNames.length > 0
+      ? selectedCategoryNames.join(", ")
+      : (fallbackCategoryName || "selected categories");
+    throw new Error(`You can only set prices for materials in your selected categories: ${categoryLabel}`);
+  }
+
   // Check if price already exists
   const existing = await pool.query(
     `SELECT id, version FROM dealer_prices WHERE dealer_id = $1 AND material_id = $2 AND is_active = true`,
@@ -376,12 +450,14 @@ function formatDealerProfile(row: any): DealerProfile {
     id: row.id,
     userId: row.user_id,
     organizationId: row.organization_id,
+    productCategoryId: row.product_category_id || null,
     shopName: row.shop_name,
     location: row.location,
     contactNumber: row.contact_number,
     email: row.email,
     city: row.city,
     state: row.state,
+    productCategoryName: row.product_category_name || null,
     isApproved: row.is_approved,
     approvalDate: row.approval_date ? new Date(row.approval_date).toISOString() : null,
     approvedBy: row.approved_by,

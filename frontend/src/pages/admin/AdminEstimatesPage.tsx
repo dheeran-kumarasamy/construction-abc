@@ -2,6 +2,7 @@ import React from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { AdminCard, AdminShell, AdminTable, StatusPill } from "./AdminShell";
 import { adminFetch, type PaginatedResponse } from "./adminApi";
+import { formatDateTime } from "../../services/dateTime";
 
 const ESTIMATE_STATUSES = [
   "draft",
@@ -26,7 +27,7 @@ type EstimateRow = {
 
 function formatDate(value: string | null) {
   if (!value) return "—";
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 function formatCurrency(value: number | null) {

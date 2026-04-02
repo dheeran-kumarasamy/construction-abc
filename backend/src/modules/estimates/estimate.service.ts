@@ -223,6 +223,7 @@ export async function getAllProjectEstimates(projectId: string) {
        er.id AS revision_id,
        er.revision_number,
        er.pricing_snapshot,
+      er.margin_config,
        er.grand_total,
        er.notes,
        er.submitted_at,
@@ -233,7 +234,7 @@ export async function getAllProjectEstimates(projectId: string) {
      FROM estimates e
      JOIN organizations o ON o.id = e.builder_org_id
      LEFT JOIN LATERAL (
-       SELECT id, revision_number, pricing_snapshot, grand_total, notes, submitted_at
+       SELECT id, revision_number, pricing_snapshot, grand_total, notes, submitted_at, margin_config
        FROM estimate_revisions
        WHERE estimate_id = e.id
        ORDER BY revision_number DESC
@@ -264,6 +265,7 @@ export async function getAllProjectEstimates(projectId: string) {
     const latestReviewStatus = REVIEW_ACTION_TO_STATUS[String(row.latest_review_action || "")] || null;
     return {
       ...row,
+      basic_material_cost: row.margin_config?.basicMaterialCost ?? null,
       latest_review_status: latestReviewStatus,
       latest_review_comment: metadata?.comment || null,
     };
@@ -484,6 +486,7 @@ export async function getEstimateHistory(projectId: string, estimateId: string) 
        revision_number,
        source,
        pricing_snapshot,
+       margin_config,
        grand_total,
        notes,
        submitted_at
@@ -511,6 +514,7 @@ export async function getEstimateHistory(projectId: string, estimateId: string) 
 
   const revisions = revisionsRes.rows.map((row: any) => ({
     ...row,
+    basic_material_cost: row.margin_config?.basicMaterialCost ?? null,
     submitted_at: row.submitted_at,
   }));
 

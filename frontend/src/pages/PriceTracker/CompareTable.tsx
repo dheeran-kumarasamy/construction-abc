@@ -1,4 +1,5 @@
 import type { CompareResponse } from "./types";
+import { formatINR } from "../../services/currency";
 
 interface Props {
   data: CompareResponse | null;
@@ -48,7 +49,7 @@ export default function CompareTable({ data }: Props) {
 
                     return (
                       <td key={`${material.materialId}-${district}`} style={style}>
-                        {value != null ? `₹${value.toFixed(2)}` : "-"}
+                        {value != null ? formatINR(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-"}
                       </td>
                     );
                   })}

@@ -2,6 +2,7 @@ import React from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { AdminCard, AdminShell, AdminTable, StatusPill } from "./AdminShell";
 import { adminFetch, type PaginatedResponse } from "./adminApi";
+import { formatDateTime } from "../../services/dateTime";
 
 type InviteRow = {
   id: string;
@@ -16,7 +17,7 @@ type InviteRow = {
 };
 
 function formatDate(value: string | null) {
-  return value ? new Date(value).toLocaleString() : "—";
+  return value ? formatDateTime(value) : "—";
 }
 
 function toneForStatus(status: string): "neutral" | "success" | "danger" | "warning" {

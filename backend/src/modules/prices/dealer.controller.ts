@@ -17,7 +17,7 @@ export async function createDealerProfile(req: Request, res: Response) {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { shopName, email, location, contactNumber, city, state, organizationId } = req.body;
+    const { shopName, email, location, contactNumber, city, state, organizationId, productCategoryId } = req.body;
 
     if (!shopName || !email) {
       return res.status(400).json({ error: "shopName and email are required" });
@@ -31,7 +31,8 @@ export async function createDealerProfile(req: Request, res: Response) {
       contactNumber,
       city,
       state,
-      organizationId
+      organizationId,
+      productCategoryId
     );
 
     return res.status(201).json(dealer);
@@ -68,7 +69,7 @@ export async function updateDealerProfile(req: Request, res: Response) {
       return res.status(404).json({ error: "Dealer profile not found" });
     }
 
-    const { shopName, location, contactNumber, email, city, state } = req.body;
+    const { shopName, location, contactNumber, email, city, state, productCategoryId } = req.body;
 
     const updated = await dealerService.updateDealerProfile(dealer.id, {
       shopName,
@@ -77,6 +78,7 @@ export async function updateDealerProfile(req: Request, res: Response) {
       email,
       city,
       state,
+      productCategoryId,
     });
 
     return res.json(updated);
@@ -147,6 +149,9 @@ export async function setPriceForMaterial(req: Request, res: Response) {
     console.error("Set dealer price error:", error);
     if ((error as any)?.message?.includes("materials")) {
       return res.status(400).json({ error: "Invalid material ID" });
+    }
+    if ((error as any)?.message?.includes("selected category") || (error as any)?.message?.includes("product category")) {
+      return res.status(400).json({ error: (error as any)?.message });
     }
     return res.status(500).json({ error: "Failed to set price" });
   }

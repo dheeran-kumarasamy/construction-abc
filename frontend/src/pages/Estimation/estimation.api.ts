@@ -53,12 +53,102 @@ export async function fetchTemplates(params?: {
   const qs = new URLSearchParams();
   if (params?.category) qs.set("category", params.category);
   if (params?.search) qs.set("search", params.search);
-  const res = await fetch(apiUrl(`/api/estimation/sor/templates?${qs}`));
+  const res = await fetch(apiUrl(`/api/estimation/sor/templates?${qs}`), {
+    headers: authHeaders(),
+  });
   return json<RateTemplate[]>(res);
 }
 
 export async function fetchTemplateDetail(id: string): Promise<RateTemplate> {
-  const res = await fetch(apiUrl(`/api/estimation/sor/templates/${id}`));
+  const res = await fetch(apiUrl(`/api/estimation/sor/templates/${id}`), {
+    headers: authHeaders(),
+  });
+  return json<RateTemplate>(res);
+}
+
+export async function createCustomLineItemTemplateRequest(data: {
+  code?: string;
+  name: string;
+  category: string;
+  sub_category?: string;
+  unit: string;
+  overhead_percent?: number;
+  profit_percent?: number;
+  gst_percent?: number;
+  resource_id: string;
+  coefficient: number;
+  wastage_percent?: number;
+  remarks?: string;
+}): Promise<RateTemplate> {
+  const res = await fetch(apiUrl("/api/estimation/templates/custom-line-item-request"), {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  return json<RateTemplate>(res);
+}
+
+export type PendingTemplateApproval = {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  sub_category: string | null;
+  unit: string;
+  overhead_percent: number;
+  profit_percent: number;
+  gst_percent: number;
+  approval_status: "pending" | "approved" | "rejected";
+  submitted_for_global: boolean;
+  created_at: string;
+  owner_organization_id: string | null;
+  organization_name: string | null;
+  created_by_email: string | null;
+  line_item_id: string | null;
+  resource_id: string | null;
+  resource_name: string | null;
+  resource_code: string | null;
+  coefficient: number | null;
+  wastage_percent: number | null;
+  remarks: string | null;
+};
+
+export async function fetchPendingTemplateApprovals(): Promise<PendingTemplateApproval[]> {
+  const res = await fetch(apiUrl("/api/estimation/templates/pending-approvals"), {
+    headers: authHeaders(),
+  });
+  return json<PendingTemplateApproval[]>(res);
+}
+
+export async function updatePendingTemplateApproval(
+  id: string,
+  data: {
+    name?: string;
+    category?: string;
+    sub_category?: string;
+    unit?: string;
+    overhead_percent?: number;
+    profit_percent?: number;
+    gst_percent?: number;
+    resource_id?: string;
+    coefficient?: number;
+    wastage_percent?: number;
+    remarks?: string;
+  }
+) {
+  const res = await fetch(apiUrl(`/api/estimation/templates/pending-approvals/${id}`), {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  return json<RateTemplate>(res);
+}
+
+export async function approvePendingTemplateApproval(id: string) {
+  const res = await fetch(apiUrl(`/api/estimation/templates/pending-approvals/${id}/approve`), {
+    method: "POST",
+    headers: authHeaders(),
+  });
   return json<RateTemplate>(res);
 }
 
@@ -178,8 +268,10 @@ export interface MarketCategory {
 }
 
 export interface MarketPriceRow {
+  materialPriceId: string;
   materialId: string;
   materialName: string;
+  brandName: string | null;
   unit: string;
   price: number;
   source: string;

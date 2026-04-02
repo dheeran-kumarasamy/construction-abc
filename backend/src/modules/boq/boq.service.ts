@@ -3,6 +3,66 @@ import { unlink } from "fs/promises";
 import XLSX from "xlsx";
 import path from "path";
 
+type BoqFileKind = "excel" | "csv" | "pdf";
+
+function detectBoqFileKind(mimetype: string, fileName = ""): BoqFileKind {
+  const normalizedMime = String(mimetype || "").toLowerCase();
+  const extension = path.extname(String(fileName || "").toLowerCase());
+
+  if (
+    normalizedMime === "application/vnd.ms-excel" ||
+    normalizedMime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    extension === ".xls" ||
+    extension === ".xlsx"
+  ) {
+    return "excel";
+  }
+
+  if (normalizedMime === "application/pdf" || extension === ".pdf") {
+    return "pdf";
+  }
+
+  return "csv";
+}
+
+function extractPdfRowsFromText(rawText: string) {
+  const unitPattern = "(?:kg|kgs|mt|ton|tons|nos?|no|each|ea|m|rm|rmt|rft|ft|sft|sqft|m2|sqm|cft|cuft|m3|cum|ltr|l|set)";
+  const qtyPattern = "-?\\d+(?:[.,]\\d+)?";
+  const linePattern = new RegExp(
+    `^(?:\\d+[.)\\-]?\\s*)?(.+?)\\s+(${qtyPattern})\\s+(${unitPattern})\\b`,
+    "i"
+  );
+
+  const lines = String(rawText || "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  const items = lines
+    .map((line) => {
+      const match = line.match(linePattern);
+      if (!match) return null;
+
+      const item = String(match[1] || "").trim();
+      const qtyRaw = String(match[2] || "").replace(/,/g, "");
+      const uom = String(match[3] || "").trim();
+      const qty = Number.parseFloat(qtyRaw);
+
+      if (!item || item.length < 3 || !Number.isFinite(qty) || !uom) {
+        return null;
+      }
+
+      return {
+        item,
+        qty: Number(qty.toFixed(3)),
+        uom,
+      };
+    })
+    .filter((row): row is { item: string; qty: number; uom: string } => Boolean(row));
+
+  return { lines, items };
+}
+
 function getConfiguredLlmModel() {
   const raw = String(process.env.LLM_MODEL || "").trim();
   if (!raw) {
@@ -241,7 +301,7 @@ export async function saveOrUpdateBOQ(
     // Parse the file to extract data for database storage
     const fs = require("fs");
     const buffer = fs.readFileSync(file.path);
-    const parsed = await parseBOQFile(buffer, file.mimetype, columnMapping);
+    const parsed = await parseBOQFile(buffer, file.mimetype, columnMapping, file.originalname);
 
     // Check if BOQ already exists for this project
     const existingBOQ = await client.query(
@@ -554,11 +614,14 @@ export async function parseStoredBOQFile(filePath: string, columnMapping: Record
   try {
     const fs = require("fs");
     const buffer = fs.readFileSync(filePath);
-    const mimetype = filePath.endsWith(".xlsx") || filePath.endsWith(".xls") 
-      ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      : "text/csv";
+    const ext = path.extname(String(filePath || "").toLowerCase());
+    const mimetype = ext === ".pdf"
+      ? "application/pdf"
+      : ext === ".xlsx" || ext === ".xls"
+        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        : "text/csv";
     
-    return parseBOQFile(buffer, mimetype, columnMapping);
+    return parseBOQFile(buffer, mimetype, columnMapping, filePath);
   } catch (err) {
     console.error("Error parsing stored BOQ:", err);
     return { columns: [], mapping: columnMapping, items: [], preview: [] };
@@ -658,7 +721,12 @@ export async function uploadBOQ(
   };
 }
 
-export async function parseBOQFile(buffer: Buffer, mimetype: string, overrideMapping?: Record<string, string>) {
+export async function parseBOQFile(
+  buffer: Buffer,
+  mimetype: string,
+  overrideMapping?: Record<string, string>,
+  originalFileName?: string
+) {
   const UNIT_TOKENS = new Set([
     "kg", "kgs", "mt", "ton", "tons", "nos", "no", "each", "ea", "m", "rm", "rmt",
     "rft", "ft", "sft", "sqft", "m2", "sqm", "cft", "cuft", "m3", "cum", "ltr", "l", "set",
@@ -822,9 +890,8 @@ export async function parseBOQFile(buffer: Buffer, mimetype: string, overrideMap
     };
   };
 
-  const isExcel =
-    mimetype === "application/vnd.ms-excel" ||
-    mimetype === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  const fileKind = detectBoqFileKind(mimetype, originalFileName);
+  const isExcel = fileKind === "excel";
 
   if (isExcel) {
     const workbook = XLSX.read(buffer, { type: "buffer" });
@@ -869,6 +936,52 @@ export async function parseBOQFile(buffer: Buffer, mimetype: string, overrideMap
       mapping,
       items,
       preview: items.slice(0, 5), // First 5 rows for preview
+      llmUsed,
+    };
+  }
+
+  if (fileKind === "pdf") {
+    let extractedText = "";
+
+    try {
+      const pdfParse = await import("pdf-parse");
+      const parsed = await pdfParse.default(buffer);
+      extractedText = String(parsed?.text || "");
+    } catch {
+      throw new Error("Failed to extract BOQ content from PDF");
+    }
+
+    if (!extractedText.trim()) {
+      return {
+        columns: ["item", "qty", "uom"],
+        mapping: { item: "item", qty: "qty", uom: "uom" },
+        items: [],
+        preview: [],
+        llmUsed: false,
+      };
+    }
+
+    const { lines, items: regexItems } = extractPdfRowsFromText(extractedText);
+    let items = regexItems as Array<{ item: string; qty: number | string; uom: string }>;
+    let llmUsed = false;
+
+    if (items.length === 0) {
+      const llmResult = await extractBoqWithLlm({
+        columns: ["line"],
+        sampleRows: lines.slice(0, 180).map((line) => ({ line })),
+      });
+
+      if (llmResult.llmUsed && llmResult.items.length > 0) {
+        items = llmResult.items;
+        llmUsed = true;
+      }
+    }
+
+    return {
+      columns: ["item", "qty", "uom"],
+      mapping: { item: "item", qty: "qty", uom: "uom" },
+      items,
+      preview: items.slice(0, 5),
       llmUsed,
     };
   }

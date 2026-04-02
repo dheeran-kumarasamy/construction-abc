@@ -12,6 +12,8 @@ const navItems = [
   { label: "Dealers", path: "/admin/dealers" },
   { label: "Est. Projects", path: "/admin/estimation-projects" },
   { label: "Estimates", path: "/admin/estimates" },
+  { label: "Deviation Alerts", path: "/admin/deviations" },
+  { label: "Rates & Analysis", path: "/admin/rates-analysis" },
   { label: "Prices", path: "/admin/prices" },
   { label: "Audit", path: "/admin/audit" },
 ];

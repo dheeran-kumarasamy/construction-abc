@@ -5,7 +5,7 @@ import path from "path";
 export async function parseBOQ(req: Request, res: Response) {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    const result = await service.parseBOQFile(req.file.buffer, req.file.mimetype);
+    const result = await service.parseBOQFile(req.file.buffer, req.file.mimetype, undefined, req.file.originalname);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message });

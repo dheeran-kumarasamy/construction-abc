@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import AlertDialog from "./AlertDialog";
 import AddToHomeScreenBanner from "./AddToHomeScreenBanner";
 import CategoryTabs from "./CategoryTabs";
@@ -33,10 +34,14 @@ import type {
 } from "./types";
 import "./priceTracker.css";
 import { useAuth } from "../../auth/AuthContext";
+import { formatINR } from "../../services/currency";
 
 export default function PriceTrackerPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const isDealer = user?.role === "dealer";
+  const isPublicMarketPricesPage = location.pathname === "/market-prices";
 
   const [districts, setDistricts] = useState<District[]>([]);
   const [categories, setCategories] = useState<MaterialCategory[]>([]);
@@ -100,6 +105,15 @@ export default function PriceTrackerPage() {
     () => prices.find((p) => p.materialId === dealerMaterialId) || null,
     [prices, dealerMaterialId]
   );
+  const dealerMaterialOptions = useMemo(() => {
+    const unique = new Map<string, PriceRecord>();
+    for (const price of prices) {
+      if (!unique.has(price.materialId)) {
+        unique.set(price.materialId, price);
+      }
+    }
+    return Array.from(unique.values());
+  }, [prices]);
 
   useEffect(() => {
     (async () => {
@@ -314,9 +328,46 @@ export default function PriceTrackerPage() {
     }
   };
 
+  const exitMarketPrices = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/login");
+  };
+
   return (
     <div className="pt-page page-container">
       <AddToHomeScreenBanner />
+      {isPublicMarketPricesPage ? (
+        <button
+          type="button"
+          aria-label="Exit"
+          title="Exit"
+          onClick={exitMarketPrices}
+          style={{
+            position: "fixed",
+            right: 18,
+            bottom: 18,
+            width: 54,
+            height: 54,
+            minWidth: 54,
+            borderRadius: "999px",
+            padding: 0,
+            fontSize: "24px",
+            fontWeight: 900,
+            lineHeight: 1,
+            color: "#ffffff",
+            background: "#b91c1c",
+            border: "1px solid rgba(255, 255, 255, 0.24)",
+            boxShadow: "0 10px 24px rgba(2, 6, 23, 0.38)",
+            cursor: "pointer",
+            zIndex: 999,
+          }}
+        >
+          ✕
+        </button>
+      ) : null}
       <h1>TN Construction Material Price Tracker</h1>
 
       {isDealer ? (
@@ -350,7 +401,7 @@ export default function PriceTrackerPage() {
                 required
                 disabled={!selectedDistrict || compareMode || prices.length === 0}
               >
-                {prices.map((material) => (
+                {dealerMaterialOptions.map((material) => (
                   <option key={material.materialId} value={material.materialId}>
                     {material.materialName} ({material.unit})
                   </option>
@@ -410,7 +461,7 @@ export default function PriceTrackerPage() {
             {selectedDealerMaterial ? (
               <div className="pt-map-hint" style={{ gridColumn: "1 / -1" }}>
                 District reference rate for {selectedDealerMaterial.materialName}: ₹
-                {selectedDealerMaterial.price ? selectedDealerMaterial.price.toFixed(2) : "-"} per {selectedDealerMaterial.unit}
+                {selectedDealerMaterial.price ? formatINR(selectedDealerMaterial.price, { minimumFractionDigits: 2, maximumFractionDigits: 2, withSymbol: false }) : "-"} per {selectedDealerMaterial.unit}
               </div>
             ) : null}
 
@@ -445,7 +496,7 @@ export default function PriceTrackerPage() {
                     {dealerOwnPrices.map((row) => (
                       <tr key={row.id}>
                         <td>{row.materialName || row.materialId}</td>
-                        <td>{row.price.toFixed(2)}</td>
+                        <td>{formatINR(row.price, { minimumFractionDigits: 2, maximumFractionDigits: 2, withSymbol: false })}</td>
                         <td>{row.unitOfSale || "-"}</td>
                         <td>{row.notes || "-"}</td>
                       </tr>

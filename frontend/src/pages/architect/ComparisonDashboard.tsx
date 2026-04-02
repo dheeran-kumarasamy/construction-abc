@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import { apiUrl } from "../../services/api";
+import { formatINR } from "../../services/currency";
 
 interface Project {
   id: string;
@@ -170,7 +171,7 @@ export default function ComparisonDashboard() {
                       color: e.rank === 1 ? "#16A34A" : "inherit",
                     }}
                   >
-                    ₹{getGrandTotal(e).toLocaleString()}
+                    {formatINR(getGrandTotal(e), { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                   </td>
                   <td style={pageStyles.td}>
                     <button

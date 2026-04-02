@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import { apiUrl } from "../../services/api";
+import { useAuth } from "../../auth/AuthContext";
 
 interface ProjectRow {
   id: string; // UUID
@@ -35,6 +36,8 @@ function resolveProjectRef(project: ProjectRow): string {
 
 export default function ProjectsList() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isArchitectHead = user?.role === "architect" && user?.orgRole === "head";
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -84,6 +87,17 @@ export default function ProjectsList() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
             <ConstructionIllustration type="building" size={80} />
+            <button style={pageStyles.secondaryBtn} onClick={() => navigate("/architect/builders")}>
+              Browse Builders
+            </button>
+            {isArchitectHead ? (
+              <button
+                style={pageStyles.secondaryBtn}
+                onClick={() => navigate("/architect/invite?role=architect")}
+              >
+                Invite Architects
+              </button>
+            ) : null}
             <button style={pageStyles.primaryBtn} onClick={() => navigate("/architect/create")}>
               New Project
             </button>

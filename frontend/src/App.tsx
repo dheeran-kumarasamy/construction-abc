@@ -28,8 +28,10 @@ import AdminOrganizationsPage from "./pages/admin/AdminOrganizationsPage";
 import AdminProjectsPage from "./pages/admin/AdminProjectsPage";
 import AdminInvitesPage from "./pages/admin/AdminInvitesPage";
 import AdminDealersPage from "./pages/admin/AdminDealersPage";
+import AdminRatesAnalysisPage from "./pages/admin/AdminRatesAnalysisPage";
 import AdminPricesPage from "./pages/admin/AdminPricesPage";
 import AdminAuditPage from "./pages/admin/AdminAuditPage";
+import AdminDeviationAlertsPage from "./pages/admin/AdminDeviationAlertsPage";
 import AdminBOQsPage from "./pages/admin/AdminBOQsPage";
 import AdminEstimationProjectsPage from "./pages/admin/AdminEstimationProjectsPage";
 import AdminEstimatesPage from "./pages/admin/AdminEstimatesPage";
@@ -60,6 +62,8 @@ function DashboardButton() {
   const navigate = useNavigate();
   const location = useLocation();
   const [quickEstimateOpen, setQuickEstimateOpen] = React.useState(false);
+  const [fabHovered, setFabHovered] = React.useState(false);
+  const [actionsVisible, setActionsVisible] = React.useState(false);
   const onArchitectScreen = location.pathname.startsWith("/architect");
   const onBuilderScreen = location.pathname.startsWith("/builder");
   const roleLabel = String(user?.role || "").toUpperCase();
@@ -72,6 +76,7 @@ function DashboardButton() {
 
   const showBackToDashboard = !!dashboardPath && location.pathname !== dashboardPath;
   const canOpenQuickEstimate = user?.role === "architect" || user?.role === "builder" || user?.role === "client";
+  const showMaterialPrices = location.pathname !== "/prices";
 
   React.useEffect(() => {
     if (!quickEstimateOpen) return;
@@ -95,21 +100,10 @@ function DashboardButton() {
       <div
         style={{
           position: "fixed",
+          left: 16,
           top: 16,
-          right: 16,
           zIndex: 1200,
           pointerEvents: "none",
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          alignItems: "stretch",
-          background: "rgba(2, 6, 23, 0.72)",
-          border: "1px solid rgba(148, 163, 184, 0.5)",
-          borderRadius: "12px",
-          padding: "8px",
-          boxShadow: "0 8px 22px rgba(2, 6, 23, 0.35)",
-          width: "fit-content",
-          maxWidth: "min(220px, calc(100vw - 24px))",
         }}
       >
         {roleLabel ? (
@@ -118,92 +112,151 @@ function DashboardButton() {
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              height: "38px",
-              padding: "0 12px",
+              height: "34px",
+              padding: "0 10px",
               borderRadius: "999px",
               border: "1px solid #cbd5e1",
               background: "#e2e8f0",
               color: "#334155",
-              fontSize: "12px",
+              fontSize: "11px",
               fontWeight: 800,
               letterSpacing: "0.4px",
-              cursor: "default",
               userSelect: "none",
-              marginBottom: "4px",
               pointerEvents: "auto",
             }}
           >
             {roleLabel}
           </span>
         ) : null}
+      </div>
 
-        {showBackToDashboard ? (
-          <button
-            type="button"
+      <div
+        onMouseEnter={() => setActionsVisible(true)}
+        onMouseLeave={() => setActionsVisible(false)}
+        style={{
+          position: "fixed",
+          right: 18,
+          bottom: 18,
+          zIndex: 1200,
+          pointerEvents: "auto",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: 10,
+          maxWidth: "min(240px, calc(100vw - 24px))",
+        }}
+      >
+        {actionsVisible ? (
+          <div
             style={{
-              ...pageStyles.primaryBtn,
-              height: "36px",
-              padding: "0 14px",
-              fontSize: "12px",
-              fontWeight: 800,
-              letterSpacing: "0.2px",
-              background: "#0f766e",
-              border: "1px solid rgba(255, 255, 255, 0.22)",
-              width: "100%",
-              pointerEvents: "auto",
+              background: "rgba(2, 6, 23, 0.78)",
+              border: "1px solid rgba(148, 163, 184, 0.52)",
+              borderRadius: "12px",
+              padding: "8px",
+              boxShadow: "0 8px 22px rgba(2, 6, 23, 0.35)",
+              width: "fit-content",
+              minWidth: "178px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
             }}
-            onClick={() => navigate(dashboardPath)}
           >
-            Dashboard
-          </button>
-        ) : null}
+            {showBackToDashboard ? (
+              <button
+                type="button"
+                style={{
+                  ...pageStyles.primaryBtn,
+                  height: "36px",
+                  padding: "0 14px",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  letterSpacing: "0.2px",
+                  background: "#0f766e",
+                  border: "1px solid rgba(255, 255, 255, 0.22)",
+                  width: "100%",
+                }}
+                onClick={() => navigate(dashboardPath)}
+              >
+                Back to Dashboard
+              </button>
+            ) : null}
 
-        {canOpenQuickEstimate ? (
-          <button
-            type="button"
-            style={{
-              ...pageStyles.primaryBtn,
-              height: "36px",
-              padding: "0 14px",
-              fontSize: "12px",
-              fontWeight: 800,
-              letterSpacing: "0.2px",
-              background: "#1d4ed8",
-              color: "#ffffff",
-              border: "1px solid #1e40af",
-              boxShadow: "0 8px 18px rgba(30, 64, 175, 0.28)",
-              width: "100%",
-              pointerEvents: "auto",
-            }}
-            onClick={() => setQuickEstimateOpen(true)}
-          >
-            Quick Estimate
-          </button>
+            {canOpenQuickEstimate ? (
+              <button
+                type="button"
+                style={{
+                  ...pageStyles.primaryBtn,
+                  height: "36px",
+                  padding: "0 14px",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  letterSpacing: "0.2px",
+                  background: "#1d4ed8",
+                  color: "#ffffff",
+                  border: "1px solid #1e40af",
+                  boxShadow: "0 8px 18px rgba(30, 64, 175, 0.28)",
+                  width: "100%",
+                }}
+                onClick={() => setQuickEstimateOpen(true)}
+              >
+                Quick Estimate
+              </button>
+            ) : null}
+
+            {showMaterialPrices ? (
+              <button
+                type="button"
+                style={{
+                  ...pageStyles.primaryBtn,
+                  height: "36px",
+                  padding: "0 14px",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  letterSpacing: "0.2px",
+                  background: "#7c3aed",
+                  border: "1px solid rgba(255, 255, 255, 0.22)",
+                  width: "100%",
+                }}
+                onClick={() => navigate("/prices")}
+              >
+                Material Prices
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         <button
           type="button"
-          style={{
-            ...pageStyles.primaryBtn,
-            height: "36px",
-            padding: "0 14px",
-            fontSize: "12px",
-            fontWeight: 800,
-            letterSpacing: "0.2px",
-            background: "#b91c1c",
-            border: "1px solid rgba(255, 255, 255, 0.25)",
-            boxShadow: "0 6px 16px rgba(127, 29, 29, 0.45)",
-            width: "100%",
-            pointerEvents: "auto",
-          }}
+          aria-label="Logout"
+          title="Logout"
+          onMouseEnter={() => setFabHovered(true)}
+          onMouseLeave={() => setFabHovered(false)}
           onClick={() => {
             logout();
             localStorage.removeItem("token");
             localStorage.removeItem("role");
             navigate("/login");
           }}
+          style={{
+            ...pageStyles.primaryBtn,
+            width: 54,
+            height: 54,
+            minWidth: 54,
+            borderRadius: "999px",
+            padding: 0,
+            fontSize: "22px",
+            fontWeight: 900,
+            lineHeight: 1,
+            background: "#b91c1c",
+            border: "1px solid rgba(255, 255, 255, 0.24)",
+            boxShadow: fabHovered
+              ? "0 0 0 4px rgba(248, 113, 113, 0.25), 0 0 26px rgba(239, 68, 68, 0.7), 0 12px 24px rgba(2, 6, 23, 0.48)"
+              : "0 10px 24px rgba(2, 6, 23, 0.38)",
+            transform: fabHovered ? "translateY(-1px) scale(1.03)" : "none",
+            transition: "box-shadow 160ms ease, transform 160ms ease",
+          }}
         >
-          Logout
+          ⏻
         </button>
       </div>
 
@@ -335,10 +388,26 @@ export default function App() {
             }
           />
           <Route
+            path="/admin/rates-analysis"
+            element={
+              <RequireAuth role="admin">
+                <AdminRatesAnalysisPage />
+              </RequireAuth>
+            }
+          />
+          <Route
             path="/admin/prices"
             element={
               <RequireAuth role="admin">
                 <AdminPricesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/deviations"
+            element={
+              <RequireAuth role="admin">
+                <AdminDeviationAlertsPage />
               </RequireAuth>
             }
           />

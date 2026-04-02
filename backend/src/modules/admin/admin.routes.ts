@@ -49,7 +49,7 @@ router.use(authenticate, requireAdmin);
 
 router.get("/dashboard", async (_req: Request, res: Response) => {
   try {
-    const [users, organizations, projects, estimates, boqs, dealers, activeAlerts, recentActivity, lastScraperRun] = await Promise.all([
+    const [users, organizations, projects, estimates, boqs, dealers, activeAlerts, deviationAlerts, recentActivity, lastScraperRun] = await Promise.all([
       pool.query(`SELECT COUNT(*)::int AS count FROM users`),
       pool.query(`SELECT COUNT(*)::int AS count FROM organizations`),
       pool.query(`SELECT COUNT(*)::int AS count FROM projects`),
@@ -57,6 +57,7 @@ router.get("/dashboard", async (_req: Request, res: Response) => {
       pool.query(`SELECT COUNT(*)::int AS count FROM boqs`),
       pool.query(`SELECT COUNT(*)::int AS count FROM dealers`),
       pool.query(`SELECT COUNT(*)::int AS count FROM price_alerts WHERE is_active = true`),
+      pool.query(`SELECT COUNT(*)::int AS count FROM audit_logs WHERE action = 'ESTIMATE_MARKET_DEVIATION_ALERT'`),
       pool.query(
         `SELECT al.id, al.action, al.metadata, al.created_at, u.email AS user_email
          FROM audit_logs al
@@ -82,6 +83,7 @@ router.get("/dashboard", async (_req: Request, res: Response) => {
         boqUploads: boqs.rows[0]?.count || 0,
         dealers: dealers.rows[0]?.count || 0,
         activePriceAlerts: activeAlerts.rows[0]?.count || 0,
+        marketDeviationAlerts: deviationAlerts.rows[0]?.count || 0,
       },
       recentActivity: recentActivity.rows,
       systemHealth: {
@@ -92,6 +94,214 @@ router.get("/dashboard", async (_req: Request, res: Response) => {
   } catch (error) {
     console.error("Failed to fetch admin dashboard", error);
     return res.status(500).json({ error: "Failed to load dashboard" });
+  }
+});
+
+router.get("/deviation-alerts", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+    const minDeviationPercent = Math.max(0, Number(req.query.minDeviationPercent || 0));
+    const statusFilterRaw = String(req.query.status || "open").toLowerCase();
+    const statusFilter = ["open", "resolved", "all"].includes(statusFilterRaw)
+      ? statusFilterRaw
+      : "open";
+    const directionFilterRaw = String(req.query.direction || "all").toLowerCase();
+    const directionFilter = ["all", "above_market", "below_market", "mixed"].includes(directionFilterRaw)
+      ? directionFilterRaw
+      : "all";
+
+    const statusCountWhere =
+      statusFilter === "all"
+        ? ""
+        : statusFilter === "resolved"
+          ? `AND EXISTS (
+               SELECT 1
+               FROM audit_logs rs
+               WHERE rs.action = 'ESTIMATE_MARKET_DEVIATION_RESOLVED'
+                 AND (rs.metadata->>'alertId') = al.id::text
+             )`
+          : `AND NOT EXISTS (
+               SELECT 1
+               FROM audit_logs rs
+               WHERE rs.action = 'ESTIMATE_MARKET_DEVIATION_RESOLVED'
+                 AND (rs.metadata->>'alertId') = al.id::text
+             )`;
+
+    const resolvedDirectionSql = `COALESCE(
+      NULLIF(al.metadata->>'deviationDirection', ''),
+      CASE
+        WHEN COALESCE((al.metadata->>'belowMarketCount')::int, 0) > 0
+             AND COALESCE((al.metadata->>'aboveMarketCount')::int, 0) > 0
+          THEN 'mixed'
+        WHEN COALESCE((al.metadata->>'belowMarketCount')::int, 0) > 0
+          THEN 'below_market'
+        ELSE 'above_market'
+      END
+    )`;
+    const directionCountWhere = directionFilter === "all"
+      ? ""
+      : `AND ${resolvedDirectionSql} = $2`;
+
+    const totalParams = directionFilter === "all"
+      ? [minDeviationPercent]
+      : [minDeviationPercent, directionFilter];
+
+    const totalQuery = await pool.query(
+      `SELECT COUNT(*)::int AS count
+       FROM audit_logs al
+       WHERE al.action = 'ESTIMATE_MARKET_DEVIATION_ALERT'
+         AND COALESCE((al.metadata->>'maxDeviationPercent')::numeric, 0) >= $1
+         ${directionCountWhere}
+         ${statusCountWhere}`,
+      totalParams
+    );
+
+    const directionCountsQuery = await pool.query(
+      `SELECT
+         ${resolvedDirectionSql} AS direction,
+         COUNT(*)::int AS count
+       FROM audit_logs al
+       WHERE al.action = 'ESTIMATE_MARKET_DEVIATION_ALERT'
+         AND COALESCE((al.metadata->>'maxDeviationPercent')::numeric, 0) >= $1
+         ${statusCountWhere}
+       GROUP BY 1`,
+      [minDeviationPercent]
+    );
+
+    const directionCounts = {
+      all: 0,
+      above_market: 0,
+      below_market: 0,
+      mixed: 0,
+    } as Record<string, number>;
+
+    for (const row of directionCountsQuery.rows || []) {
+      const key = String(row.direction || "above_market");
+      const count = Number(row.count || 0);
+      if (Object.prototype.hasOwnProperty.call(directionCounts, key)) {
+        directionCounts[key] = count;
+      }
+      directionCounts.all += count;
+    }
+
+    const directionRowsWhere = directionFilter === "all"
+      ? ""
+      : `AND ${resolvedDirectionSql} = $2`;
+
+    const rowParams = directionFilter === "all"
+      ? [minDeviationPercent, pageSize, offset]
+      : [minDeviationPercent, directionFilter, pageSize, offset];
+
+    const rowLimitIndex = directionFilter === "all" ? 2 : 3;
+    const rowOffsetIndex = directionFilter === "all" ? 3 : 4;
+
+    const rows = await pool.query(
+      `SELECT al.id, al.project_id, al.user_id, u.email AS user_email,
+              al.action, al.metadata, al.created_at,
+              resolved.resolved_at,
+              resolved.resolved_by_user_id,
+              resolved.resolved_by_email,
+              resolved.resolved_note
+       FROM audit_logs al
+       LEFT JOIN users u ON u.id = al.user_id
+       LEFT JOIN LATERAL (
+         SELECT
+           rs.created_at AS resolved_at,
+           rs.user_id AS resolved_by_user_id,
+           ru.email AS resolved_by_email,
+           (rs.metadata->>'note') AS resolved_note
+         FROM audit_logs rs
+         LEFT JOIN users ru ON ru.id = rs.user_id
+         WHERE rs.action = 'ESTIMATE_MARKET_DEVIATION_RESOLVED'
+           AND (rs.metadata->>'alertId') = al.id::text
+         ORDER BY rs.created_at DESC
+         LIMIT 1
+       ) resolved ON true
+       WHERE al.action = 'ESTIMATE_MARKET_DEVIATION_ALERT'
+         AND COALESCE((al.metadata->>'maxDeviationPercent')::numeric, 0) >= $1
+         ${directionRowsWhere}
+         ${
+           statusFilter === "all"
+             ? ""
+             : statusFilter === "resolved"
+               ? "AND resolved.resolved_at IS NOT NULL"
+               : "AND resolved.resolved_at IS NULL"
+         }
+       ORDER BY al.created_at DESC
+       LIMIT $${rowLimitIndex} OFFSET $${rowOffsetIndex}`,
+      rowParams
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+      directionCounts,
+    });
+  } catch (error) {
+    console.error("Failed to list deviation alerts", error);
+    return res.status(500).json({ error: "Failed to list deviation alerts" });
+  }
+});
+
+router.post("/deviation-alerts/:alertId/resolve", async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const alertId = String(req.params.alertId || "");
+    const note = String(req.body?.note || "").trim();
+    const resolverUserId = getAdminUserId(req);
+
+    if (!resolverUserId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    await client.query("BEGIN");
+
+    const alertResult = await client.query(
+      `SELECT id, project_id
+       FROM audit_logs
+       WHERE id = $1
+         AND action = 'ESTIMATE_MARKET_DEVIATION_ALERT'
+       LIMIT 1`,
+      [alertId]
+    );
+
+    if (!alertResult.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Deviation alert not found" });
+    }
+
+    const alreadyResolved = await client.query(
+      `SELECT id
+       FROM audit_logs
+       WHERE action = 'ESTIMATE_MARKET_DEVIATION_RESOLVED'
+         AND (metadata->>'alertId') = $1
+       LIMIT 1`,
+      [alertId]
+    );
+
+    if (alreadyResolved.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Deviation alert already resolved" });
+    }
+
+    await client.query(
+      `INSERT INTO audit_logs (project_id, user_id, action, metadata)
+       VALUES ($1, $2, 'ESTIMATE_MARKET_DEVIATION_RESOLVED', $3::jsonb)`,
+      [
+        alertResult.rows[0].project_id || null,
+        resolverUserId,
+        JSON.stringify({ alertId, note: note || null }),
+      ]
+    );
+
+    await client.query("COMMIT");
+    return res.json({ success: true, alertId, resolved: true });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Failed to resolve deviation alert", error);
+    return res.status(500).json({ error: "Failed to resolve deviation alert" });
+  } finally {
+    client.release();
   }
 });
 
@@ -700,6 +910,351 @@ router.delete("/boqs/:boqId", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/rate-templates", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM rate_templates WHERE is_active = true`);
+    const rows = await pool.query(
+      `SELECT rt.id, rt.code, rt.name, rt.category, rt.sub_category, rt.unit,
+              rt.overhead_percent, rt.profit_percent, rt.gst_percent,
+              rt.approval_status, rt.submitted_for_global, rt.is_system,
+              rt.created_at, rt.updated_at,
+              rt.owner_organization_id,
+              o.name AS organization_name,
+              u.email AS created_by_email,
+              COUNT(tli.id) AS line_item_count
+       FROM rate_templates rt
+       LEFT JOIN organizations o ON o.id = rt.owner_organization_id
+       LEFT JOIN users u ON u.id = rt.created_by
+       LEFT JOIN template_line_items tli ON tli.template_id = rt.id
+       WHERE rt.is_active = true
+       GROUP BY rt.id, o.name, u.email
+       ORDER BY rt.code ASC, rt.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    console.error("Failed to list rate templates", error);
+    return res.status(500).json({ error: "Failed to list rate templates" });
+  }
+});
+
+router.patch("/rate-templates/:templateId", async (req: Request, res: Response) => {
+  try {
+    const templateId = String(req.params.templateId || "").trim();
+    if (!templateId) {
+      return res.status(400).json({ error: "Template ID is required" });
+    }
+
+    const exists = await pool.query(
+      `SELECT id FROM rate_templates WHERE id = $1 AND is_active = true LIMIT 1`,
+      [templateId]
+    );
+
+    if (!exists.rows.length) {
+      return res.status(404).json({ error: "Rate template not found" });
+    }
+
+    const {
+      code,
+      name,
+      category,
+      sub_category,
+      unit,
+      overhead_percent,
+      profit_percent,
+      gst_percent,
+    } = req.body || {};
+
+    const updates: string[] = [];
+    const params: Array<string | number | null> = [];
+
+    if (code !== undefined) {
+      params.push(String(code).trim());
+      updates.push(`code = $${params.length}`);
+    }
+
+    if (name !== undefined) {
+      params.push(String(name).trim());
+      updates.push(`name = $${params.length}`);
+    }
+
+    if (category !== undefined) {
+      params.push(String(category).trim());
+      updates.push(`category = $${params.length}`);
+    }
+
+    if (sub_category !== undefined) {
+      params.push(String(sub_category).trim() || null);
+      updates.push(`sub_category = $${params.length}`);
+    }
+
+    if (unit !== undefined) {
+      params.push(String(unit).trim());
+      updates.push(`unit = $${params.length}`);
+    }
+
+    if (overhead_percent !== undefined) {
+      const parsed = Number(overhead_percent);
+      if (!Number.isFinite(parsed)) {
+        return res.status(400).json({ error: "Invalid overhead_percent" });
+      }
+      params.push(parsed);
+      updates.push(`overhead_percent = $${params.length}`);
+    }
+
+    if (profit_percent !== undefined) {
+      const parsed = Number(profit_percent);
+      if (!Number.isFinite(parsed)) {
+        return res.status(400).json({ error: "Invalid profit_percent" });
+      }
+      params.push(parsed);
+      updates.push(`profit_percent = $${params.length}`);
+    }
+
+    if (gst_percent !== undefined) {
+      const parsed = Number(gst_percent);
+      if (!Number.isFinite(parsed)) {
+        return res.status(400).json({ error: "Invalid gst_percent" });
+      }
+      params.push(parsed);
+      updates.push(`gst_percent = $${params.length}`);
+    }
+
+    if (!updates.length) {
+      return res.status(400).json({ error: "No fields provided" });
+    }
+
+    params.push(templateId);
+    await pool.query(
+      `UPDATE rate_templates
+       SET ${updates.join(", ")}, updated_at = NOW()
+       WHERE id = $${params.length}`,
+      params
+    );
+
+    await logAdminAction(req, "admin.rate-templates.update", {
+      templateId,
+      updatedFields: Object.keys(req.body || {}),
+    });
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to update rate template", error);
+    return res.status(500).json({ error: "Failed to update rate template" });
+  }
+});
+
+router.get("/template-approval-requests", async (_req: Request, res: Response) => {
+  try {
+    const rows = await pool.query(
+      `SELECT rt.id, rt.code, rt.name, rt.category, rt.sub_category, rt.unit,
+              rt.overhead_percent, rt.profit_percent, rt.gst_percent,
+              rt.approval_status, rt.submitted_for_global, rt.created_at,
+              rt.owner_organization_id,
+              o.name AS organization_name,
+              u.email AS created_by_email,
+              tli.id AS line_item_id,
+              tli.resource_id,
+              tli.coefficient,
+              tli.wastage_percent,
+              tli.remarks,
+              r.name AS resource_name,
+              r.unique_code AS resource_code
+       FROM rate_templates rt
+       LEFT JOIN organizations o ON o.id = rt.owner_organization_id
+       LEFT JOIN users u ON u.id = rt.created_by
+       LEFT JOIN LATERAL (
+         SELECT *
+         FROM template_line_items
+         WHERE template_id = rt.id
+         ORDER BY sort_order ASC, created_at ASC
+         LIMIT 1
+       ) tli ON true
+       LEFT JOIN resources r ON r.id = tli.resource_id
+       WHERE rt.is_active = true
+         AND rt.owner_organization_id IS NOT NULL
+         AND rt.submitted_for_global = true
+         AND rt.approval_status = 'pending'
+       ORDER BY rt.created_at DESC`
+    );
+
+    return res.json(rows.rows);
+  } catch (error) {
+    console.error("Failed to list template approval requests", error);
+    return res.status(500).json({ error: "Failed to list template approval requests" });
+  }
+});
+
+router.patch("/template-approval-requests/:templateId", async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const templateId = String(req.params.templateId || "");
+    const {
+      name,
+      category,
+      sub_category,
+      unit,
+      overhead_percent,
+      profit_percent,
+      gst_percent,
+      resource_id,
+      coefficient,
+      wastage_percent,
+      remarks,
+    } = req.body || {};
+
+    await client.query("BEGIN");
+
+    const check = await client.query(
+      `SELECT id FROM rate_templates
+       WHERE id = $1
+         AND is_active = true
+         AND owner_organization_id IS NOT NULL
+         AND submitted_for_global = true
+         AND approval_status = 'pending'
+       LIMIT 1`,
+      [templateId]
+    );
+
+    if (!check.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Pending template request not found" });
+    }
+
+    const updates: string[] = [];
+    const params: any[] = [];
+    if (name !== undefined) {
+      params.push(String(name).trim());
+      updates.push(`name = $${params.length}`);
+    }
+    if (category !== undefined) {
+      params.push(String(category).trim());
+      updates.push(`category = $${params.length}`);
+    }
+    if (sub_category !== undefined) {
+      params.push(String(sub_category).trim() || null);
+      updates.push(`sub_category = $${params.length}`);
+    }
+    if (unit !== undefined) {
+      params.push(String(unit).trim());
+      updates.push(`unit = $${params.length}`);
+    }
+    if (overhead_percent !== undefined) {
+      params.push(Number(overhead_percent));
+      updates.push(`overhead_percent = $${params.length}`);
+    }
+    if (profit_percent !== undefined) {
+      params.push(Number(profit_percent));
+      updates.push(`profit_percent = $${params.length}`);
+    }
+    if (gst_percent !== undefined) {
+      params.push(Number(gst_percent));
+      updates.push(`gst_percent = $${params.length}`);
+    }
+
+    if (updates.length) {
+      params.push(templateId);
+      await client.query(
+        `UPDATE rate_templates SET ${updates.join(", ")}, updated_at = NOW() WHERE id = $${params.length}`,
+        params
+      );
+    }
+
+    const lineItem = await client.query(
+      `SELECT id FROM template_line_items WHERE template_id = $1 ORDER BY sort_order ASC, created_at ASC LIMIT 1`,
+      [templateId]
+    );
+
+    if (lineItem.rows.length) {
+      const lineUpdates: string[] = [];
+      const lineParams: any[] = [];
+      if (resource_id !== undefined) {
+        lineParams.push(String(resource_id).trim() || null);
+        lineUpdates.push(`resource_id = $${lineParams.length}`);
+      }
+      if (coefficient !== undefined) {
+        lineParams.push(Number(coefficient));
+        lineUpdates.push(`coefficient = $${lineParams.length}`);
+      }
+      if (wastage_percent !== undefined) {
+        lineParams.push(Number(wastage_percent));
+        lineUpdates.push(`wastage_percent = $${lineParams.length}`);
+      }
+      if (remarks !== undefined) {
+        lineParams.push(String(remarks).trim() || null);
+        lineUpdates.push(`remarks = $${lineParams.length}`);
+      }
+
+      if (lineUpdates.length) {
+        lineParams.push(lineItem.rows[0].id);
+        await client.query(
+          `UPDATE template_line_items SET ${lineUpdates.join(", ")} WHERE id = $${lineParams.length}`,
+          lineParams
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+    await logAdminAction(req, "admin.template-approval-requests.edit", {
+      templateId,
+      updatedFields: Object.keys(req.body || {}),
+    });
+
+    return res.json({ success: true });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Failed to edit template approval request", error);
+    return res.status(500).json({ error: "Failed to edit template approval request" });
+  } finally {
+    client.release();
+  }
+});
+
+router.post("/template-approval-requests/:templateId/approve", async (req: Request, res: Response) => {
+  try {
+    const templateId = String(req.params.templateId || "");
+    const adminUserId = getAdminUserId(req);
+
+    const result = await pool.query(
+      `UPDATE rate_templates
+       SET owner_organization_id = NULL,
+           approval_status = 'approved',
+           submitted_for_global = false,
+           approved_by = $2,
+           approved_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $1
+         AND is_active = true
+         AND owner_organization_id IS NOT NULL
+         AND approval_status = 'pending'
+       RETURNING id, code, name`,
+      [templateId, adminUserId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Pending template request not found" });
+    }
+
+    await logAdminAction(req, "admin.template-approval-requests.approve", {
+      templateId,
+      templateCode: result.rows[0].code,
+      templateName: result.rows[0].name,
+    });
+
+    return res.json({ success: true, template: result.rows[0] });
+  } catch (error) {
+    console.error("Failed to approve template request", error);
+    return res.status(500).json({ error: "Failed to approve template request" });
+  }
+});
+
 router.get("/estimation-projects", async (req: Request, res: Response) => {
   try {
     const { page, pageSize, offset } = parsePagination(req);
@@ -744,11 +1299,12 @@ router.patch("/estimation-projects/:projectId", async (req: Request, res: Respon
       updates.push(`description = $${params.length}`);
     }
     if (status !== undefined) {
-      const allowed = ["draft", "in_progress", "completed", "submitted", "estimated"];
+      const allowed = ["draft", "in_progress", "WIP", "completed", "submitted", "estimated"];
+      const normalizedStatus = String(status) === "WIP" ? "in_progress" : String(status);
       if (!allowed.includes(String(status))) {
         return res.status(400).json({ error: `Invalid status. Allowed: ${allowed.join(", ")}` });
       }
-      params.push(String(status));
+      params.push(normalizedStatus);
       updates.push(`status = $${params.length}`);
     }
     if (terrain !== undefined) {
@@ -1036,7 +1592,7 @@ router.get("/prices/records", async (req: Request, res: Response) => {
 
     const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM price_records`);
     const rows = await pool.query(
-      `SELECT pr.id, pr.material_id, pr.district_id, pr.price, pr.source, pr.scraped_at, pr.flagged, pr.created_at,
+      `SELECT pr.id, pr.material_id, pr.district_id, pr.price, pr.brand_name, pr.source, pr.scraped_at, pr.flagged, pr.created_at,
               m.name AS material_name, m.unit AS material_unit,
               d.name AS district_name
        FROM price_records pr
@@ -1076,19 +1632,20 @@ router.get("/prices/reference", async (_req: Request, res: Response) => {
 
 router.post("/prices/records", async (req: Request, res: Response) => {
   try {
-    const { materialId, districtId, price, source, scrapedAt, flagged } = req.body || {};
+    const { materialId, districtId, price, brandName, source, scrapedAt, flagged } = req.body || {};
     if (!materialId || !districtId || !price || !source) {
       return res.status(400).json({ error: "materialId, districtId, price and source are required" });
     }
 
     const result = await pool.query(
-      `INSERT INTO price_records (material_id, district_id, price, source, scraped_at, flagged)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, material_id, district_id, price, source, scraped_at, flagged, created_at`,
+      `INSERT INTO price_records (material_id, district_id, price, brand_name, source, scraped_at, flagged)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, material_id, district_id, price, brand_name, source, scraped_at, flagged, created_at`,
       [
         materialId,
         districtId,
         Number(price),
+        brandName ? String(brandName).trim() : null,
         String(source).trim(),
         scrapedAt || new Date().toISOString(),
         Boolean(flagged),
@@ -1111,10 +1668,10 @@ router.post("/prices/records", async (req: Request, res: Response) => {
 router.patch("/prices/records/:recordId", async (req: Request, res: Response) => {
   try {
     const recordId = String(req.params.recordId || "");
-    const { materialId, districtId, price, source, scrapedAt, flagged } = req.body || {};
+    const { materialId, districtId, price, brandName, source, scrapedAt, flagged } = req.body || {};
 
     const updates: string[] = [];
-    const params: Array<string | number | boolean> = [];
+    const params: Array<string | number | boolean | null> = [];
 
     if (materialId !== undefined) {
       params.push(String(materialId));
@@ -1129,6 +1686,11 @@ router.patch("/prices/records/:recordId", async (req: Request, res: Response) =>
     if (price !== undefined) {
       params.push(Number(price));
       updates.push(`price = $${params.length}`);
+    }
+
+    if (brandName !== undefined) {
+      params.push(brandName ? String(brandName).trim() : null);
+      updates.push(`brand_name = $${params.length}`);
     }
 
     if (source !== undefined) {
@@ -1156,7 +1718,7 @@ router.patch("/prices/records/:recordId", async (req: Request, res: Response) =>
       `UPDATE price_records
        SET ${updates.join(", ")}
        WHERE id = $${params.length}
-       RETURNING id, material_id, district_id, price, source, scraped_at, flagged, created_at`,
+       RETURNING id, material_id, district_id, price, brand_name, source, scraped_at, flagged, created_at`,
       params
     );
 

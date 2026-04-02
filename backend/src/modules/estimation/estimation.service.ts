@@ -39,13 +39,48 @@ export async function listResources(filters: {
   return rows;
 }
 
+async function getUserContext(userId?: string) {
+  if (!userId) {
+    return { role: "", organizationId: null as string | null };
+  }
+
+  const { rows } = await pool.query(
+    `SELECT role, organization_id FROM users WHERE id = $1 LIMIT 1`,
+    [userId]
+  );
+
+  return {
+    role: String(rows[0]?.role || "").toLowerCase(),
+    organizationId: (rows[0]?.organization_id as string | null) || null,
+  };
+}
+
 export async function listTemplates(filters: {
   category?: string;
   search?: string;
-}) {
-  let query = `SELECT id, code, name, category, sub_category, unit, overhead_percent, profit_percent, gst_percent, is_system FROM rate_templates WHERE is_active = true`;
+}, userId?: string) {
+  const user = await getUserContext(userId);
+  const isAdmin = user.role === "admin";
+  const canSeeOrgTemplates = user.role === "architect" && !!user.organizationId;
+
+  let query = `SELECT id, code, name, category, sub_category, unit, overhead_percent, profit_percent, gst_percent, is_system,
+      owner_organization_id, approval_status, submitted_for_global
+    FROM rate_templates
+    WHERE is_active = true`;
   const params: any[] = [];
   let idx = 1;
+
+  if (isAdmin) {
+    // Admin can see all templates, including pending items.
+  } else if (canSeeOrgTemplates) {
+    query += ` AND (
+      (owner_organization_id IS NULL AND approval_status = 'approved')
+      OR owner_organization_id = $${idx++}
+    )`;
+    params.push(user.organizationId);
+  } else {
+    query += ` AND owner_organization_id IS NULL AND approval_status = 'approved'`;
+  }
 
   if (filters.category) {
     query += ` AND category = $${idx++}`;
@@ -62,7 +97,36 @@ export async function listTemplates(filters: {
   return rows;
 }
 
-export async function getTemplateDetail(templateId: string) {
+export async function getTemplateDetail(templateId: string, userId?: string) {
+  const user = await getUserContext(userId);
+  const isAdmin = user.role === "admin";
+
+  const templateRes = await pool.query(
+    `SELECT id, owner_organization_id, approval_status, is_active
+     FROM rate_templates
+     WHERE id = $1
+     LIMIT 1`,
+    [templateId]
+  );
+
+  const templateRow = templateRes.rows[0];
+  if (!templateRow || !templateRow.is_active) {
+    return null;
+  }
+
+  if (!isAdmin) {
+    const ownerOrgId = templateRow.owner_organization_id as string | null;
+    const approvalStatus = String(templateRow.approval_status || "");
+
+    if (ownerOrgId) {
+      if (!(user.role === "architect" && user.organizationId && user.organizationId === ownerOrgId)) {
+        return null;
+      }
+    } else if (approvalStatus !== "approved") {
+      return null;
+    }
+  }
+
   return priceLookup.getTemplate(templateId);
 }
 
@@ -87,6 +151,186 @@ export async function createTemplate(data: {
   );
   priceLookup.invalidateCache();
   return rows[0];
+}
+
+export async function createCustomLineItemTemplateRequest(
+  userId: string,
+  data: {
+    code?: string;
+    name: string;
+    category: string;
+    sub_category?: string;
+    unit: string;
+    overhead_percent?: number;
+    profit_percent?: number;
+    gst_percent?: number;
+    resource_id: string;
+    coefficient: number;
+    wastage_percent?: number;
+    remarks?: string;
+  }
+) {
+  const user = await getUserContext(userId);
+  if (user.role !== "architect") {
+    throw new Error("Only architects can submit custom line item requests");
+  }
+
+  if (!user.organizationId) {
+    throw new Error("Architect must belong to an organization");
+  }
+
+  const code = String(data.code || `ORG-${Date.now().toString().slice(-8)}`).trim();
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const createdTemplate = await client.query(
+      `INSERT INTO rate_templates (
+        code, name, category, sub_category, unit,
+        overhead_percent, profit_percent, gst_percent,
+        is_system, created_by, owner_organization_id,
+        approval_status, submitted_for_global
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,$9,$10,'pending',true)
+      RETURNING *`,
+      [
+        code,
+        data.name,
+        data.category,
+        data.sub_category || null,
+        data.unit,
+        data.overhead_percent ?? 15,
+        data.profit_percent ?? 15,
+        data.gst_percent ?? 18,
+        userId,
+        user.organizationId,
+      ]
+    );
+
+    const template = createdTemplate.rows[0];
+    await client.query(
+      `INSERT INTO template_line_items (
+        template_id, resource_id, sub_template_id,
+        coefficient, wastage_percent, remarks, sort_order
+      )
+      VALUES ($1,$2,NULL,$3,$4,$5,1)`,
+      [
+        template.id,
+        data.resource_id,
+        data.coefficient,
+        data.wastage_percent ?? 0,
+        data.remarks || null,
+      ]
+    );
+
+    await client.query("COMMIT");
+    priceLookup.invalidateCache();
+    return template;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listPendingTemplateApprovals() {
+  const { rows } = await pool.query(
+    `SELECT rt.id, rt.code, rt.name, rt.category, rt.sub_category, rt.unit,
+            rt.overhead_percent, rt.profit_percent, rt.gst_percent,
+            rt.approval_status, rt.submitted_for_global, rt.created_at,
+            rt.owner_organization_id,
+            o.name AS organization_name,
+            u.email AS created_by_email,
+            tli.id AS line_item_id,
+            tli.resource_id,
+            tli.coefficient,
+            tli.wastage_percent,
+            tli.remarks,
+            r.name AS resource_name,
+            r.unique_code AS resource_code
+     FROM rate_templates rt
+     LEFT JOIN organizations o ON o.id = rt.owner_organization_id
+     LEFT JOIN users u ON u.id = rt.created_by
+     LEFT JOIN LATERAL (
+       SELECT *
+       FROM template_line_items
+       WHERE template_id = rt.id
+       ORDER BY sort_order ASC, created_at ASC
+       LIMIT 1
+     ) tli ON true
+     LEFT JOIN resources r ON r.id = tli.resource_id
+     WHERE rt.is_active = true
+       AND rt.owner_organization_id IS NOT NULL
+       AND rt.submitted_for_global = true
+       AND rt.approval_status = 'pending'
+     ORDER BY rt.created_at DESC`
+  );
+
+  return rows;
+}
+
+export async function adminEditPendingTemplate(
+  templateId: string,
+  payload: {
+    name?: string;
+    category?: string;
+    sub_category?: string;
+    unit?: string;
+    overhead_percent?: number;
+    profit_percent?: number;
+    gst_percent?: number;
+    resource_id?: string;
+    coefficient?: number;
+    wastage_percent?: number;
+    remarks?: string;
+  }
+) {
+  const updatedTemplate = await updateTemplate(templateId, payload);
+  if (!updatedTemplate) {
+    return null;
+  }
+
+  const firstLineItem = await pool.query(
+    `SELECT id FROM template_line_items WHERE template_id = $1 ORDER BY sort_order ASC, created_at ASC LIMIT 1`,
+    [templateId]
+  );
+
+  const lineItemId = firstLineItem.rows[0]?.id as string | undefined;
+  if (lineItemId) {
+    const lineUpdatePayload: Record<string, any> = {};
+    if (payload.resource_id !== undefined) lineUpdatePayload.resource_id = payload.resource_id;
+    if (payload.coefficient !== undefined) lineUpdatePayload.coefficient = payload.coefficient;
+    if (payload.wastage_percent !== undefined) lineUpdatePayload.wastage_percent = payload.wastage_percent;
+    if (payload.remarks !== undefined) lineUpdatePayload.remarks = payload.remarks;
+
+    if (Object.keys(lineUpdatePayload).length) {
+      await updateLineItem(lineItemId, lineUpdatePayload);
+    }
+  }
+
+  return getTemplateDetail(templateId);
+}
+
+export async function approvePendingTemplateForGlobal(templateId: string, adminUserId: string) {
+  const { rows } = await pool.query(
+    `UPDATE rate_templates
+     SET owner_organization_id = NULL,
+         approval_status = 'approved',
+         submitted_for_global = false,
+         approved_by = $2,
+         approved_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $1
+       AND is_active = true
+       AND approval_status = 'pending'
+     RETURNING *`,
+    [templateId, adminUserId]
+  );
+
+  priceLookup.invalidateCache();
+  return rows[0] || null;
 }
 
 export async function updateTemplate(templateId: string, data: {

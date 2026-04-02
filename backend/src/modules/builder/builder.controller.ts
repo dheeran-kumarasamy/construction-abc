@@ -114,7 +114,7 @@ export async function createOrUpdateEstimate(req: Request, res: Response) {
   try {
     const { projectId } = req.params;
     const projectIdStr = Array.isArray(projectId) ? projectId[0] : projectId;
-    const { pricedItems, marginConfig, notes } = req.body;
+    const { pricedItems, marginConfig, notes, basicMaterialCost } = req.body;
 
     const user = (req as any).user;
     const userId = user?.userId;
@@ -130,7 +130,8 @@ export async function createOrUpdateEstimate(req: Request, res: Response) {
       builderOrgId,
       pricedItems,
       marginConfig,
-      notes
+      notes,
+      basicMaterialCost
     );
 
     return res.json(result);

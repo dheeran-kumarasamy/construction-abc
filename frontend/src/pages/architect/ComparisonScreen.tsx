@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "../../services/api";
 import { pageStyles } from "../../layouts/pageStyles";
+import { formatINR } from "../../services/currency";
 
 interface ComparisonRow {
   builder_org_id: string;
@@ -112,7 +113,7 @@ export default function ComparisonScreen({ projectId }: { projectId: string }) {
                     <td style={pageStyles.td}>Rev {row.revision_number}</td>
                     <td style={pageStyles.td}>{row.margin_percent}%</td>
                     <td style={{ ...pageStyles.td, fontWeight: 500 }}>
-                      ₹ {row.grand_total.toLocaleString()}
+                      {formatINR(row.grand_total, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                     </td>
                     <td style={pageStyles.td}>
                       <button

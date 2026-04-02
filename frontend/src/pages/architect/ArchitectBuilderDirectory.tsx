@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { apiUrl } from "../../services/api";
+import { formatINR } from "../../services/currency";
 
 interface BuilderProfile {
   id: string;
@@ -147,7 +148,7 @@ function BuilderCard({ builder: b }: { builder: BuilderProfile }) {
           <span>Team size: <strong>{b.teamSize}</strong></span>
         )}
         {b.minProjectBudget != null && (
-          <span>Min budget: <strong>₹{Number(b.minProjectBudget).toLocaleString("en-IN")}</strong></span>
+          <span>Min budget: <strong>{formatINR(b.minProjectBudget, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</strong></span>
         )}
       </div>
 

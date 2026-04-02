@@ -40,7 +40,7 @@ export class ScraperManager {
     const map = new Map<string, ScrapedPrice>();
 
     for (const record of records) {
-      const key = `${record.materialId}:${record.districtId}`;
+      const key = `${record.materialId}:${record.districtId}:${(record.brandName || "").toLowerCase()}`;
       const existing = map.get(key);
 
       if (!existing) {
@@ -64,11 +64,13 @@ export class ScraperManager {
       `
         SELECT price
         FROM price_records
-        WHERE material_id = $1 AND district_id = $2
+        WHERE material_id = $1
+          AND district_id = $2
+          AND COALESCE(brand_name, '') = COALESCE($3, '')
         ORDER BY scraped_at DESC
         LIMIT 1
       `,
-      [record.materialId, record.districtId]
+      [record.materialId, record.districtId, record.brandName || null]
     );
 
     const previousPrice = latest.rows[0]?.price ? Number(latest.rows[0].price) : null;
@@ -111,14 +113,15 @@ export class ScraperManager {
           material_id,
           district_id,
           price,
+          brand_name,
           source,
           scraped_at,
           flagged,
           created_at
         )
-        VALUES ($1, $2, $3, $4, $5, false, now())
+        VALUES ($1, $2, $3, $4, $5, $6, false, now())
       `,
-      [record.materialId, record.districtId, record.price, record.source, record.scrapedAt]
+      [record.materialId, record.districtId, record.price, record.brandName || null, record.source, record.scrapedAt]
     );
 
     await processPriceAlerts(record.materialId, record.districtId, record.price);

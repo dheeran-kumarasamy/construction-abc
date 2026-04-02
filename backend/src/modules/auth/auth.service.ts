@@ -46,6 +46,8 @@ export async function registerUser(input: {
   phoneNumber?: string;
   dealerData?: {
     shopName: string;
+    productCategoryId?: string;
+    productCategoryIds?: string[];
     location?: string;
     contactNumber?: string;
     city?: string;
@@ -103,6 +105,19 @@ export async function registerUser(input: {
 
   if (role === "dealer" && !dealerData?.shopName) {
     throw new Error("shopName is required for dealer registration");
+  }
+
+  const dealerCategoryIds = Array.from(
+    new Set(
+      [
+        ...((dealerData?.productCategoryIds || []).map((id) => String(id || "").trim())),
+        String(dealerData?.productCategoryId || "").trim(),
+      ].filter(Boolean)
+    )
+  );
+
+  if (role === "dealer" && dealerCategoryIds.length === 0) {
+    throw new Error("At least one product category is required for dealer registration");
   }
 
   if (role !== "architect" && role !== "dealer" && role !== "builder") {
@@ -194,6 +209,15 @@ export async function registerUser(input: {
         throw new Error("User already exists with this email");
       }
 
+      const productCategoryId = dealerCategoryIds[0];
+      const categoryResult = await client.query(
+        `SELECT id FROM material_categories WHERE id = ANY($1::uuid[])`,
+        [dealerCategoryIds]
+      );
+      if (categoryResult.rows.length !== dealerCategoryIds.length) {
+        throw new Error("One or more productCategoryIds are invalid for dealer registration");
+      }
+
       userRes = await client.query(
         `INSERT INTO users (email, password_hash, role)
          VALUES ($1, $2, 'dealer')
@@ -205,8 +229,8 @@ export async function registerUser(input: {
 
       // Create dealer profile
       await client.query(
-        `INSERT INTO dealers (user_id, shop_name, email, location, contact_number, city, state)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        `INSERT INTO dealers (user_id, shop_name, email, location, contact_number, city, state, product_category_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           userId,
           dealerData!.shopName,
@@ -215,8 +239,21 @@ export async function registerUser(input: {
           dealerData?.contactNumber || null,
           dealerData?.city || null,
           dealerData?.state || null,
+          productCategoryId,
         ]
       );
+
+      if (dealerCategoryIds.length > 0) {
+        await client.query(
+          `INSERT INTO dealer_product_categories (dealer_id, category_id)
+           SELECT d.id, cat_id
+           FROM dealers d
+           CROSS JOIN UNNEST($2::uuid[]) AS cat_id
+           WHERE d.user_id = $1
+           ON CONFLICT (dealer_id, category_id) DO NOTHING`,
+          [userId, dealerCategoryIds]
+        );
+      }
     }
 
     await client.query("COMMIT");
