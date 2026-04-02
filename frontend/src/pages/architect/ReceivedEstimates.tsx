@@ -3,6 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import { apiUrl } from "../../services/api";
+import { formatINR } from "../../services/currency";
+import { formatDate, formatTime } from "../../services/dateTime";
 
 interface Estimate {
   estimate_id: string;
@@ -10,6 +12,7 @@ interface Estimate {
   revision_number?: number | null;
   revision_count?: number;
   builder_name: string;
+  basic_material_cost?: number | null;
   grand_total: number | null;
   submitted_at: string;
   pricing_snapshot?: any;
@@ -197,6 +200,19 @@ export default function ReceivedEstimates() {
     return Number(estimate.grand_total ?? 0);
   }
 
+  function renderDateTime(value?: string | null) {
+    if (!value) return "-";
+    const datePart = formatDate(value);
+    const timePart = formatTime(value);
+    if (datePart === "-" || timePart === "-") return "-";
+    return (
+      <span>
+        <span style={pageStyles.dateLine}>{datePart}</span>
+        <span style={pageStyles.timeLine}>{timePart}</span>
+      </span>
+    );
+  }
+
   const lowest =
     estimates.length > 0
       ? Math.min(...estimates.map((e) => getGrandTotal(e)))
@@ -293,6 +309,7 @@ export default function ReceivedEstimates() {
                 <tr>
                   <th style={pageStyles.th}>Compare</th>
                   <th style={pageStyles.th}>Builder</th>
+                  <th className="amount-header" style={pageStyles.th}>Basic Material Cost</th>
                   <th className="amount-header" style={pageStyles.th}>Grand Total</th>
                   <th style={pageStyles.th}>Status</th>
                   <th style={pageStyles.th}>Submitted At</th>
@@ -314,6 +331,12 @@ export default function ReceivedEstimates() {
                     </td>
                     <td style={pageStyles.td}>{e.builder_name}</td>
 
+                    <td className="amount-cell" style={pageStyles.td}>
+                      {e.basic_material_cost != null
+                        ? formatINR(e.basic_material_cost, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                        : "-"}
+                    </td>
+
                     <td
                       className="amount-cell"
                       style={{
@@ -322,14 +345,14 @@ export default function ReceivedEstimates() {
                         color: getGrandTotal(e) === lowest ? "#16A34A" : "inherit",
                       }}
                     >
-                      ₹{getGrandTotal(e).toLocaleString()}
+                      {formatINR(getGrandTotal(e), { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                     </td>
 
                     <td style={pageStyles.td}>{formatReviewStatus(e.latest_review_status)}</td>
 
-                    <td style={pageStyles.td}>{new Date(e.submitted_at).toLocaleString()}</td>
+                    <td style={{ ...pageStyles.td, ...pageStyles.tdDateTime }}>{renderDateTime(e.submitted_at)}</td>
 
-                    <td style={pageStyles.td}>
+                    <td style={{ ...pageStyles.td, ...pageStyles.tdCenter }}>
                       <button
                         style={pageStyles.primaryBtn}
                         onClick={() => toggleEstimateReview(e)}
@@ -369,8 +392,8 @@ export default function ReceivedEstimates() {
                       {selectedComparisonEstimates.map((estimate, idx) => (
                         <tr key={estimate.estimate_id} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
                           <td style={pageStyles.td}>{estimate.builder_name}</td>
-                          <td className="amount-cell" style={pageStyles.td}>₹{getGrandTotal(estimate).toLocaleString()}</td>
-                          <td style={pageStyles.td}>{new Date(estimate.submitted_at).toLocaleString()}</td>
+                          <td className="amount-cell" style={pageStyles.td}>{formatINR(getGrandTotal(estimate), { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                          <td style={{ ...pageStyles.td, ...pageStyles.tdDateTime }}>{renderDateTime(estimate.submitted_at)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -395,7 +418,7 @@ export default function ReceivedEstimates() {
                             const value = comparisonItemsByName[itemName]?.[header];
                             return (
                               <td key={`${itemName}-${header}`} className="amount-cell" style={pageStyles.td}>
-                                {value != null ? `₹${Number(value).toLocaleString()}` : "-"}
+                                {value != null ? formatINR(value, { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "-"}
                               </td>
                             );
                           })}
@@ -431,12 +454,16 @@ export default function ReceivedEstimates() {
             </p>
             <p>
               <strong>Submitted:</strong>{" "}
-              {selectedEstimate.submitted_at
-                ? new Date(selectedEstimate.submitted_at).toLocaleString()
-                : "-"}
+              {renderDateTime(selectedEstimate.submitted_at)}
             </p>
             <p>
-              <strong>Grand Total:</strong> ₹{getGrandTotal(selectedEstimate).toLocaleString()}
+              <strong>Grand Total:</strong> {formatINR(getGrandTotal(selectedEstimate), { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+            </p>
+            <p>
+              <strong>Basic Material Cost:</strong>{" "}
+              {selectedEstimate.basic_material_cost != null
+                ? formatINR(selectedEstimate.basic_material_cost, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                : "-"}
             </p>
             {selectedEstimate.notes && (
               <p>
@@ -506,8 +533,8 @@ export default function ReceivedEstimates() {
                         <td style={pageStyles.td}>{name}</td>
                         <td className="num-cell" style={pageStyles.td}>{qty}</td>
                         <td style={pageStyles.td}>{uom}</td>
-                        <td className="amount-cell" style={pageStyles.td}>₹{rate.toLocaleString()}</td>
-                        <td className="amount-cell" style={pageStyles.td}>₹{total.toLocaleString()}</td>
+                        <td className="amount-cell" style={pageStyles.td}>{formatINR(rate, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                        <td className="amount-cell" style={pageStyles.td}>{formatINR(total, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
                       </tr>
                     );
                   })}
@@ -535,8 +562,8 @@ export default function ReceivedEstimates() {
                       {(historyData.revisions || []).map((revision: any, idx: number) => (
                         <tr key={revision.revision_id} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
                           <td style={pageStyles.td}>Rev {revision.revision_number}</td>
-                          <td className="amount-cell" style={pageStyles.td}>₹{Number(revision.grand_total || 0).toLocaleString()}</td>
-                          <td style={pageStyles.td}>{revision.submitted_at ? new Date(revision.submitted_at).toLocaleString() : "-"}</td>
+                          <td className="amount-cell" style={pageStyles.td}>{formatINR(revision.grand_total || 0, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                          <td style={{ ...pageStyles.td, ...pageStyles.tdDateTime }}>{renderDateTime(revision.submitted_at)}</td>
                           <td style={pageStyles.td}>{revision.notes || "-"}</td>
                         </tr>
                       ))}
@@ -561,7 +588,7 @@ export default function ReceivedEstimates() {
                               <td style={pageStyles.td}>{formatReviewStatus(review.status)}</td>
                               <td style={pageStyles.td}>{review.comment || "-"}</td>
                               <td style={pageStyles.td}>{review.revision_id || "-"}</td>
-                              <td style={pageStyles.td}>{review.created_at ? new Date(review.created_at).toLocaleString() : "-"}</td>
+                              <td style={{ ...pageStyles.td, ...pageStyles.tdDateTime }}>{renderDateTime(review.created_at)}</td>
                             </tr>
                           ))}
                         </tbody>

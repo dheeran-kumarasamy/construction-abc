@@ -1,6 +1,8 @@
 import type { District, Material, PriceHistoryPoint, PriceRecord } from "./types";
 import BookmarkButton from "./BookmarkButton";
 import PriceHistoryChart from "./PriceHistoryChart";
+import { formatINR } from "../../services/currency";
+import { formatDate } from "../../services/dateTime";
 
 interface Props {
   district: District | null;
@@ -47,6 +49,7 @@ export default function DistrictPricePanel({
           <thead>
             <tr>
               <th>Material</th>
+              <th>Brand</th>
               <th>Unit</th>
               <th>Price</th>
               <th>Trend</th>
@@ -56,14 +59,15 @@ export default function DistrictPricePanel({
           </thead>
           <tbody>
             {prices.map((item) => (
-              <tr key={item.materialId}>
+              <tr key={item.materialPriceId || `${item.materialId}:${item.brandName || "generic"}`}>
                 <td>{item.materialName}</td>
+                <td>{item.brandName || "-"}</td>
                 <td>{item.unit}</td>
-                <td>{item.price ? `₹${item.price.toFixed(2)}` : "-"}</td>
+                <td>{item.price ? formatINR(item.price, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-"}</td>
                 <td>
                   {item.trend === "up" ? "🔺" : item.trend === "down" ? "🔻" : "⏺"} {item.percentChange}%
                 </td>
-                <td>{item.lastUpdated ? new Date(item.lastUpdated).toLocaleDateString() : "-"}</td>
+                <td>{item.lastUpdated ? formatDate(item.lastUpdated) : "-"}</td>
                 <td>
                   <button type="button" onClick={() => onHistoryClick(item.materialId)}>
                     📈 History

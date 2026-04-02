@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { apiUrl } from "../../services/api";
+import { formatDate } from "../../services/dateTime";
 
 interface ProjectDetails {
   id: string;
@@ -83,7 +84,7 @@ export default function ProjectDetailsPage() {
               </tr>
               <tr>
                 <th style={pageStyles.th}>Start Date</th>
-                <td style={pageStyles.td}>{project.tentative_start_date ? new Date(project.tentative_start_date).toLocaleDateString() : "-"}</td>
+                <td style={pageStyles.td}>{project.tentative_start_date ? formatDate(project.tentative_start_date) : "-"}</td>
               </tr>
               <tr>
                 <th style={pageStyles.th}>Duration (months)</th>
@@ -95,7 +96,7 @@ export default function ProjectDetailsPage() {
               </tr>
               <tr>
                 <th style={pageStyles.th}>Created At</th>
-                <td style={pageStyles.td}>{new Date(project.created_at).toLocaleDateString()}</td>
+                <td style={pageStyles.td}>{formatDate(project.created_at)}</td>
               </tr>
             </tbody>
           </table>

@@ -2,6 +2,7 @@ import React from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { AdminCard, AdminShell, AdminTable, StatusPill } from "./AdminShell";
 import { adminFetch, type PaginatedResponse } from "./adminApi";
+import { formatDateTime } from "../../services/dateTime";
 
 type ProjectRow = {
   id: string;
@@ -15,7 +16,7 @@ type ProjectRow = {
 };
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 export default function AdminProjectsPage() {

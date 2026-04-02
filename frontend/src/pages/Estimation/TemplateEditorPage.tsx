@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import * as api from "./estimation.api";
 import type { RateTemplate, Resource } from "./types";
+import { useAuth } from "../../auth/AuthContext";
 
 const CATEGORIES = [
   "Earthwork", "Concrete", "Brickwork", "Plastering", "Flooring",
@@ -10,8 +11,16 @@ const CATEGORIES = [
   "Plumbing", "Roofing", "Demolition", "Other",
 ];
 
+function categoryMatches(resourceCategory: string, selectedCategory: string) {
+  return resourceCategory.trim().toLowerCase() === selectedCategory.trim().toLowerCase();
+}
+
 export default function TemplateEditorPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+  const isCustomLineItemMode = searchParams.get("mode") === "custom-line-item";
+  const projectId = searchParams.get("projectId") || "";
   const [templates, setTemplates] = useState<RateTemplate[]>([]);
   const [selected, setSelected] = useState<RateTemplate | null>(null);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -34,6 +43,21 @@ export default function TemplateEditorPage() {
     resource_id: "", coefficient: 1, wastage_percent: 0, remarks: "",
   });
   const [resourceSearch, setResourceSearch] = useState("");
+  const [requestSaving, setRequestSaving] = useState(false);
+  const [customLineItemRequest, setCustomLineItemRequest] = useState({
+    code: "",
+    name: "",
+    category: "Concrete",
+    sub_category: "",
+    unit: "cum",
+    overhead_percent: 15,
+    profit_percent: 15,
+    gst_percent: 18,
+    resource_id: "",
+    coefficient: 1,
+    wastage_percent: 0,
+    remarks: "",
+  });
 
   const loadTemplates = useCallback(async () => {
     try {
@@ -53,6 +77,22 @@ export default function TemplateEditorPage() {
       setLoading(false);
     })();
   }, [loadTemplates]);
+
+  useEffect(() => {
+    if (!isCustomLineItemMode) return;
+
+    const matchingResources = resources.filter((resource) => categoryMatches(resource.category, customLineItemRequest.category));
+    const selectedResourceExists = matchingResources.some(
+      (resource) => resource.id === customLineItemRequest.resource_id
+    );
+
+    if (selectedResourceExists) return;
+
+    setCustomLineItemRequest((prev) => ({
+      ...prev,
+      resource_id: matchingResources[0]?.id || "",
+    }));
+  }, [customLineItemRequest.category, customLineItemRequest.resource_id, isCustomLineItemMode, resources]);
 
   useEffect(() => {
     if (!showCreate && !showAddLine) return;
@@ -157,15 +197,157 @@ export default function TemplateEditorPage() {
     }
   }
 
+  async function handleSubmitCustomLineItemRequest() {
+    if (!isCustomLineItemMode) return;
+    if (!customLineItemRequest.name.trim()) {
+      alert("Template name is required");
+      return;
+    }
+    if (!customLineItemRequest.unit.trim()) {
+      alert("Unit is required");
+      return;
+    }
+    if (!customLineItemRequest.resource_id) {
+      alert("Please select a resource");
+      return;
+    }
+
+    try {
+      setRequestSaving(true);
+      await api.createCustomLineItemTemplateRequest({
+        name: customLineItemRequest.name.trim(),
+        category: customLineItemRequest.category,
+        sub_category: customLineItemRequest.sub_category || undefined,
+        unit: customLineItemRequest.unit.trim(),
+        overhead_percent: Number(customLineItemRequest.overhead_percent || 0),
+        profit_percent: Number(customLineItemRequest.profit_percent || 0),
+        gst_percent: Number(customLineItemRequest.gst_percent || 0),
+        resource_id: customLineItemRequest.resource_id,
+        coefficient: Number(customLineItemRequest.coefficient || 0),
+        wastage_percent: Number(customLineItemRequest.wastage_percent || 0),
+        remarks: customLineItemRequest.remarks || undefined,
+      });
+
+      alert("Custom line item submitted successfully.");
+      if (projectId) {
+        navigate(`/architect/estimation/${projectId}`);
+      } else {
+        navigate("/architect");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to submit custom line item request");
+    } finally {
+      setRequestSaving(false);
+    }
+  }
+
   const filteredResources = resources.filter((r) => {
     if (!resourceSearch) return true;
     const q = resourceSearch.toLowerCase();
     return r.name.toLowerCase().includes(q) || r.unique_code.toLowerCase().includes(q);
   });
 
+  const customLineItemResources = resources.filter((resource) => categoryMatches(resource.category, customLineItemRequest.category));
+
   const fmt = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(n);
 
   if (loading) return <div style={pageStyles.page}><p>Loading templates...</p></div>;
+
+  if (isCustomLineItemMode) {
+    if (user?.role !== "architect") {
+      return (
+        <div style={pageStyles.page}>
+          <div style={pageStyles.card}>
+            <h2 style={pageStyles.title}>Custom Line Item Request</h2>
+            <p style={pageStyles.error}>Only architects can submit custom line item requests.</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={pageStyles.page}>
+        <div style={{ ...pageStyles.card, width: "min(920px, 100%)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            <div>
+              <h1 style={{ ...pageStyles.title, margin: 0 }}>Custom Line Item</h1>
+              <p style={{ ...pageStyles.subtitle, margin: "6px 0 0" }}>
+                Submit a custom template line item.
+              </p>
+            </div>
+            <button style={pageStyles.secondaryBtn} onClick={() => navigate(projectId ? `/architect/estimation/${projectId}` : "/architect")}>
+              Back
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            <div style={pageStyles.field}>
+              <label style={pageStyles.label}>Template Name *</label>
+              <input style={pageStyles.input} value={customLineItemRequest.name} onChange={(e) => setCustomLineItemRequest((prev) => ({ ...prev, name: e.target.value }))} />
+            </div>
+            <div style={pageStyles.field}>
+              <label style={pageStyles.label}>Category *</label>
+              <select style={pageStyles.select} value={customLineItemRequest.category} onChange={(e) => setCustomLineItemRequest((prev) => ({ ...prev, category: e.target.value }))}>
+                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div style={pageStyles.field}>
+              <label style={pageStyles.label}>Sub Category</label>
+              <input style={pageStyles.input} value={customLineItemRequest.sub_category} onChange={(e) => setCustomLineItemRequest((prev) => ({ ...prev, sub_category: e.target.value }))} />
+            </div>
+            <div style={pageStyles.field}>
+              <label style={pageStyles.label}>Unit *</label>
+              <input style={pageStyles.input} value={customLineItemRequest.unit} onChange={(e) => setCustomLineItemRequest((prev) => ({ ...prev, unit: e.target.value }))} />
+            </div>
+            <div style={pageStyles.field}>
+              <label style={pageStyles.label}>Resource *</label>
+              <select style={pageStyles.select} value={customLineItemRequest.resource_id} onChange={(e) => setCustomLineItemRequest((prev) => ({ ...prev, resource_id: e.target.value }))}>
+                <option value="">{customLineItemResources.length ? "Select Resource" : "No resources available"}</option>
+                {customLineItemResources.map((r) => (
+                  <option key={r.id} value={r.id}>{r.unique_code} - {r.name}</option>
+                ))}
+              </select>
+            </div>
+            <div style={pageStyles.field}>
+              <label style={pageStyles.label}>Coefficient</label>
+              <input type="number" step="0.001" style={pageStyles.input} value={customLineItemRequest.coefficient} onChange={(e) => setCustomLineItemRequest((prev) => ({ ...prev, coefficient: Number(e.target.value) }))} />
+            </div>
+            <div style={pageStyles.field}>
+              <label style={pageStyles.label}>Wastage %</label>
+              <input type="number" step="0.1" style={pageStyles.input} value={customLineItemRequest.wastage_percent} onChange={(e) => setCustomLineItemRequest((prev) => ({ ...prev, wastage_percent: Number(e.target.value) }))} />
+            </div>
+            <div style={pageStyles.field}>
+              <label style={pageStyles.label}>Overhead %</label>
+              <input type="number" style={pageStyles.input} value={customLineItemRequest.overhead_percent} onChange={(e) => setCustomLineItemRequest((prev) => ({ ...prev, overhead_percent: Number(e.target.value) }))} />
+            </div>
+            <div style={pageStyles.field}>
+              <label style={pageStyles.label}>Profit %</label>
+              <input type="number" style={pageStyles.input} value={customLineItemRequest.profit_percent} onChange={(e) => setCustomLineItemRequest((prev) => ({ ...prev, profit_percent: Number(e.target.value) }))} />
+            </div>
+            <div style={pageStyles.field}>
+              <label style={pageStyles.label}>GST %</label>
+              <input type="number" style={pageStyles.input} value={customLineItemRequest.gst_percent} onChange={(e) => setCustomLineItemRequest((prev) => ({ ...prev, gst_percent: Number(e.target.value) }))} />
+            </div>
+            <div style={{ ...pageStyles.field, gridColumn: "1 / -1" }}>
+              <label style={pageStyles.label}>Remarks</label>
+              <input style={pageStyles.input} value={customLineItemRequest.remarks} onChange={(e) => setCustomLineItemRequest((prev) => ({ ...prev, remarks: e.target.value }))} />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+            <button style={pageStyles.secondaryBtn} onClick={() => navigate(projectId ? `/architect/estimation/${projectId}` : "/architect")}>Cancel</button>
+            <button
+              style={pageStyles.primaryBtn}
+              onClick={handleSubmitCustomLineItemRequest}
+              disabled={requestSaving || !customLineItemRequest.name.trim() || !customLineItemRequest.unit.trim() || !customLineItemRequest.resource_id}
+            >
+              {requestSaving ? "Submitting..." : "Submit"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={pageStyles.page}>

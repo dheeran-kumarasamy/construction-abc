@@ -87,7 +87,7 @@ export interface BOQProject {
   district_id?: string;
   location_zone_id?: string;
   description?: string;
-  status: "draft" | "in_progress" | "completed" | "submitted";
+  status: "draft" | "in_progress" | "WIP" | "completed" | "submitted";
   global_overhead_percent?: number;
   global_profit_percent?: number;
   global_gst_percent?: number;

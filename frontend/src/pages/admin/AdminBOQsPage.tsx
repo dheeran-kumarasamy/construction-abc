@@ -2,6 +2,7 @@ import React from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { AdminCard, AdminShell, AdminTable, StatusPill } from "./AdminShell";
 import { adminFetch, type PaginatedResponse } from "./adminApi";
+import { formatDateTime } from "../../services/dateTime";
 
 type BOQRow = {
   id: string;
@@ -17,7 +18,7 @@ type BOQRow = {
 };
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 function formatSize(bytes: number | null) {

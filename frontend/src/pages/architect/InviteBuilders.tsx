@@ -25,10 +25,13 @@ export default function InviteBuilders() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const projectIdFromQuery = searchParams.get("projectId") || "";
+  const roleFromQuery = searchParams.get("role") || "";
   const isArchitectHead = user?.role === "architect" && user?.orgRole === "head";
 
   const [email, setEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"builder" | "architect">("builder");
+  const [inviteRole, setInviteRole] = useState<"builder" | "architect">(
+    isArchitectHead && roleFromQuery === "architect" ? "architect" : "builder"
+  );
   const [projectId, setProjectId] = useState<string>("");
   const [assignProject, setAssignProject] = useState<string>("");
 
@@ -41,6 +44,17 @@ export default function InviteBuilders() {
   const [loadingInvites, setLoadingInvites] = useState(false);
 
   const token = localStorage.getItem("token") || "";
+
+  useEffect(() => {
+    if (!isArchitectHead) return;
+    if (roleFromQuery === "architect") {
+      setInviteRole("architect");
+      return;
+    }
+    if (roleFromQuery === "builder") {
+      setInviteRole("builder");
+    }
+  }, [isArchitectHead, roleFromQuery]);
 
   useEffect(() => {
     if (!token) return;

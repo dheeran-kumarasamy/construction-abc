@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../auth/auth.middleware";
+import { authenticate, requireAdmin } from "../auth/auth.middleware";
 import {
   // SOR Reference
   getResources,
@@ -15,6 +15,10 @@ import {
   addLineItem,
   updateLineItem,
   deleteLineItem,
+  createCustomLineItemTemplateRequest,
+  listPendingTemplateApprovals,
+  adminEditPendingTemplate,
+  approvePendingTemplate,
   // Rate Computation
   computeRate,
   computeRateBatch,
@@ -50,8 +54,8 @@ const router = Router();
 
 // ── SOR Reference (public, cacheable) ──────────
 router.get("/sor/resources", getResources);
-router.get("/sor/templates", getTemplates);
-router.get("/sor/templates/:id", getTemplateById);
+router.get("/sor/templates", authenticate, getTemplates);
+router.get("/sor/templates/:id", authenticate, getTemplateById);
 router.get("/sor/location-zones", getLocationZones);
 router.get("/sor/conveyance-slabs", getConveyanceSlabs);
 router.get("/sor/plinth-area-rates", getPlinthAreaRates);
@@ -63,6 +67,10 @@ router.delete("/templates/:id", authenticate, deleteTemplate);
 router.post("/templates/:templateId/line-items", authenticate, addLineItem);
 router.put("/line-items/:id", authenticate, updateLineItem);
 router.delete("/line-items/:id", authenticate, deleteLineItem);
+router.post("/templates/custom-line-item-request", authenticate, createCustomLineItemTemplateRequest);
+router.get("/templates/pending-approvals", authenticate, requireAdmin, listPendingTemplateApprovals);
+router.patch("/templates/pending-approvals/:id", authenticate, requireAdmin, adminEditPendingTemplate);
+router.post("/templates/pending-approvals/:id/approve", authenticate, requireAdmin, approvePendingTemplate);
 
 // ── Rate Computation (authenticated) ───────────
 router.post("/compute/rate", authenticate, computeRate);

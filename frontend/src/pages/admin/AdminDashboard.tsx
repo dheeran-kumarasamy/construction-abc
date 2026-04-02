@@ -1,7 +1,9 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { adminFetch } from "./adminApi";
 import { AdminCard, AdminShell } from "./AdminShell";
+import { formatDateTime } from "../../services/dateTime";
 
 type DashboardResponse = {
   summary: {
@@ -12,6 +14,7 @@ type DashboardResponse = {
     boqUploads: number;
     dealers: number;
     activePriceAlerts: number;
+    marketDeviationAlerts: number;
   };
   recentActivity: Array<{
     id: string;
@@ -79,6 +82,7 @@ export default function AdminDashboard() {
         <StatCard label="BOQ Uploads" value={data?.summary.boqUploads || 0} />
         <StatCard label="Dealers" value={data?.summary.dealers || 0} />
         <StatCard label="Active Price Alerts" value={data?.summary.activePriceAlerts || 0} />
+        <StatCard label="Market Deviation Alerts" value={data?.summary.marketDeviationAlerts || 0} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 14 }}>
@@ -89,7 +93,7 @@ export default function AdminDashboard() {
               <div key={item.id} style={{ border: "1px solid #f1f5f9", borderRadius: 10, padding: "10px 12px", background: "#f8fafc" }}>
                 <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 13 }}>{item.action}</div>
                 <div style={{ color: "#334155", fontSize: 12, marginTop: 4 }}>
-                  by {item.user_email || "system"} · {new Date(item.created_at).toLocaleString()}
+                  by {item.user_email || "system"} · {formatDateTime(item.created_at)}
                 </div>
               </div>
             ))}
@@ -112,7 +116,7 @@ export default function AdminDashboard() {
               <span style={{ color: "#64748b" }}>Last Scraper Run</span>
               <strong style={{ color: "#0f172a", textAlign: "right" }}>
                 {data?.systemHealth.lastScraperRunAt
-                  ? new Date(data.systemHealth.lastScraperRunAt).toLocaleString()
+                  ? formatDateTime(data.systemHealth.lastScraperRunAt)
                   : "Never"}
               </strong>
             </div>
@@ -123,6 +127,21 @@ export default function AdminDashboard() {
           <h4 style={{ margin: "0 0 8px", color: "#0f172a" }}>Admin Modules</h4>
           <div style={{ color: "#334155", fontSize: 13, lineHeight: 1.5 }}>
             Users · Organizations · Projects · BOQs · Estimation Projects · Estimates · Invites · Dealers · Prices · Audit
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <Link
+              to="/admin/deviations"
+              style={{
+                ...pageStyles.primaryBtn,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                textDecoration: "none",
+              }}
+            >
+              Open Deviation Alerts
+            </Link>
           </div>
         </AdminCard>
       </div>

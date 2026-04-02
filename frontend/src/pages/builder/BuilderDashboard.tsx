@@ -20,33 +20,27 @@ export default function BuilderDashboard() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<BuilderProject[]>([]);
   const [submitted, setSubmitted] = useState<SubmittedEstimate[]>([]);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     loadPipeline();
   }, []);
 
   async function loadPipeline() {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem("token");
-      const requestOptions = token
-        ? ({ headers: { Authorization: `Bearer ${token}` } } as const)
-        : undefined;
+    const token = localStorage.getItem("token");
+    const requestOptions = token
+      ? ({ headers: { Authorization: `Bearer ${token}` } } as const)
+      : undefined;
 
-      const [projectsRes, submittedRes] = await Promise.all([
-        fetch(apiUrl("/api/builder/available-projects"), requestOptions),
-        fetch(apiUrl("/api/builder/submitted-estimates"), requestOptions),
-      ]);
+    const [projectsRes, submittedRes] = await Promise.all([
+      fetch(apiUrl("/api/builder/available-projects"), requestOptions),
+      fetch(apiUrl("/api/builder/submitted-estimates"), requestOptions),
+    ]);
 
-      const projectsData = projectsRes.ok ? await projectsRes.json() : [];
-      const submittedData = submittedRes.ok ? await submittedRes.json() : [];
+    const projectsData = projectsRes.ok ? await projectsRes.json() : [];
+    const submittedData = submittedRes.ok ? await submittedRes.json() : [];
 
-      setProjects(Array.isArray(projectsData) ? projectsData : []);
-      setSubmitted(Array.isArray(submittedData) ? submittedData : []);
-    } finally {
-      setLoading(false);
-    }
+    setProjects(Array.isArray(projectsData) ? projectsData : []);
+    setSubmitted(Array.isArray(submittedData) ? submittedData : []);
   }
 
   const submittedProjectIds = useMemo(
@@ -153,6 +147,13 @@ export default function BuilderDashboard() {
           <button
             type="button"
             style={pageStyles.primaryBtn}
+            onClick={() => navigate("/builder/profile")}
+          >
+            Manage Builder Profile
+          </button>
+          <button
+            type="button"
+            style={pageStyles.primaryBtn}
             onClick={() => navigate("/builder/prices")}
           >
             Open Material Prices
@@ -160,16 +161,9 @@ export default function BuilderDashboard() {
           <button
             type="button"
             style={pageStyles.secondaryBtn}
-            onClick={() => navigate("/builder/estimation")}
-          >
-            Rate Analysis & BOQ
-          </button>
-          <button
-            type="button"
-            style={pageStyles.secondaryBtn}
             onClick={() => navigate("/builder/base-pricing")}
           >
-            Manage Base Pricing
+            Manage Base Pricing Overrides
           </button>
           <button
             type="button"
@@ -184,14 +178,6 @@ export default function BuilderDashboard() {
             onClick={() => navigate("/builder/submit")}
           >
             View Submissions
-          </button>
-          <button
-            type="button"
-            style={pageStyles.secondaryBtn}
-            onClick={loadPipeline}
-            disabled={loading}
-          >
-            {loading ? "Refreshing..." : "Refresh Pipeline"}
           </button>
         </div>
 

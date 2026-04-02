@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { apiUrl } from "../../services/api";
+import { formatDateTime } from "../../services/dateTime";
 import { useAuth } from "../../auth/AuthContext";
 
 interface TeamApprovalLogEntry {
@@ -224,7 +225,7 @@ export default function AuditTrail() {
                   <td style={pageStyles.td}>{entry.estimate_id || "-"}</td>
                   <td style={pageStyles.td}>{entry.reviewer_email}</td>
                   <td style={pageStyles.td}>{entry.comment || "-"}</td>
-                  <td style={pageStyles.td}>{entry.approved_at ? new Date(entry.approved_at).toLocaleString() : "-"}</td>
+                  <td style={pageStyles.td}>{entry.approved_at ? formatDateTime(entry.approved_at) : "-"}</td>
                   <td style={pageStyles.td}>{entry.head_sms_sent ? "Sent" : entry.head_sms_reason || "Pending"}</td>
                 </tr>
               ))}

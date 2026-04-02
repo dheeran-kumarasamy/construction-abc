@@ -120,31 +120,35 @@ export async function getDistrictCategoryPrices(districtInput: string, categoryI
   const latestRows = await pool.query(
     `
       WITH latest AS (
-        SELECT DISTINCT ON (pr.material_id)
+        SELECT DISTINCT ON (pr.material_id, COALESCE(pr.brand_name, ''))
           pr.material_id,
           pr.price,
+          pr.brand_name,
           pr.source,
           pr.scraped_at
         FROM price_records pr
         WHERE pr.district_id = $1
-        ORDER BY pr.material_id, pr.scraped_at DESC
+        ORDER BY pr.material_id, COALESCE(pr.brand_name, ''), pr.scraped_at DESC
       ),
       baseline AS (
-        SELECT DISTINCT ON (pr.material_id)
+        SELECT DISTINCT ON (pr.material_id, COALESCE(pr.brand_name, ''))
           pr.material_id,
+          pr.brand_name,
           pr.price,
           pr.scraped_at
         FROM price_records pr
         JOIN latest l ON l.material_id = pr.material_id
+          AND COALESCE(l.brand_name, '') = COALESCE(pr.brand_name, '')
         WHERE pr.district_id = $1
           AND pr.scraped_at <= l.scraped_at - interval '30 days'
-        ORDER BY pr.material_id, pr.scraped_at DESC
+        ORDER BY pr.material_id, COALESCE(pr.brand_name, ''), pr.scraped_at DESC
       )
       SELECT
         m.id AS material_id,
         m.name AS material_name,
         m.unit,
         l.price AS latest_price,
+        l.brand_name,
         l.source,
         l.scraped_at AS last_updated,
         b.price AS baseline_price
@@ -152,8 +156,9 @@ export async function getDistrictCategoryPrices(districtInput: string, categoryI
       JOIN material_categories c ON c.id = m.category_id
       LEFT JOIN latest l ON l.material_id = m.id
       LEFT JOIN baseline b ON b.material_id = m.id
+        AND COALESCE(b.brand_name, '') = COALESCE(l.brand_name, '')
       WHERE c.id = $2
-      ORDER BY m.sort_order ASC, m.name ASC
+      ORDER BY m.sort_order ASC, m.name ASC, COALESCE(l.brand_name, '') ASC
     `,
     [district.id, category.id]
   );
@@ -164,8 +169,10 @@ export async function getDistrictCategoryPrices(districtInput: string, categoryI
     const trendData = resolveTrend(latestPrice, baselinePrice);
 
     return {
+      materialPriceId: `${row.material_id}:${String(row.brand_name || "generic").toLowerCase()}`,
       materialId: row.material_id,
       materialName: row.material_name,
+      brandName: row.brand_name || null,
       unit: row.unit,
       price: latestPrice,
       trend: trendData.trend,

@@ -4,6 +4,7 @@ import { ConstructionIllustration } from "../../components/ConstructionIllustrat
 import TableWrapper from "../../components/TableWrapper";
 import { getBasePricing } from "../../services/basePricingStore";
 import { apiUrl } from "../../services/api";
+import { formatINR } from "../../services/currency";
 import { useLocation } from "react-router-dom";
 
 interface Project {
@@ -34,6 +35,7 @@ interface BasePriceItem {
 
 interface MarketRateItem {
   materialName: string;
+  brandName?: string | null;
   unit: string;
   price: number;
   source: string;
@@ -131,6 +133,7 @@ export default function ApplyBasePricing({
   const [expenseRecommendations, setExpenseRecommendations] = useState<ExpenseRecommendation[]>([]);
   const [optimizerEngineInfo, setOptimizerEngineInfo] = useState<string>("");
   const [optimizerBaseRatesByItem, setOptimizerBaseRatesByItem] = useState<Record<number, number>>({});
+  const [basicMaterialCost, setBasicMaterialCost] = useState<string>("");
   const [activeRecommendationId, setActiveRecommendationId] = useState<string | null>(null);
   const [isLandscapeWide, setIsLandscapeWide] = useState(false);
   const [isFloatingBreakdownCollapsed, setIsFloatingBreakdownCollapsed] = useState(false);
@@ -140,6 +143,9 @@ export default function ApplyBasePricing({
     () => projects.find((project) => project.id === selectedProjectId) || null,
     [projects, selectedProjectId]
   );
+  const pageHeading = selectedProject?.name
+    ? `${selectedProject.name} - BOQ Estimate`
+    : "Project Name - BOQ Estimate";
   const queryProjectId = useMemo(
     () => new URLSearchParams(location.search).get("projectId") || "",
     [location.search]
@@ -327,6 +333,7 @@ export default function ApplyBasePricing({
       setBoqItems([]);
       setPricedItems([]);
       setMarketRates([]);
+      setBasicMaterialCost("");
       return;
     }
 
@@ -451,6 +458,7 @@ export default function ApplyBasePricing({
             if (!Number.isFinite(price) || price <= 0) return;
             rows.push({
               materialName: String(entry?.materialName || "").trim(),
+              brandName: entry?.brandName ? String(entry.brandName).trim() : null,
               unit: String(entry?.unit || "").trim(),
               price,
               source: String(entry?.source || "scraped").trim(),
@@ -471,23 +479,25 @@ export default function ApplyBasePricing({
     marketSource: MarketRateItem[] = marketRates
   ) {
     const matched = items.map((item) => {
+      const pwdRate = Number(item.rate || 0);
       const manualMatch = findBestMatch(item.item, item.uom, pricingSource);
-      const marketMatch = manualMatch ? null : findBestMatch(item.item, item.uom, marketSource);
+      const marketMatch = pwdRate > 0 ? null : manualMatch ? null : findBestMatch(item.item, item.uom, marketSource);
 
       let rate = 0;
       let category = "Material";
       let rateSource = "PWD";
 
-      if (manualMatch) {
+      if (pwdRate > 0) {
+        rate = pwdRate;
+        category = item.category || "Material";
+        rateSource = "PWD";
+      } else if (manualMatch) {
         rate = Number((manualMatch as BasePriceItem).rate || 0);
         category = (manualMatch as BasePriceItem).category || "Material";
-        rateSource = "Manual";
+        rateSource = "Base Pricing Override";
       } else if (marketMatch) {
         rate = Number((marketMatch as MarketRateItem).price || 0);
         rateSource = resolveRateLabel((marketMatch as MarketRateItem).source || "scraped");
-      } else if (Number(item.rate || 0) > 0) {
-        rate = Number(item.rate || 0);
-        rateSource = "PWD";
       }
 
       const total = item.qty * rate;
@@ -510,6 +520,47 @@ export default function ApplyBasePricing({
     updated[index].total = updated[index].qty * newRate;
     updated[index].rateSource = "Manual Override";
     setPricedItems(updated);
+  }
+
+  function handleMarketRateChange(index: number, newRate: number) {
+    const safeRate = Number.isFinite(newRate) && newRate >= 0 ? newRate : 0;
+    const updatedMarketRates = [...marketRates];
+    const current = updatedMarketRates[index];
+
+    if (!current) {
+      return;
+    }
+
+    updatedMarketRates[index] = {
+      ...current,
+      price: safeRate,
+      source: "manual",
+    };
+
+    setMarketRates(updatedMarketRates);
+
+    // Keep BOQ rows synced only when they were previously using scraped market rates.
+    setPricedItems((prev) =>
+      prev.map((item) => {
+        const currentSource = normalizeText(item.rateSource || "");
+        if (!currentSource.includes("scraped")) {
+          return item;
+        }
+
+        const match = findBestMatch(item.item, item.uom, updatedMarketRates);
+        if (!match) {
+          return item;
+        }
+
+        const nextRate = Number((match as MarketRateItem).price || 0);
+        return {
+          ...item,
+          rate: nextRate,
+          total: Number((item.qty * nextRate).toFixed(2)),
+          rateSource: resolveRateLabel((match as MarketRateItem).source || "manual"),
+        };
+      })
+    );
   }
 
   async function handleGenerateSuggestions() {
@@ -865,6 +916,18 @@ export default function ApplyBasePricing({
       if (!confirm) return;
     }
 
+    const normalizedBasicMaterialCost = basicMaterialCost.trim() === ""
+      ? null
+      : Number(basicMaterialCost);
+
+    if (
+      normalizedBasicMaterialCost !== null &&
+      (!Number.isFinite(normalizedBasicMaterialCost) || normalizedBasicMaterialCost < 0)
+    ) {
+      alert("Basic material cost must be a non-negative number");
+      return;
+    }
+
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
@@ -880,6 +943,7 @@ export default function ApplyBasePricing({
             pricedItems,
             marginConfig,
             notes,
+            basicMaterialCost: normalizedBasicMaterialCost,
           }),
         }
       );
@@ -890,8 +954,18 @@ export default function ApplyBasePricing({
       }
 
       const result = await response.json();
+      const informationalAlerts = Array.isArray(result?.informationalAlerts)
+        ? result.informationalAlerts
+        : [];
+      const previousProjectIncreaseAlert = informationalAlerts.find(
+        (item: any) => item?.type === "previous_project_unit_price_increase"
+      );
+
+      const informationalSuffix = previousProjectIncreaseAlert
+        ? `\n\nInfo Alert (can be ignored): ${previousProjectIncreaseAlert.itemCount || 0} material rate(s) are > ${Number(previousProjectIncreaseAlert.thresholdPercent || 10).toFixed(2)}% higher than previous project (${previousProjectIncreaseAlert.previousProjectName || "previous project"}).`
+        : "";
       alert(
-        `Estimate submitted successfully!\nRevision: ${result.revisionNumber}\nGrand Total: ₹${result.grandTotal.toFixed(2)}`
+        `Estimate submitted successfully!\nRevision: ${result.revisionNumber}\nGrand Total: ${formatINR(result.grandTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${informationalSuffix}`
       );
 
       // Refresh projects to update status
@@ -909,6 +983,7 @@ export default function ApplyBasePricing({
       setExpenseRecommendations([]);
       setOptimizerEngineInfo("");
       setOptimizerBaseRatesByItem({});
+      setBasicMaterialCost("");
       setActiveRecommendationId(null);
       loadMarginConfig();
     } catch (err) {
@@ -1095,7 +1170,7 @@ export default function ApplyBasePricing({
         >
           <div style={{ color: "#0d9488", fontWeight: 600 }}>Grand Total</div>
           <div style={{ color: "#0f766e", fontWeight: 700, fontSize: "1.4rem" }}>
-            ₹{totals.grandTotal.toFixed(2)}
+            {formatINR(totals.grandTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
       ) : (
@@ -1111,47 +1186,47 @@ export default function ApplyBasePricing({
           }}
         >
         <div style={{ color: "#0d9488" }}>Material:</div>
-        <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.materialTotal.toFixed(2)}</div>
+        <div style={{ textAlign: "right", fontWeight: 500 }}>{formatINR(totals.materialTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
 
         <div style={{ color: "#0d9488" }}>Labor Rate:</div>
-        <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.laborTotal.toFixed(2)}</div>
+        <div style={{ textAlign: "right", fontWeight: 500 }}>{formatINR(totals.laborTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
 
         <div style={{ color: "#0d9488", display: "flex", alignItems: "center", flexWrap: "wrap" }}>
           Labor Margin ({marginConfig.laborUplift}%)
           {renderInlineAdjuster("laborUplift", "laborUplift", marginConfig.laborUplift)}
         </div>
-        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>₹{laborMarginAmount.toFixed(2)}</div>
+        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>{formatINR(laborMarginAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
 
         <div style={{ color: "#0d9488" }}>Machinery Rate:</div>
-        <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.machineryTotal.toFixed(2)}</div>
+        <div style={{ textAlign: "right", fontWeight: 500 }}>{formatINR(totals.machineryTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
 
         <div style={{ color: "#0d9488", display: "flex", alignItems: "center", flexWrap: "wrap" }}>
           Machinery Margin ({marginConfig.machineryUplift}%)
           {renderInlineAdjuster("machineryUplift", "machineryUplift", marginConfig.machineryUplift)}
         </div>
-        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>₹{machineryMarginAmount.toFixed(2)}</div>
+        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>{formatINR(machineryMarginAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
 
         <div style={{ color: "#0d9488" }}>Other:</div>
-        <div style={{ textAlign: "right", fontWeight: 500 }}>₹{totals.otherTotal.toFixed(2)}</div>
+        <div style={{ textAlign: "right", fontWeight: 500 }}>{formatINR(totals.otherTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
 
         <div style={{ borderTop: "2px solid #99f6e4", paddingTop: "0.75rem", marginTop: "0.5rem", color: "#0f766e", fontWeight: 600 }}>
           Subtotal (with labor/machinery adjustments):
         </div>
         <div style={{ borderTop: "2px solid #99f6e4", paddingTop: "0.75rem", marginTop: "0.5rem", textAlign: "right", fontWeight: 700, fontSize: "1.1rem", color: "#0f766e" }}>
-          ₹{totals.subtotalWithUplifts.toFixed(2)}
+          {formatINR(totals.subtotalWithUplifts, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
 
         <div style={{ color: "#0d9488", display: "flex", alignItems: "center", flexWrap: "wrap" }}>
           Project Overall Margin ({marginConfig.overallMargin}%)
           {renderInlineAdjuster("overallMargin", "overallMargin", marginConfig.overallMargin)}
         </div>
-        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>₹{totals.marginAmount.toFixed(2)}</div>
+        <div style={{ textAlign: "right", fontWeight: 600, color: "#0f766e" }}>{formatINR(totals.marginAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
 
         <div style={{ borderTop: "3px solid #5eead4", paddingTop: "0.75rem", marginTop: "0.5rem", color: "#0f766e", fontWeight: 700, fontSize: "1.15rem", display: "flex", alignItems: "center", flexWrap: "wrap" }}>
           Grand Total:
         </div>
         <div style={{ borderTop: "3px solid #5eead4", paddingTop: "0.75rem", marginTop: "0.5rem", textAlign: "right", fontWeight: 700, fontSize: "1.5rem", color: "#0f766e" }}>
-          ₹{totals.grandTotal.toFixed(2)}
+          {formatINR(totals.grandTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
         </div>
         </>
@@ -1174,14 +1249,14 @@ export default function ApplyBasePricing({
               marginBottom: "2rem",
             }}
           >
-            <h2 style={pageStyles.title}>Apply Base Pricing to Project</h2>
+            <h2 style={pageStyles.title}>{pageHeading}</h2>
             <div style={{ width: "120px", opacity: 0.7 }}>
               <ConstructionIllustration type="blueprint" />
             </div>
           </div>
         ) : (
           <div style={{ marginBottom: "1rem" }}>
-            <h3 style={{ ...pageStyles.title, fontSize: "clamp(18px, 3vw, 24px)" }}>Apply Pricing & Review</h3>
+            <h3 style={{ ...pageStyles.title, fontSize: "clamp(18px, 3vw, 24px)" }}>{pageHeading}</h3>
             {selectedProject ? (
               <p style={pageStyles.subtitle}>
                 Selected project: {selectedProject.name} ({selectedProject.site_address || "No location"})
@@ -1325,21 +1400,21 @@ export default function ApplyBasePricing({
 
               {targetGap !== null && (
                 <p style={{ marginTop: "0.75rem", marginBottom: 0, color: "#0f766e", fontWeight: 500 }}>
-                  Current vs Target Gap: ₹{targetGap.toFixed(2)}
+                  Current vs Target Gap: {formatINR(targetGap, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
               )}
 
               {targetGap !== null && (
                 <p style={{ marginTop: "0.5rem", marginBottom: 0, color: targetGap <= 0 ? "#15803d" : "#1e293b", fontWeight: 600 }}>
                   {targetGap <= 0
-                    ? `Target achieved. Current estimate is ₹${Math.abs(targetGap).toFixed(2)} below target.`
-                    : `Need ₹${targetGap.toFixed(2)} more reduction to reach target.`}
+                    ? `Target achieved. Current estimate is ${formatINR(Math.abs(targetGap), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} below target.`
+                    : `Need ${formatINR(targetGap, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} more reduction to reach target.`}
                 </p>
               )}
 
               {acceptedCount > 0 && (
                 <p style={{ marginTop: "0.5rem", marginBottom: 0, color: "#334155" }}>
-                  Accepted suggestions: {acceptedCount} • Net grand-total impact: ₹{acceptedImpact.toFixed(2)}
+                  Accepted suggestions: {acceptedCount} • Net grand-total impact: {formatINR(acceptedImpact, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
               )}
 
@@ -1395,12 +1470,12 @@ export default function ApplyBasePricing({
                       </div>
                       <div style={{ border: "1px solid #ccfbf1", borderRadius: "8px", padding: "0.6rem", backgroundColor: "#f0fdfa" }}>
                         <div style={{ color: "#0f766e", fontSize: "0.82rem" }}>Net accepted impact</div>
-                        <div style={{ color: "#0f172a", fontWeight: 700, fontSize: "1.05rem" }}>₹{acceptedImpact.toFixed(2)}</div>
+                        <div style={{ color: "#0f172a", fontWeight: 700, fontSize: "1.05rem" }}>{formatINR(acceptedImpact, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                       </div>
                       <div style={{ border: "1px solid #ccfbf1", borderRadius: "8px", padding: "0.6rem", backgroundColor: "#f0fdfa" }}>
                         <div style={{ color: "#0f766e", fontSize: "0.82rem" }}>Remaining gap</div>
                         <div style={{ color: targetGap !== null && targetGap <= 0 ? "#15803d" : "#0f172a", fontWeight: 700, fontSize: "1.05rem" }}>
-                          {targetGap === null ? "—" : `₹${targetGap.toFixed(2)}`}
+                          {targetGap === null ? "—" : formatINR(targetGap, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                       </div>
                     </div>
@@ -1457,7 +1532,7 @@ export default function ApplyBasePricing({
                             <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", flexWrap: "wrap" }}>
                               <strong style={{ color: "#1e1b4b" }}>{headLabel}</strong>
                               <span style={{ color: "#4338ca", fontWeight: 700 }}>
-                                Suggested: ₹{Number(recommendation.suggestedAmount || 0).toFixed(2)}
+                                Suggested: {formatINR(Number(recommendation.suggestedAmount || 0), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             </div>
 
@@ -1472,21 +1547,21 @@ export default function ApplyBasePricing({
                                 disabled={isUiLocked}
                                 style={pageStyles.primaryBtn}
                               >
-                                Increase (₹{increaseAmount.toFixed(2)})
+                                Increase ({formatINR(increaseAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                               </button>
                               <button
                                 onClick={() => applyExpenseRecommendation(recommendation.head, "decrease")}
                                 disabled={isUiLocked}
                                 style={pageStyles.secondaryBtn}
                               >
-                                Decrease (₹{decreaseAmount.toFixed(2)})
+                                Decrease ({formatINR(decreaseAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                               </button>
                               <button
                                 onClick={() => applyExpenseRecommendation(recommendation.head, "base")}
                                 disabled={isUiLocked}
                                 style={pageStyles.secondaryBtn}
                               >
-                                0% Base (₹{Number(recommendation.suggestedAmount || 0).toFixed(2)})
+                                0% Base ({formatINR(Number(recommendation.suggestedAmount || 0), { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                               </button>
                               <button
                                 onClick={() => ignoreExpenseRecommendation(recommendation.head)}
@@ -1554,7 +1629,7 @@ export default function ApplyBasePricing({
                                 />
                               </td>
                               <td style={pageStyles.td}>{item.rateSource || "PWD"}</td>
-                              <td className="amount-cell" style={pageStyles.td}>{item.total.toFixed(2)}</td>
+                              <td className="amount-cell" style={pageStyles.td}>{formatINR(item.total, { minimumFractionDigits: 2, maximumFractionDigits: 2, withSymbol: false })}</td>
                             </tr>
 
                             {llmSuggestion && (
@@ -1573,7 +1648,7 @@ export default function ApplyBasePricing({
                                     <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
                                       <strong style={{ color: "#0f766e" }}>LLM Recommendation</strong>
                                       <span style={{ color: "#334155", fontWeight: 600 }}>
-                                        Rate: ₹{llmSuggestion.oldRate.toFixed(2)} → ₹{llmSuggestion.newRate.toFixed(2)}
+                                        Rate: {formatINR(llmSuggestion.oldRate, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → {formatINR(llmSuggestion.newRate, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </span>
                                     </div>
 
@@ -1587,7 +1662,7 @@ export default function ApplyBasePricing({
 
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                                       <span style={{ color: "#0f766e", fontWeight: 500 }}>
-                                        Total impact: ₹{llmSuggestion.totalDelta.toFixed(2)} • Confidence: {(llmSuggestion.confidence * 100).toFixed(0)}%
+                                        Total impact: {formatINR(llmSuggestion.totalDelta, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} • Confidence: {(llmSuggestion.confidence * 100).toFixed(0)}%
                                       </span>
 
                                       {llmSuggestion.blocked ? (
@@ -1625,6 +1700,110 @@ export default function ApplyBasePricing({
                     </tbody>
                   </table>
                 </TableWrapper>
+
+                <div style={{ marginTop: "1.5rem", border: "1px solid #ccfbf1", borderRadius: "10px", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      padding: "10px 12px",
+                      backgroundColor: "#f0fdfa",
+                      borderBottom: "1px solid #ccfbf1",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "0.75rem",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <strong style={{ color: "#0f172a" }}>Basic Material List (Editable)</strong>
+                    <span style={{ color: "#475569", fontSize: "0.85rem" }}>
+                      Update basic material rates before submitting your estimate.
+                    </span>
+                  </div>
+
+                  <div style={{ maxHeight: "300px", overflow: "auto" }}>
+                    <table style={{ ...pageStyles.table, margin: 0, border: "none" }}>
+                      <thead>
+                        <tr>
+                          <th style={pageStyles.th}>Material</th>
+                          <th style={pageStyles.th}>Brand</th>
+                          <th className="amount-header" style={pageStyles.th}>Rate (₹)</th>
+                          <th style={pageStyles.th}>UOM</th>
+                          <th style={pageStyles.th}>Source</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {marketRates.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} style={pageStyles.empty}>
+                              No market rates found for this project location.
+                            </td>
+                          </tr>
+                        ) : (
+                          marketRates.slice(0, 120).map((rate, idx) => (
+                            <tr
+                              key={`${normalizeText(rate.materialName)}|${normalizeText(rate.brandName || "")}|${normalizeText(rate.unit)}|${idx}`}
+                              style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}
+                            >
+                              <td style={pageStyles.td}>{rate.materialName || "-"}</td>
+                              <td style={pageStyles.td}>{rate.brandName || "-"}</td>
+                              <td className="amount-cell" style={pageStyles.td}>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={Number.isFinite(rate.price) ? rate.price : 0}
+                                  disabled={isUiLocked}
+                                  onChange={(e) => handleMarketRateChange(idx, Number(e.target.value))}
+                                  style={{
+                                    ...pageStyles.input,
+                                    width: "130px",
+                                    padding: "0.45rem",
+                                  }}
+                                />
+                              </td>
+                              <td style={pageStyles.td}>{rate.unit || "-"}</td>
+                              <td style={pageStyles.td}>{resolveRateLabel(rate.source || "manual")}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: "1.5rem" }}>
+                  <label
+                    style={{
+                      display: "block",
+                      marginBottom: "0.5rem",
+                      color: "#0f766e",
+                      fontWeight: 500,
+                    }}
+                  >
+                    Basic Material Cost (for architect visibility)
+                  </label>
+                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+                    <input
+                      type="number"
+                      min="0"
+                      value={basicMaterialCost}
+                      disabled={isUiLocked}
+                      onChange={(e) => setBasicMaterialCost(e.target.value)}
+                      placeholder={`Suggested from BOQ material total: ${formatINR(totals.materialTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      style={{ ...pageStyles.input, width: "320px" }}
+                    />
+                    <button
+                      type="button"
+                      disabled={isUiLocked}
+                      onClick={() => setBasicMaterialCost(String(Number(totals.materialTotal.toFixed(2))))}
+                      style={pageStyles.secondaryBtn}
+                    >
+                      Use BOQ Material Total
+                    </button>
+                  </div>
+                  <p style={{ margin: "0.5rem 0 0", color: "#475569", fontSize: "0.9rem" }}>
+                    Enter a basic material cost by referring architect pricing and current market rates from /prices.
+                  </p>
+                </div>
 
                 <div style={{ marginTop: "1.5rem" }}>
                   <label
@@ -1742,11 +1921,11 @@ export default function ApplyBasePricing({
                   <p style={{ margin: 0, color: "#334155" }}>{activeRecommendation.reason}</p>
 
                   <p style={{ margin: 0, color: "#0f766e", fontWeight: 600 }}>
-                    Rate: ₹{activeRecommendation.oldRate.toFixed(2)} → ₹{activeRecommendation.newRate.toFixed(2)}
+                    Rate: {formatINR(activeRecommendation.oldRate, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → {formatINR(activeRecommendation.newRate, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
 
                   <p style={{ margin: 0, color: "#475569", fontSize: "0.9rem" }}>
-                    Total impact: ₹{activeRecommendation.totalDelta.toFixed(2)} • Confidence: {(activeRecommendation.confidence * 100).toFixed(0)}%
+                    Total impact: {formatINR(activeRecommendation.totalDelta, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} • Confidence: {(activeRecommendation.confidence * 100).toFixed(0)}%
                   </p>
 
                   {activeRecommendation.qualityValidation && (
@@ -1799,7 +1978,7 @@ export default function ApplyBasePricing({
 
         {!selectedProjectId && !loading && (
           <p style={{ textAlign: "center", color: "#64748b", marginTop: "2rem" }}>
-            Please select a project to start applying base pricing.
+            Please select a project to start replacing BOQ rates with PWD rates.
           </p>
         )}
       </div>

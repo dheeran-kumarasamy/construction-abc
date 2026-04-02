@@ -2,6 +2,8 @@ import React from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { AdminCard, AdminShell, AdminTable, StatusPill } from "./AdminShell";
 import { adminFetch, type PaginatedResponse } from "./adminApi";
+import { formatINR } from "../../services/currency";
+import { formatDateTime } from "../../services/dateTime";
 
 type PriceRecord = {
   id: string;
@@ -34,7 +36,7 @@ type PriceReference = {
 };
 
 function formatDate(value: string | null) {
-  return value ? new Date(value).toLocaleString() : "—";
+  return value ? formatDateTime(value) : "—";
 }
 
 export default function AdminPricesPage() {
@@ -209,7 +211,7 @@ export default function AdminPricesPage() {
                     <tr key={record.id} style={index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
                       <td style={pageStyles.td}>{record.material_name} <span style={pageStyles.subtext}>/{record.material_unit}</span></td>
                       <td style={pageStyles.td}>{record.district_name}</td>
-                      <td style={pageStyles.td}>Rs. {Number(record.price).toFixed(2)}</td>
+                      <td style={pageStyles.td}>{formatINR(record.price, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td style={pageStyles.td}>{record.source}</td>
                       <td style={pageStyles.td}><StatusPill label={record.flagged ? "flagged" : "clean"} tone={record.flagged ? "warning" : "success"} /></td>
                       <td style={pageStyles.td}>{formatDate(record.scraped_at)}</td>
@@ -253,7 +255,7 @@ export default function AdminPricesPage() {
                       <td style={pageStyles.td}>{alert.material_name}</td>
                       <td style={pageStyles.td}>{alert.district_name}</td>
                       <td style={pageStyles.td}>{alert.condition}</td>
-                      <td style={pageStyles.td}>Rs. {Number(alert.threshold).toFixed(2)}</td>
+                      <td style={pageStyles.td}>{formatINR(alert.threshold, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td style={pageStyles.td}><StatusPill label={alert.is_active ? "active" : "inactive"} tone={alert.is_active ? "success" : "neutral"} /></td>
                       <td style={pageStyles.td}>{formatDate(alert.last_triggered_at)}</td>
                     </tr>

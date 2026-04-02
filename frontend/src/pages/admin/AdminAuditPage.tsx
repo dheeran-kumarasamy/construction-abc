@@ -2,6 +2,7 @@ import React from "react";
 import { pageStyles } from "../../layouts/pageStyles";
 import { AdminCard, AdminShell, AdminTable } from "./AdminShell";
 import { adminFetch, type PaginatedResponse } from "./adminApi";
+import { formatDateTime } from "../../services/dateTime";
 
 type AuditRow = {
   id: string;
@@ -12,7 +13,7 @@ type AuditRow = {
 };
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 export default function AdminAuditPage() {

@@ -61,7 +61,7 @@ async function getRequesterProfile(req: Request) {
 
 export async function register(req: Request, res: Response) {
   try {
-    const { email, password, role, organizationName, phoneNumber, dealerData } = req.body || {};
+    const { email, password, role, organizationName, phoneNumber, dealerData, builderData } = req.body || {};
 
     const result = await service.registerUser({
       email,
@@ -70,6 +70,7 @@ export async function register(req: Request, res: Response) {
       organizationName,
       phoneNumber,
       dealerData,
+      builderData,
     });
 
     return res.status(201).json(result);

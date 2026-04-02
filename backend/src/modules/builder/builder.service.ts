@@ -87,6 +87,37 @@ interface RevisionDiffSummary {
   }>;
 }
 
+interface MarketPriceBenchmark {
+  material_id: string;
+  material_name: string;
+  market_unit: string | null;
+  avg_market_price: number;
+}
+
+interface DeviationAlertItem {
+  boqItemId: number;
+  boqItemName: string;
+  boqItemUom: string;
+  matchedMaterialName: string;
+  matchedMaterialUom: string | null;
+  builderRate: number;
+  marketRate: number;
+  deviationPercent: number;
+  deviationPercentSigned: number;
+  deviationDirection: "above_market" | "below_market";
+  quantity: number;
+  estimatedExcess: number;
+}
+
+interface PreviousProjectRateIncreaseItem {
+  boqItemId: number;
+  boqItemName: string;
+  boqItemUom: string;
+  currentRate: number;
+  previousRate: number;
+  increasePercent: number;
+}
+
 function getConfiguredLlmModel() {
   const raw = String(process.env.LLM_MODEL || "").trim();
   if (!raw) {
@@ -113,6 +144,254 @@ function getConfiguredLlmApiKey() {
     process.env.LLM_API_KEY ||
     "";
   return String(raw).trim().replace(/^['"]+|['"]+$/g, "");
+}
+
+function normalizeComparableText(value: string | null | undefined) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveDeviationThresholdPercent() {
+  const raw = Number(process.env.BUILDER_MARKET_DEVIATION_THRESHOLD_PERCENT || 20);
+  if (!Number.isFinite(raw)) return 20;
+  return Math.max(0, raw);
+}
+
+function resolvePreviousProjectIncreaseThresholdPercent() {
+  const raw = Number(process.env.BUILDER_PREVIOUS_PROJECT_DEVIATION_THRESHOLD_PERCENT || 10);
+  if (!Number.isFinite(raw)) return 10;
+  return Math.max(0, raw);
+}
+
+function isMaterialCategory(category: string | undefined) {
+  const normalized = String(category || "material").toLowerCase();
+  if (normalized.includes("labor") || normalized.includes("labour")) return false;
+  if (normalized.includes("mach")) return false;
+  if (normalized.includes("other")) return false;
+  return true;
+}
+
+function findBestMarketBenchmark(
+  itemName: string,
+  itemUom: string,
+  benchmarks: MarketPriceBenchmark[]
+) {
+  const targetName = normalizeComparableText(itemName);
+  const targetUom = normalizeComparableText(itemUom);
+  if (!targetName) return null;
+
+  let match = benchmarks.find((entry) => {
+    const benchmarkName = normalizeComparableText(entry.material_name);
+    const benchmarkUom = normalizeComparableText(entry.market_unit || "");
+    return benchmarkName === targetName && (!targetUom || benchmarkUom === targetUom);
+  });
+
+  if (!match) {
+    match = benchmarks.find((entry) => normalizeComparableText(entry.material_name) === targetName);
+  }
+
+  if (!match) {
+    match = benchmarks.find((entry) => {
+      const benchmarkName = normalizeComparableText(entry.material_name);
+      return targetName.includes(benchmarkName) || benchmarkName.includes(targetName);
+    });
+  }
+
+  return match || null;
+}
+
+async function detectMarketDeviations(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  pricedItems: any[],
+  thresholdPercent: number
+): Promise<DeviationAlertItem[]> {
+  const benchmarkResult = await client.query(
+    `WITH latest AS (
+       SELECT DISTINCT ON (pr.material_id, pr.district_id)
+         pr.material_id,
+         pr.district_id,
+         pr.price,
+         pr.scraped_at
+       FROM price_records pr
+       WHERE pr.price > 0
+       ORDER BY pr.material_id, pr.district_id, pr.scraped_at DESC
+     )
+     SELECT
+       m.id AS material_id,
+       m.name AS material_name,
+       m.unit AS market_unit,
+       AVG(latest.price)::numeric(12,2) AS avg_market_price
+     FROM latest
+     JOIN materials m ON m.id = latest.material_id
+     GROUP BY m.id, m.name, m.unit`
+  );
+
+  const benchmarks: MarketPriceBenchmark[] = (benchmarkResult.rows || []).map((row: any) => ({
+    material_id: String(row.material_id || ""),
+    material_name: String(row.material_name || ""),
+    market_unit: row.market_unit || null,
+    avg_market_price: Number(row.avg_market_price || 0),
+  })).filter((row: MarketPriceBenchmark) => Number.isFinite(row.avg_market_price) && row.avg_market_price > 0);
+
+  if (!benchmarks.length) return [];
+
+  const deviations: DeviationAlertItem[] = [];
+  for (const item of pricedItems || []) {
+    if (!isMaterialCategory(item?.category)) continue;
+
+    const boqRate = Number(item?.rate || 0);
+    if (!Number.isFinite(boqRate) || boqRate <= 0) continue;
+
+    const boqName = String(item?.item || "").trim();
+    const boqUom = String(item?.uom || "").trim();
+    if (!boqName) continue;
+
+    const benchmark = findBestMarketBenchmark(boqName, boqUom, benchmarks);
+    if (!benchmark) continue;
+
+    const marketRate = Number(benchmark.avg_market_price || 0);
+    if (!Number.isFinite(marketRate) || marketRate <= 0) continue;
+
+    const deviationPercentSigned = Number((((boqRate - marketRate) / marketRate) * 100).toFixed(2));
+    const deviationPercent = Number(Math.abs(deviationPercentSigned).toFixed(2));
+    if (!Number.isFinite(deviationPercent) || deviationPercent < thresholdPercent) continue;
+
+    const qty = Number(item?.qty || 0);
+    const estimatedExcess = Number(((boqRate - marketRate) * (Number.isFinite(qty) ? qty : 0)).toFixed(2));
+    const deviationDirection: "above_market" | "below_market" =
+      deviationPercentSigned >= 0 ? "above_market" : "below_market";
+
+    deviations.push({
+      boqItemId: Number(item?.id || 0),
+      boqItemName: boqName,
+      boqItemUom: boqUom,
+      matchedMaterialName: benchmark.material_name,
+      matchedMaterialUom: benchmark.market_unit,
+      builderRate: boqRate,
+      marketRate,
+      deviationPercent,
+      deviationPercentSigned,
+      deviationDirection,
+      quantity: Number.isFinite(qty) ? qty : 0,
+      estimatedExcess,
+    });
+  }
+
+  return deviations.sort((a, b) => b.deviationPercent - a.deviationPercent);
+}
+
+function buildComparableRateIndex(items: any[]) {
+  const map = new Map<string, number>();
+  for (const item of items || []) {
+    if (!isMaterialCategory(item?.category)) continue;
+
+    const name = normalizeComparableText(item?.item || "");
+    const uom = normalizeComparableText(item?.uom || "");
+    const rate = Number(item?.rate || 0);
+    if (!name || !Number.isFinite(rate) || rate <= 0) continue;
+
+    if (uom) {
+      map.set(`${name}::${uom}`, rate);
+    }
+    if (!map.has(name)) {
+      map.set(name, rate);
+    }
+  }
+
+  return map;
+}
+
+async function detectPreviousProjectRateIncreases(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  builderOrgId: string,
+  currentProjectId: string,
+  pricedItems: any[],
+  thresholdPercent: number
+): Promise<{
+  previousProjectId: string;
+  previousProjectName: string;
+  items: PreviousProjectRateIncreaseItem[];
+}> {
+  const previousResult = await client.query(
+    `SELECT
+       e.project_id,
+       p.name AS project_name,
+       er.pricing_snapshot
+     FROM estimate_revisions er
+     JOIN estimates e ON e.id = er.estimate_id
+     JOIN projects p ON p.id = e.project_id
+     WHERE e.builder_org_id = $1
+       AND e.project_id <> $2
+       AND er.submitted_at IS NOT NULL
+       AND er.pricing_snapshot IS NOT NULL
+     ORDER BY er.submitted_at DESC
+     LIMIT 1`,
+    [builderOrgId, currentProjectId]
+  );
+
+  if (!previousResult.rows.length) {
+    return { previousProjectId: "", previousProjectName: "", items: [] };
+  }
+
+  const previousRow = previousResult.rows[0];
+  const previousSnapshot = Array.isArray(previousRow.pricing_snapshot)
+    ? previousRow.pricing_snapshot
+    : [];
+  if (!previousSnapshot.length) {
+    return {
+      previousProjectId: String(previousRow.project_id || ""),
+      previousProjectName: String(previousRow.project_name || ""),
+      items: [],
+    };
+  }
+
+  const previousRateIndex = buildComparableRateIndex(previousSnapshot);
+  if (!previousRateIndex.size) {
+    return {
+      previousProjectId: String(previousRow.project_id || ""),
+      previousProjectName: String(previousRow.project_name || ""),
+      items: [],
+    };
+  }
+
+  const increases: PreviousProjectRateIncreaseItem[] = [];
+  for (const item of pricedItems || []) {
+    if (!isMaterialCategory(item?.category)) continue;
+
+    const currentRate = Number(item?.rate || 0);
+    if (!Number.isFinite(currentRate) || currentRate <= 0) continue;
+
+    const normalizedName = normalizeComparableText(item?.item || "");
+    const normalizedUom = normalizeComparableText(item?.uom || "");
+    if (!normalizedName) continue;
+
+    const matchedPreviousRate =
+      (normalizedUom ? previousRateIndex.get(`${normalizedName}::${normalizedUom}`) : undefined) ??
+      previousRateIndex.get(normalizedName);
+    const previousRate = Number(matchedPreviousRate || 0);
+    if (!Number.isFinite(previousRate) || previousRate <= 0) continue;
+
+    const increasePercent = Number((((currentRate - previousRate) / previousRate) * 100).toFixed(2));
+    if (!Number.isFinite(increasePercent) || increasePercent <= thresholdPercent) continue;
+
+    increases.push({
+      boqItemId: Number(item?.id || 0),
+      boqItemName: String(item?.item || "").trim() || "item",
+      boqItemUom: String(item?.uom || "").trim(),
+      currentRate,
+      previousRate,
+      increasePercent,
+    });
+  }
+
+  return {
+    previousProjectId: String(previousRow.project_id || ""),
+    previousProjectName: String(previousRow.project_name || ""),
+    items: increases.sort((a, b) => b.increasePercent - a.increasePercent),
+  };
 }
 
 function normalizeMarginConfig(input?: Partial<MarginConfig>): MarginConfig {
@@ -1398,7 +1677,8 @@ export async function createOrUpdateEstimate(
     laborUplift: number;
     machineryUplift: number;
   } = { overallMargin: 10, laborUplift: 5, machineryUplift: 5 },
-  notes?: string
+  notes?: string,
+  basicMaterialCost?: number | null
 ) {
   await assertBuilderProjectAccess(userId, projectId);
 
@@ -1483,6 +1763,14 @@ export async function createOrUpdateEstimate(
     const revisionNumber = revResult.rows[0].next_rev;
 
     const normalizedMarginConfig = normalizeMarginConfig(marginConfig);
+    const normalizedBasicMaterialCost = Number(basicMaterialCost);
+    const persistedBasicMaterialCost = Number.isFinite(normalizedBasicMaterialCost)
+      ? Math.max(0, normalizedBasicMaterialCost)
+      : null;
+    const persistedMarginConfig = {
+      ...marginConfig,
+      basicMaterialCost: persistedBasicMaterialCost,
+    };
     const cleanedNotes = String(notes || "").trim();
     const finalNotes = cleanedNotes
       ? cleanedNotes
@@ -1518,7 +1806,7 @@ export async function createOrUpdateEstimate(
         revisionNumber,
         boqResult.rows[0]?.id || null,
         JSON.stringify(pricedItems),
-        JSON.stringify(marginConfig),
+        JSON.stringify(persistedMarginConfig),
         grandTotal,
         finalNotes || null,
       ]
@@ -1530,7 +1818,190 @@ export async function createOrUpdateEstimate(
       [estimateId]
     );
 
+    const informationalAlerts: Array<{
+      type: "previous_project_unit_price_increase";
+      title: string;
+      message: string;
+      thresholdPercent: number;
+      itemCount: number;
+      previousProjectId: string;
+      previousProjectName: string;
+      maxIncreasePercent: number;
+      items: PreviousProjectRateIncreaseItem[];
+    }> = [];
+
     // Audit log
+    const deviationThresholdPercent = resolveDeviationThresholdPercent();
+    const deviationItems = await detectMarketDeviations(client, pricedItems, deviationThresholdPercent);
+
+    const previousProjectIncreaseThresholdPercent = resolvePreviousProjectIncreaseThresholdPercent();
+    const previousProjectIncreases = await detectPreviousProjectRateIncreases(
+      client,
+      builderOrgId,
+      projectId,
+      pricedItems,
+      previousProjectIncreaseThresholdPercent
+    );
+
+    if (previousProjectIncreases.items.length > 0) {
+      const maxIncreasePercent = Math.max(
+        ...previousProjectIncreases.items.map((item) => Number(item.increasePercent || 0))
+      );
+      const previousProjectName = previousProjectIncreases.previousProjectName || "previous project";
+      const infoMessage = `${previousProjectIncreases.items.length} material unit rate(s) increased by more than ${previousProjectIncreaseThresholdPercent}% compared to ${previousProjectName}. This is informational only.`;
+
+      informationalAlerts.push({
+        type: "previous_project_unit_price_increase",
+        title: "Informational Price Increase Alert",
+        message: infoMessage,
+        thresholdPercent: previousProjectIncreaseThresholdPercent,
+        itemCount: previousProjectIncreases.items.length,
+        previousProjectId: previousProjectIncreases.previousProjectId,
+        previousProjectName,
+        maxIncreasePercent,
+        items: previousProjectIncreases.items.slice(0, 25),
+      });
+
+      try {
+        await client.query(
+          `INSERT INTO notifications (user_id, message, metadata)
+           VALUES ($1, $2, $3::jsonb)`,
+          [
+            userId,
+            infoMessage,
+            JSON.stringify({
+              type: "builder_previous_project_price_increase_info",
+              canIgnore: true,
+              thresholdPercent: previousProjectIncreaseThresholdPercent,
+              projectId,
+              estimateId,
+              revisionNumber,
+              previousProjectId: previousProjectIncreases.previousProjectId,
+              previousProjectName,
+              maxIncreasePercent,
+              itemCount: previousProjectIncreases.items.length,
+              items: previousProjectIncreases.items.slice(0, 25),
+            }),
+          ]
+        );
+      } catch (notifyError: any) {
+        if (notifyError?.code !== "42P01") {
+          throw notifyError;
+        }
+      }
+
+      await client.query(
+        `INSERT INTO audit_logs (project_id, user_id, action, metadata)
+         VALUES ($1, $2, 'BUILDER_PREVIOUS_PROJECT_PRICE_INCREASE_INFO', $3::jsonb)`,
+        [
+          projectId,
+          userId,
+          JSON.stringify({
+            estimateId,
+            revisionNumber,
+            thresholdPercent: previousProjectIncreaseThresholdPercent,
+            previousProjectId: previousProjectIncreases.previousProjectId,
+            previousProjectName,
+            itemCount: previousProjectIncreases.items.length,
+            maxIncreasePercent,
+          }),
+        ]
+      );
+    }
+
+    if (deviationItems.length > 0) {
+      const projectRes = await client.query(
+        `SELECT name FROM projects WHERE id = $1 LIMIT 1`,
+        [projectId]
+      );
+      const projectName = String(projectRes.rows[0]?.name || "Project");
+      const maxDeviationPercent = Math.max(...deviationItems.map((item) => Number(item.deviationPercent || 0)));
+      const maxAboveDeviationPercent = Math.max(
+        0,
+        ...deviationItems
+          .filter((item) => item.deviationDirection === "above_market")
+          .map((item) => Number(item.deviationPercent || 0))
+      );
+      const maxBelowDeviationPercent = Math.max(
+        0,
+        ...deviationItems
+          .filter((item) => item.deviationDirection === "below_market")
+          .map((item) => Number(item.deviationPercent || 0))
+      );
+      const aboveMarketCount = deviationItems.filter((item) => item.deviationDirection === "above_market").length;
+      const belowMarketCount = deviationItems.filter((item) => item.deviationDirection === "below_market").length;
+      const deviationDirection =
+        aboveMarketCount > 0 && belowMarketCount > 0
+          ? "mixed"
+          : belowMarketCount > 0
+            ? "below_market"
+            : "above_market";
+
+      const deviationMetadata = {
+        projectId,
+        projectName,
+        estimateId,
+        revisionNumber,
+        builderOrgId,
+        thresholdPercent: deviationThresholdPercent,
+        deviationCount: deviationItems.length,
+        maxDeviationPercent,
+        maxAboveDeviationPercent,
+        maxBelowDeviationPercent,
+        aboveMarketCount,
+        belowMarketCount,
+        deviationDirection,
+        items: deviationItems.slice(0, 25),
+      };
+
+      await client.query(
+        `INSERT INTO audit_logs (project_id, user_id, action, metadata)
+         VALUES ($1, $2, 'ESTIMATE_MARKET_DEVIATION_ALERT', $3)`,
+        [projectId, userId, JSON.stringify(deviationMetadata)]
+      );
+
+      try {
+        const admins = await client.query(
+          `SELECT id
+           FROM users
+           WHERE role = 'admin'
+             AND COALESCE(is_active, true) = true`
+        );
+
+        const directionMessage =
+          deviationDirection === "below_market"
+            ? "below"
+            : deviationDirection === "mixed"
+              ? "above/below"
+              : "above";
+        const message = `Market deviation alert: ${deviationItems.length} item(s) deviated ${directionMessage} market benchmark by >= ${deviationThresholdPercent}% for ${projectName}.`;
+        for (const row of admins.rows || []) {
+          await client.query(
+            `INSERT INTO notifications (user_id, message, metadata)
+             VALUES ($1, $2, $3::jsonb)`,
+            [row.id, message, JSON.stringify({
+              type: "estimate_market_deviation",
+              projectId,
+              estimateId,
+              revisionNumber,
+              deviationCount: deviationItems.length,
+              maxDeviationPercent,
+              maxAboveDeviationPercent,
+              maxBelowDeviationPercent,
+              aboveMarketCount,
+              belowMarketCount,
+              deviationDirection,
+            })]
+          );
+        }
+      } catch (notifyError: any) {
+        // If notifications table/module is unavailable, keep submission successful.
+        if (notifyError?.code !== "42P01") {
+          throw notifyError;
+        }
+      }
+    }
+
     await client.query(
       `INSERT INTO audit_logs (project_id, user_id, action, metadata)
        VALUES ($1, $2, 'ESTIMATE_SUBMITTED', $3)`,
@@ -1544,6 +2015,7 @@ export async function createOrUpdateEstimate(
       revisionNumber,
       subtotalWithUplifts,
       grandTotal,
+      informationalAlerts,
     };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -1559,6 +2031,7 @@ export async function getSubmittedEstimates(builderOrgId: string) {
        e.id AS estimate_id,
        e.project_id,
        p.name AS project_name,
+       ao.name AS architect_designer_org_name,
        er.id AS revision_id,
        er.revision_number,
        rev_stats.revision_count,
@@ -1575,6 +2048,8 @@ export async function getSubmittedEstimates(builderOrgId: string) {
        ) AS margin_percent
      FROM estimates e
      JOIN projects p ON p.id = e.project_id
+     LEFT JOIN users architect_user ON architect_user.id = p.architect_id
+     LEFT JOIN organizations ao ON ao.id = architect_user.organization_id
      JOIN LATERAL (
        SELECT id, revision_number, grand_total, submitted_at, notes, margin_config
        FROM estimate_revisions

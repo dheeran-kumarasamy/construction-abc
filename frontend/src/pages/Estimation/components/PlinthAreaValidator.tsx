@@ -141,13 +141,13 @@ export default function PlinthAreaValidator({ projectId }: Props) {
             {result.cost_per_sqft != null && (
               <div>
                 <div style={{ fontSize: 11, opacity: 0.7 }}>Cost per sq.ft</div>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>₹{result.cost_per_sqft}</div>
+                <div style={{ fontWeight: 600, fontSize: 15 }}>{fmt(Number(result.cost_per_sqft))}</div>
               </div>
             )}
             {result.benchmark_rate_per_sqm != null && (
               <div>
                 <div style={{ fontSize: 11, opacity: 0.7 }}>Benchmark Rate / m²</div>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>₹{result.benchmark_rate_per_sqm}</div>
+                <div style={{ fontWeight: 600, fontSize: 15 }}>{fmt(Number(result.benchmark_rate_per_sqm))}</div>
               </div>
             )}
             <div>
@@ -189,8 +189,8 @@ export default function PlinthAreaValidator({ projectId }: Props) {
                   <td style={pageStyles.td}>{r.class_code}</td>
                   <td style={pageStyles.td}>{r.description}</td>
                   <td style={pageStyles.td}>{r.floor}</td>
-                  <td style={pageStyles.td}>₹{Number(r.rate).toLocaleString("en-IN")}</td>
-                  <td style={pageStyles.td}>₹{Math.round(Number(r.rate) / 10.764).toLocaleString("en-IN")}</td>
+                  <td style={pageStyles.td}>{fmt(Number(r.rate))}</td>
+                  <td style={pageStyles.td}>{fmt(Math.round(Number(r.rate) / 10.764))}</td>
                 </tr>
               ))}
             </tbody>

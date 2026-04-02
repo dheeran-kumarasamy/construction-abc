@@ -12,6 +12,7 @@ export interface ScrapedPrice {
   districtId: string;
   materialId: string;
   price: number;
+  brandName?: string;
   source: string;
   scrapedAt: Date;
   confidence: number;

@@ -188,6 +188,31 @@ export const pageStyles: Record<string, CSSProperties> = {
     wordBreak: "break-word",
     overflowWrap: "break-word",
   },
+  tdCenter: {
+    textAlign: "center",
+    verticalAlign: "middle",
+  },
+  tdPercent: {
+    textAlign: "center",
+    verticalAlign: "middle",
+    whiteSpace: "nowrap",
+    fontVariantNumeric: "tabular-nums",
+  },
+  tdDateTime: {
+    textAlign: "center",
+    verticalAlign: "middle",
+    whiteSpace: "nowrap",
+    lineHeight: "1.3",
+  },
+  dateLine: {
+    display: "block",
+    fontWeight: 500,
+  },
+  timeLine: {
+    display: "block",
+    fontSize: "12px",
+    color: "var(--muted)",
+  },
   rowEven: {
     background: "#ffffff",
   },

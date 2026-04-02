@@ -6,6 +6,8 @@ import { pageStyles } from "../../layouts/pageStyles";
 import * as api from "./estimation.api";
 import type { BOQProject, RateTemplate } from "./types";
 import { useAuth } from "../../auth/AuthContext";
+import { formatINR } from "../../services/currency";
+import { formatDate } from "../../services/dateTime";
 
 
 type BOQRow =
@@ -318,8 +320,8 @@ export default function BOQWorkspacePage() {
                           <span>{row.uom || "-"}</span>
                         )}
                       </td>
-                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace" }}>{row.rate != null ? `₹${row.rate}` : "—"}</td>}
-                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{row.amount != null ? `₹${row.amount}` : "—"}</td>}
+                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace" }}>{row.rate != null ? formatINR(row.rate, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
+                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{row.amount != null ? formatINR(row.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
                     </tr>
                   );
                 } else {
@@ -361,8 +363,8 @@ export default function BOQWorkspacePage() {
                           <span>{row.uom || "-"}</span>
                         )}
                       </td>
-                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace" }}>{row.rate != null ? `₹${row.rate}` : "—"}</td>}
-                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{row.amount != null ? `₹${row.amount}` : "—"}</td>}
+                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace" }}>{row.rate != null ? formatINR(row.rate, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
+                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{row.amount != null ? formatINR(row.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
                     </tr>
                   );
                 }
@@ -373,22 +375,13 @@ export default function BOQWorkspacePage() {
           <div style={{ marginTop: 12 }}>
             <button
               style={{ ...pageStyles.secondaryBtn, fontSize: 14 }}
-              onClick={() => {
-                const customName = prompt("Enter new item name:");
-                if (!customName) return;
-                const uom = UOM_OPTIONS[0];
-                setBoqRows(prev => [
-                  ...prev,
-                  {
-                    customId: `custom-${Date.now()}`,
-                    customName,
-                    quantity: "",
-                    uom,
-                    rate: undefined,
-                    amount: undefined,
-                  },
-                ]);
-              }}
+              onClick={() =>
+                navigate(
+                  `/architect/estimation/templates?mode=custom-line-item&projectId=${encodeURIComponent(
+                    projectId || ""
+                  )}`
+                )
+              }
             >
               + Add Custom Line Item
             </button>
@@ -484,7 +477,7 @@ export default function BOQWorkspacePage() {
         )}
         {showRateColumns && estimate != null && (
           <div style={{ marginTop: 24, fontWeight: 600, fontSize: 18, color: "#0f766e" }}>
-            Total Estimate: ₹{estimate.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+            Total Estimate: {formatINR(estimate, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
           </div>
         )}
         {isArchitectFlow && (
@@ -546,6 +539,7 @@ export default function BOQWorkspacePage() {
                 <thead>
                   <tr>
                     <th style={pageStyles.th}>Material</th>
+                    <th style={pageStyles.th}>Brand</th>
                     <th style={pageStyles.th}>Market Rate</th>
                     <th style={pageStyles.th}>UOM</th>
                     <th style={pageStyles.th}>Source</th>
@@ -555,23 +549,24 @@ export default function BOQWorkspacePage() {
                 <tbody>
                   {loadingRates ? (
                     <tr>
-                      <td colSpan={5} style={pageStyles.empty}>Loading market rates...</td>
+                      <td colSpan={6} style={pageStyles.empty}>Loading market rates...</td>
                     </tr>
                   ) : marketRates.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={pageStyles.empty}>No scraped market rates available for this selection.</td>
+                      <td colSpan={6} style={pageStyles.empty}>No scraped market rates available for this selection.</td>
                     </tr>
                   ) : (
                     marketRates.slice(0, 60).map((row, idx) => (
-                      <tr key={row.materialId} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                      <tr key={row.materialPriceId || `${row.materialId}:${row.brandName || "generic"}`} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
                         <td style={pageStyles.td}>{row.materialName}</td>
+                        <td style={pageStyles.td}>{row.brandName || "-"}</td>
                         <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace" }}>
-                          {`₹${Number(row.price || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}
+                          {formatINR(Number(row.price || 0), { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                         </td>
                         <td style={pageStyles.td}>{row.unit || "-"}</td>
                         <td style={pageStyles.td}>{row.source || "scraped"}</td>
                         <td style={pageStyles.td}>
-                          {row.lastUpdated ? new Date(row.lastUpdated).toLocaleDateString("en-IN") : "-"}
+                          {row.lastUpdated ? formatDate(row.lastUpdated) : "-"}
                         </td>
                       </tr>
                     ))

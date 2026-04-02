@@ -1,4 +1,6 @@
 import type { PriceAlert } from "./types";
+import { formatINR } from "../../services/currency";
+import { formatDateTime } from "../../services/dateTime";
 
 interface Props {
   alerts: PriceAlert[];
@@ -15,10 +17,10 @@ export default function PriceAlertsList({ alerts, onDelete }: Props) {
           <div key={alert.id} className="pt-alert-item">
             <div>
               <strong>{alert.materialName}</strong> · {alert.districtName}
-              <div>{alert.condition} ₹{alert.threshold.toFixed(2)}</div>
+              <div>{alert.condition} {formatINR(alert.threshold, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <small>
                 {alert.lastTriggeredAt
-                  ? `Last triggered: ${new Date(alert.lastTriggeredAt).toLocaleString()}`
+                  ? `Last triggered: ${formatDateTime(alert.lastTriggeredAt)}`
                   : "Not triggered yet"}
               </small>
             </div>

@@ -26,7 +26,8 @@ export async function getResources(req: Request, res: Response) {
 export async function getTemplates(req: Request, res: Response) {
   try {
     const { category, search } = req.query as Record<string, string>;
-    const templates = await service.listTemplates({ category, search });
+    const userId = getUserId(req);
+    const templates = await service.listTemplates({ category, search }, userId);
     res.json(templates);
   } catch (err: any) {
     console.error("getTemplates error:", err);
@@ -36,7 +37,8 @@ export async function getTemplates(req: Request, res: Response) {
 
 export async function getTemplateById(req: Request, res: Response) {
   try {
-    const template = await service.getTemplateDetail(param(req, "id"));
+    const userId = getUserId(req);
+    const template = await service.getTemplateDetail(param(req, "id"), userId);
     if (!template) return res.status(404).json({ error: "Template not found" });
     res.json(template);
   } catch (err: any) {
@@ -106,6 +108,50 @@ export async function deleteLineItem(req: Request, res: Response) {
   } catch (err: any) {
     console.error("deleteLineItem error:", err);
     res.status(500).json({ error: "Failed to delete line item" });
+  }
+}
+
+export async function createCustomLineItemTemplateRequest(req: Request, res: Response) {
+  try {
+    const userId = getUserId(req);
+    const template = await service.createCustomLineItemTemplateRequest(userId, req.body);
+    res.status(201).json(template);
+  } catch (err: any) {
+    console.error("createCustomLineItemTemplateRequest error:", err);
+    res.status(400).json({ error: err.message || "Failed to create custom line item request" });
+  }
+}
+
+export async function listPendingTemplateApprovals(req: Request, res: Response) {
+  try {
+    const rows = await service.listPendingTemplateApprovals();
+    res.json(rows);
+  } catch (err: any) {
+    console.error("listPendingTemplateApprovals error:", err);
+    res.status(500).json({ error: "Failed to fetch pending template approvals" });
+  }
+}
+
+export async function adminEditPendingTemplate(req: Request, res: Response) {
+  try {
+    const template = await service.adminEditPendingTemplate(param(req, "id"), req.body || {});
+    if (!template) return res.status(404).json({ error: "Template not found" });
+    res.json(template);
+  } catch (err: any) {
+    console.error("adminEditPendingTemplate error:", err);
+    res.status(400).json({ error: err.message || "Failed to edit pending template" });
+  }
+}
+
+export async function approvePendingTemplate(req: Request, res: Response) {
+  try {
+    const adminUserId = getUserId(req);
+    const approved = await service.approvePendingTemplateForGlobal(param(req, "id"), adminUserId);
+    if (!approved) return res.status(404).json({ error: "Pending template not found" });
+    res.json(approved);
+  } catch (err: any) {
+    console.error("approvePendingTemplate error:", err);
+    res.status(400).json({ error: err.message || "Failed to approve template" });
   }
 }
 

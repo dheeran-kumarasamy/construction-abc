@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { pageStyles } from "../layouts/pageStyles";
@@ -17,6 +17,8 @@ export default function Login() {
   const [architectPhoneNumber, setArchitectPhoneNumber] = useState("");
   const [shopName, setShopName] = useState("");
   const [city, setCity] = useState("");
+  const [dealerCategoryIds, setDealerCategoryIds] = useState<string[]>([]);
+  const [dealerCategories, setDealerCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [builderCompanyName, setBuilderCompanyName] = useState("");
   const [builderPhone, setBuilderPhone] = useState("");
   const [builderLocations, setBuilderLocations] = useState("");
@@ -25,6 +27,33 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  useEffect(() => {
+    if (mode !== "register" || registerRole !== "dealer") return;
+
+    fetch(apiUrl("/api/prices/categories"))
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch categories");
+        return res.json();
+      })
+      .then((rows) => {
+        const options = Array.isArray(rows)
+          ? rows
+              .map((row: any) => ({
+                id: String(row?.id || ""),
+                name: String(row?.name || ""),
+              }))
+              .filter((row) => row.id && row.name)
+          : [];
+
+        setDealerCategories(options);
+        setDealerCategoryIds((prev) => prev.filter((id) => options.some((opt) => opt.id === id)));
+      })
+      .catch(() => {
+        setDealerCategories([]);
+        setDealerCategoryIds([]);
+      });
+  }, [mode, registerRole]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -100,9 +129,13 @@ export default function Login() {
           specialties: builderSpecialties.trim() || undefined,
         };
       } else {
+        if (dealerCategoryIds.length === 0) {
+          throw new Error("Please select at least one product category.");
+        }
         payload.dealerData = {
           shopName: shopName.trim(),
           city: city.trim() || undefined,
+          productCategoryIds: dealerCategoryIds,
         };
       }
 
@@ -348,6 +381,56 @@ export default function Login() {
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                 />
+                <div
+                  style={{
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 8,
+                    padding: "10px 12px",
+                    background: "#f8fafc",
+                  }}
+                >
+                  <div style={{ color: "#0f172a", fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
+                    Products Dealt In
+                  </div>
+                  {dealerCategories.length === 0 ? (
+                    <div style={{ color: "#64748b", fontSize: 13 }}>No categories available</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {dealerCategories.map((category) => {
+                        const checked = dealerCategoryIds.includes(category.id);
+                        return (
+                          <label
+                            key={category.id}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              color: "#0f172a",
+                              fontSize: 14,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setDealerCategoryIds((prev) => [...prev, category.id]);
+                                } else {
+                                  setDealerCategoryIds((prev) => prev.filter((id) => id !== category.id));
+                                }
+                              }}
+                            />
+                            <span>{category.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div style={{ color: "#475569", fontSize: 12, marginTop: -4, marginBottom: 6 }}>
+                  Select at least one category.
+                </div>
               </>
             )}
           </>

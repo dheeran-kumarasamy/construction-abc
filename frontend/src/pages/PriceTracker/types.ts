@@ -22,8 +22,10 @@ export interface Material {
 }
 
 export interface PriceRecord {
+  materialPriceId: string;
   materialId: string;
   materialName: string;
+  brandName: string | null;
   unit: string;
   price: number;
   trend: "up" | "down" | "stable";
