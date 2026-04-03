@@ -67,6 +67,8 @@ export default function BuilderBasePricing() {
   const [templateRows, setTemplateRows] = useState<StarterTemplateRow[]>([]);
   const [templateCsv, setTemplateCsv] = useState<string>("");
   const [templateLoading, setTemplateLoading] = useState(false);
+  const [editingKey, setEditingKey] = useState<{ item: string; uom: string } | null>(null);
+  const [editRate, setEditRate] = useState<number>(0);
 
   useEffect(() => {
     setItems(getBasePricing());
@@ -139,9 +141,26 @@ export default function BuilderBasePricing() {
   function handleAdd() {
     if (!form.item || form.rate <= 0) return;
 
-    addBasePrice(form);
-    setItems(getBasePricing());
+    const normFormItem = form.item.trim().toLowerCase();
+    const current = getBasePricing();
+    const existingIdx = current.findIndex(
+      (it) => it.item.trim().toLowerCase() === normFormItem
+    );
 
+    if (existingIdx !== -1) {
+      // Update existing item's rate (and uom/category from form)
+      current[existingIdx] = {
+        ...current[existingIdx],
+        rate: form.rate,
+        uom: form.uom || current[existingIdx].uom,
+        category: form.category || current[existingIdx].category,
+      };
+      saveBasePricing(current);
+    } else {
+      addBasePrice(form);
+    }
+
+    setItems(getBasePricing());
     setForm({ item: "", rate: 0, uom: "", category: "Material" });
   }
 
@@ -236,6 +255,34 @@ export default function BuilderBasePricing() {
     setParseDiagnostics(null);
   }
 
+  function handleStartEdit(it: BasePriceItem) {
+    setEditingKey({ item: it.item, uom: it.uom });
+    setEditRate(it.rate);
+  }
+
+  function handleSaveEdit() {
+    if (!editingKey) return;
+
+    const current = getBasePricing();
+    const idx = current.findIndex(
+      (it) =>
+        it.item.trim().toLowerCase() === editingKey.item.trim().toLowerCase() &&
+        it.uom.trim().toLowerCase() === editingKey.uom.trim().toLowerCase()
+    );
+
+    if (idx !== -1) {
+      current[idx] = { ...current[idx], rate: editRate };
+      saveBasePricing(current);
+      setItems([...current]);
+    }
+
+    setEditingKey(null);
+  }
+
+  function handleCancelEdit() {
+    setEditingKey(null);
+  }
+
   const groupedItems = useMemo(() => {
     const categoryOrder: BasePriceItem["category"][] = ["Material", "Labor", "Machinery", "Other"];
 
@@ -260,6 +307,33 @@ export default function BuilderBasePricing() {
       items: [...grouped[category]].sort((a, b) => a.item.localeCompare(b.item)),
     }));
   }, [items]);
+
+  const compactTableStyle = {
+    ...pageStyles.table,
+    tableLayout: "fixed" as const,
+  };
+
+  const compactHeaderStyle = {
+    ...pageStyles.th,
+    textAlign: "center" as const,
+    padding: "10px 12px",
+  };
+
+  const compactCellStyle = {
+    ...pageStyles.td,
+    textAlign: "center" as const,
+    padding: "10px 12px",
+  };
+
+  const groupHeaderCellStyle = {
+    ...compactCellStyle,
+    background: "var(--accentSoft)",
+    color: "var(--ink)",
+    fontWeight: 700,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.4px",
+    borderTop: "1px solid var(--border)",
+  };
 
   return (
     <div style={pageStyles.page}>
@@ -287,15 +361,12 @@ export default function BuilderBasePricing() {
         >
           <div>
             <p style={{ margin: 0, color: "#0f766e", fontWeight: 700 }}>
-              Starter Template from BOQ Calculator Rates
-            </p>
-            <p style={{ margin: "0.35rem 0 0 0", color: "#475569", fontSize: "0.9rem" }}>
-              Pre-populated with {templateRows.length} rich rate-card items from boq-base calculator. Load and edit as your starting point.
+              Kickstart your estimate journey with our recommended rates
             </p>
           </div>
           <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
             <button onClick={handleLoadStarterTemplate} disabled={templateLoading || templateRows.length === 0} style={pageStyles.primaryBtn}>
-              Load Starter Template
+              Expert Pricing
             </button>
             <button onClick={handleDownloadTemplateCsv} disabled={templateLoading || !templateCsv} style={pageStyles.secondaryBtn}>
               Download CSV Template
@@ -365,7 +436,7 @@ export default function BuilderBasePricing() {
               </select>
 
               <button onClick={handleAdd} style={pageStyles.primaryBtn}>
-                Add
+                Add / Update
               </button>
             </div>
           </>
@@ -571,31 +642,21 @@ export default function BuilderBasePricing() {
           <>
             <h3 style={{ ...pageStyles.subtitle, marginTop: "3rem" }}>Current Base Pricing</h3>
             <TableWrapper>
-              <table style={pageStyles.table}>
+              <table style={compactTableStyle}>
                 <thead>
                   <tr>
-                    <th style={pageStyles.th}>Item</th>
-                    <th className="amount-header" style={pageStyles.th}>Rate</th>
-                    <th style={pageStyles.th}>UOM</th>
-                    <th style={pageStyles.th}>Category</th>
+                    <th style={{ ...compactHeaderStyle, width: "34%" }}>Item</th>
+                    <th className="amount-header" style={{ ...compactHeaderStyle, width: "16%" }}>Rate</th>
+                    <th style={{ ...compactHeaderStyle, width: "14%" }}>UOM</th>
+                    <th style={{ ...compactHeaderStyle, width: "18%" }}>Category</th>
+                    <th style={{ ...compactHeaderStyle, width: "18%" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {groupedItems.map((group) => (
                     <Fragment key={`${group.category}-group`}>
                       <tr style={pageStyles.rowEven}>
-                        <td
-                          style={{
-                            ...pageStyles.td,
-                            background: "var(--accentSoft)",
-                            color: "var(--ink)",
-                            fontWeight: 700,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.4px",
-                            borderTop: "1px solid var(--border)",
-                          }}
-                          colSpan={4}
-                        >
+                        <td style={groupHeaderCellStyle} colSpan={5}>
                           {group.category}
                         </td>
                       </tr>
@@ -604,10 +665,47 @@ export default function BuilderBasePricing() {
                           key={`${group.category}-${it.item}-${it.uom}-${idx}`}
                           style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}
                         >
-                          <td style={pageStyles.td}>{it.item}</td>
-                          <td className="amount-cell" style={pageStyles.td}>{it.rate}</td>
-                          <td style={pageStyles.td}>{it.uom}</td>
-                          <td style={pageStyles.td}>{it.category}</td>
+                          <td style={{ ...compactCellStyle, fontWeight: 500 }}>{it.item}</td>
+                          <td className="amount-cell" style={compactCellStyle}>
+                            {editingKey?.item === it.item && editingKey?.uom === it.uom ? (
+                              <input
+                                type="number"
+                                value={editRate}
+                                onChange={(e) => setEditRate(Number(e.target.value))}
+                                style={{ ...pageStyles.input, width: "100%", maxWidth: "110px", margin: "0 auto", padding: "6px 8px", textAlign: "center" }}
+                                autoFocus
+                              />
+                            ) : (
+                              it.rate
+                            )}
+                          </td>
+                          <td style={compactCellStyle}>{it.uom}</td>
+                          <td style={compactCellStyle}>{it.category}</td>
+                          <td style={{ ...compactCellStyle, whiteSpace: "nowrap" }}>
+                            {editingKey?.item === it.item && editingKey?.uom === it.uom ? (
+                              <div style={{ display: "flex", justifyContent: "center", gap: 6, flexWrap: "wrap" }}>
+                                <button
+                                  onClick={handleSaveEdit}
+                                  style={{ ...pageStyles.primaryBtn, padding: "4px 10px", fontSize: 13 }}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  style={{ ...pageStyles.secondaryBtn, padding: "4px 10px", fontSize: 13 }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleStartEdit(it)}
+                                style={{ ...pageStyles.secondaryBtn, padding: "4px 10px", fontSize: 13 }}
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </Fragment>

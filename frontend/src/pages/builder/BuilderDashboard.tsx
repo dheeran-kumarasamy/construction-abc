@@ -153,24 +153,10 @@ export default function BuilderDashboard() {
           </button>
           <button
             type="button"
-            style={pageStyles.primaryBtn}
-            onClick={() => navigate("/builder/prices")}
-          >
-            Open Material Prices
-          </button>
-          <button
-            type="button"
             style={pageStyles.secondaryBtn}
             onClick={() => navigate("/builder/base-pricing")}
           >
             Manage Base Pricing Overrides
-          </button>
-          <button
-            type="button"
-            style={pageStyles.secondaryBtn}
-            onClick={() => navigate("/builder/margins")}
-          >
-            Configure Margins & Uplifts
           </button>
           <button
             type="button"
