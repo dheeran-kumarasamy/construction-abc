@@ -31,6 +31,7 @@ interface BasePriceItem {
   rate: number;
   uom: string;
   category: string;
+  sourceType?: "builder_override" | "pwd_template";
 }
 
 interface MarketRateItem {
@@ -115,6 +116,7 @@ export default function ApplyBasePricing({
   const location = useLocation();
   const [projects, setProjects] = useState<Project[]>([]);
   const [basePricing, setBasePricing] = useState<BasePriceItem[]>([]);
+  const [pwdTemplateRates, setPwdTemplateRates] = useState<BasePriceItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [boqItems, setBoqItems] = useState<BOQItem[]>([]);
   const [pricedItems, setPricedItems] = useState<BOQItem[]>([]);
@@ -179,6 +181,7 @@ export default function ApplyBasePricing({
   useEffect(() => {
     fetchProjects();
     fetchBasePricing();
+    fetchPwdTemplateRates();
     loadMarginConfig();
   }, []);
 
@@ -257,9 +260,9 @@ export default function ApplyBasePricing({
 
   useEffect(() => {
     if (selectedProjectId && boqItems.length > 0) {
-      autoMatchPricing(boqItems, basePricing);
+      autoMatchPricing(boqItems, [...basePricing, ...pwdTemplateRates]);
     }
-  }, [basePricing, boqItems, selectedProjectId, marketRates]);
+  }, [basePricing, pwdTemplateRates, boqItems, selectedProjectId, marketRates]);
 
   useEffect(() => {
     if (!preferredProjectId || !projects.length || selectedProjectId === preferredProjectId) {
@@ -307,14 +310,53 @@ export default function ApplyBasePricing({
       const mergedMap = new Map<string, BasePriceItem>();
       [...apiItems, ...localItems].forEach((item) => {
         const key = `${normalizeText(item.item)}|${normalizeText(item.uom)}`;
-        mergedMap.set(key, item);
+        mergedMap.set(key, {
+          ...item,
+          sourceType: "builder_override",
+        });
       });
 
       setBasePricing(Array.from(mergedMap.values()));
     } catch (err) {
       console.error("Fetch base pricing error:", err);
       // Fallback to local base pricing so auto-fill still works
-      setBasePricing(getBasePricing());
+      setBasePricing(
+        getBasePricing().map((item) => ({
+          ...item,
+          sourceType: "builder_override",
+        }))
+      );
+    }
+  }
+
+  async function fetchPwdTemplateRates() {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(apiUrl("/api/base-pricing/template"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch PWD template rates");
+      }
+
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+
+      const normalizedRows: BasePriceItem[] = rows
+        .map((row: any) => ({
+          item: String(row?.item || "").trim(),
+          rate: Number(row?.rate || 0),
+          uom: String(row?.uom || "").trim(),
+          category: String(row?.category || "Material").trim() || "Material",
+          sourceType: "pwd_template" as const,
+        }))
+        .filter((row: BasePriceItem) => row.item && Number.isFinite(row.rate) && row.rate > 0);
+
+      setPwdTemplateRates(normalizedRows);
+    } catch (err) {
+      console.error("Fetch PWD template rates error:", err);
+      setPwdTemplateRates([]);
     }
   }
 
@@ -355,7 +397,7 @@ export default function ApplyBasePricing({
       setBoqItems(items);
 
       // Auto-match pricing
-      autoMatchPricing(items, basePricing, loadedMarketRates);
+      autoMatchPricing(items, [...basePricing, ...pwdTemplateRates], loadedMarketRates);
     } catch (err) {
       console.error("Fetch BOQ error:", err);
       alert(err instanceof Error ? err.message : "Failed to fetch BOQ");
@@ -372,6 +414,60 @@ export default function ApplyBasePricing({
       .trim();
   }
 
+  const UOM_ALIASES: Record<string, string> = {
+    sqft: "sqft", sft: "sqft", "sq ft": "sqft", ft2: "sqft",
+    sqm: "sqm", "sq m": "sqm", m2: "sqm",
+    cft: "cft", "cu ft": "cft",
+    cum: "cum", m3: "cum",
+    nos: "nos", no: "nos", number: "nos", pcs: "nos", each: "nos",
+    rmt: "rmt", rm: "rmt", "running meter": "rmt", lm: "rmt",
+    kg: "kg", bags: "bags",
+  };
+
+  const WORD_ALIASES: Record<string, string> = {
+    rcc: "reinforced concrete",
+    "reinforced cement concrete": "reinforced concrete",
+    "reinforced concrete cement": "reinforced concrete",
+    pcc: "plain concrete",
+    "plain cement concrete": "plain concrete",
+    brickwork: "brick work",
+    vitrified: "vitrified tiles",
+    granite: "granite flooring",
+    "ms steel": "steel",
+    "mild steel": "steel",
+    tmt: "steel",
+    "tmt bar": "steel",
+    opc: "cement",
+    ppc: "cement",
+    "m sand": "manufactured sand",
+    "river sand": "sand",
+    plaster: "plastering",
+    paint: "painting",
+    dado: "wall tiles",
+  };
+
+  function normalizeUom(uom: string): string {
+    const u = normalizeText(uom);
+    return UOM_ALIASES[u] ?? u;
+  }
+
+  function expandAliases(text: string): string {
+    let result = text;
+    for (const [alias, canonical] of Object.entries(WORD_ALIASES)) {
+      result = result.replace(new RegExp(`\\b${alias}\\b`, "g"), canonical);
+    }
+    return result;
+  }
+
+  function tokenScore(a: string, b: string): number {
+    const tokensA = new Set(expandAliases(a).split(" ").filter(Boolean));
+    const tokensB = new Set(expandAliases(b).split(" ").filter(Boolean));
+    if (tokensA.size === 0 || tokensB.size === 0) return 0;
+    let intersect = 0;
+    tokensA.forEach((t) => { if (tokensB.has(t)) intersect++; });
+    return intersect / Math.min(tokensA.size, tokensB.size);
+  }
+
   function resolveRateLabel(source: string) {
     const s = normalizeText(source);
     if (!s) return "Scraped";
@@ -385,27 +481,45 @@ export default function ApplyBasePricing({
     itemUom: string,
     source: T[]
   ) {
-    const normalizedItemName = normalizeText(itemName);
-    const normalizedItemUom = normalizeText(itemUom);
+    const normName = normalizeText(itemName);
+    const normUom = normalizeUom(itemUom);
 
+    // 1. Exact name + UOM
     let match = source.find((entry) => {
-      const candidateName = normalizeText((entry as any).item || (entry as any).materialName || "");
-      const candidateUom = normalizeText((entry as any).uom || (entry as any).unit || "");
-      return candidateName === normalizedItemName && (!normalizedItemUom || candidateUom === normalizedItemUom);
+      const n = normalizeText((entry as any).item || (entry as any).materialName || "");
+      const u = normalizeUom((entry as any).uom || (entry as any).unit || "");
+      return n === normName && (!normUom || u === normUom || !u);
     });
 
+    // 2. Exact name only
     if (!match) {
       match = source.find((entry) => {
-        const candidateName = normalizeText((entry as any).item || (entry as any).materialName || "");
-        return candidateName === normalizedItemName;
+        const n = normalizeText((entry as any).item || (entry as any).materialName || "");
+        return n === normName;
       });
     }
 
+    // 3. Substring
     if (!match) {
       match = source.find((entry) => {
-        const candidateName = normalizeText((entry as any).item || (entry as any).materialName || "");
-        return normalizedItemName.includes(candidateName) || candidateName.includes(normalizedItemName);
+        const n = normalizeText((entry as any).item || (entry as any).materialName || "");
+        return normName.includes(n) || n.includes(normName);
       });
+    }
+
+    // 4. Token overlap score >= 0.5
+    if (!match) {
+      let bestScore = 0.5;
+      let bestEntry: T | null = null;
+      source.forEach((entry) => {
+        const n = normalizeText((entry as any).item || (entry as any).materialName || "");
+        const score = tokenScore(normName, n);
+        if (score > bestScore) {
+          bestScore = score;
+          bestEntry = entry;
+        }
+      });
+      if (bestEntry) match = bestEntry;
     }
 
     return match || null;
@@ -475,7 +589,7 @@ export default function ApplyBasePricing({
 
   function autoMatchPricing(
     items: BOQItem[],
-    pricingSource: BasePriceItem[] = basePricing,
+    pricingSource: BasePriceItem[] = [...basePricing, ...pwdTemplateRates],
     marketSource: MarketRateItem[] = marketRates
   ) {
     const matched = items.map((item) => {
@@ -494,7 +608,10 @@ export default function ApplyBasePricing({
       } else if (manualMatch) {
         rate = Number((manualMatch as BasePriceItem).rate || 0);
         category = (manualMatch as BasePriceItem).category || "Material";
-        rateSource = "Base Pricing Override";
+        rateSource =
+          (manualMatch as BasePriceItem).sourceType === "pwd_template"
+            ? "PWD Template"
+            : "Base Pricing Override";
       } else if (marketMatch) {
         rate = Number((marketMatch as MarketRateItem).price || 0);
         rateSource = resolveRateLabel((marketMatch as MarketRateItem).source || "scraped");
@@ -1768,41 +1885,6 @@ export default function ApplyBasePricing({
                       </tbody>
                     </table>
                   </div>
-                </div>
-
-                <div style={{ marginTop: "1.5rem" }}>
-                  <label
-                    style={{
-                      display: "block",
-                      marginBottom: "0.5rem",
-                      color: "#0f766e",
-                      fontWeight: 500,
-                    }}
-                  >
-                    Basic Material Cost (for architect visibility)
-                  </label>
-                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-                    <input
-                      type="number"
-                      min="0"
-                      value={basicMaterialCost}
-                      disabled={isUiLocked}
-                      onChange={(e) => setBasicMaterialCost(e.target.value)}
-                      placeholder={`Suggested from BOQ material total: ${formatINR(totals.materialTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                      style={{ ...pageStyles.input, width: "320px" }}
-                    />
-                    <button
-                      type="button"
-                      disabled={isUiLocked}
-                      onClick={() => setBasicMaterialCost(String(Number(totals.materialTotal.toFixed(2))))}
-                      style={pageStyles.secondaryBtn}
-                    >
-                      Use BOQ Material Total
-                    </button>
-                  </div>
-                  <p style={{ margin: "0.5rem 0 0", color: "#475569", fontSize: "0.9rem" }}>
-                    Enter a basic material cost by referring architect pricing and current market rates from /prices.
-                  </p>
                 </div>
 
                 <div style={{ marginTop: "1.5rem" }}>
