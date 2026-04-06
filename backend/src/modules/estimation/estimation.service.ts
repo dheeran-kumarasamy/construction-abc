@@ -803,11 +803,18 @@ export async function getProject(projectId: string, userId: string) {
           AND ui.organization_id = requester.organization_id
         )
       )
-      AND (ui.accepted_at IS NOT NULL OR ui.expires_at > NOW())
+      AND (
+        ui.accepted_at IS NOT NULL
+        OR ui.expires_at IS NULL
+        OR ui.expires_at > NOW()
+      )
      LEFT JOIN builder_invitations bi
        ON bi.project_id = p.id
       AND bi.builder_org_id = requester.organization_id
       AND bi.status IN ('pending', 'accepted')
+     LEFT JOIN estimates est
+       ON est.project_id = p.id
+      AND est.builder_org_id = requester.organization_id
      WHERE p.id = $1
        AND (
          (
@@ -822,7 +829,7 @@ export async function getProject(projectId: string, userId: string) {
          )
          OR (
            requester.role = 'builder'
-           AND (ui.id IS NOT NULL OR bi.id IS NOT NULL)
+           AND (ui.id IS NOT NULL OR bi.id IS NOT NULL OR est.id IS NOT NULL)
          )
        )
      LIMIT 1`,
