@@ -17,6 +17,7 @@ import AuditTrail from "./pages/architect/AuditTrail";
 import ProjectsList from "./pages/architect/ProjectsList";
 import ProjectDetailsPage from "./pages/architect/ProjectDetailsPage";
 import ComparisonScreen from "./pages/architect/ComparisonScreen";
+import PlanRequirementsModule from "./pages/architect/PlanRequirementsModule";
 import AcceptInvite from "./pages/auth/AcceptInvite";
 import PriceTrackerPage from "./pages/PriceTracker/PriceTrackerPage";
 import EstimationProjectsPage from "./pages/Estimation/EstimationProjectsPage";
@@ -517,6 +518,15 @@ export default function App() {
             element={
               <RequireAuth role="architect">
                 <ProjectsList />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/architect/plan-requirements"
+            element={
+              <RequireAuth role="architect">
+                <PlanRequirementsModule />
               </RequireAuth>
             }
           />

@@ -30,6 +30,7 @@ export default function SubmitEstimate({ embedded = false }: { embedded?: boolea
   const [selectedHistory, setSelectedHistory] = useState<any | null>(null);
   const [selectedEstimateId, setSelectedEstimateId] = useState<string>("");
   const [selectedRevision, setSelectedRevision] = useState<any | null>(null);
+  const [selectedNoteOverlay, setSelectedNoteOverlay] = useState<{ title: string; note: string } | null>(null);
 
   useEffect(() => {
     fetchSubmittedEstimates();
@@ -47,6 +48,19 @@ export default function SubmitEstimate({ embedded = false }: { embedded?: boolea
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedRevision]);
+
+  useEffect(() => {
+    if (!selectedNoteOverlay) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedNoteOverlay(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedNoteOverlay]);
 
   async function fetchSubmittedEstimates() {
     setLoading(true);
@@ -140,6 +154,47 @@ export default function SubmitEstimate({ embedded = false }: { embedded?: boolea
   const cardStyle = embedded ? { ...pageStyles.card, padding: "0" } : pageStyles.card;
   const selectedEstimate = estimates.find((estimate) => estimate.estimate_id === selectedEstimateId) || null;
 
+  function renderNotesCell(note: string | null | undefined, title: string) {
+    const text = String(note || "").trim();
+    if (!text) {
+      return <span>-</span>;
+    }
+
+    return (
+      <div style={{ display: "grid", gap: 6 }}>
+        <span
+          style={{
+            display: "-webkit-box",
+            WebkitLineClamp: 4,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            lineHeight: 1.35,
+            maxHeight: "5.4em",
+          }}
+        >
+          {text}
+        </span>
+        <button
+          type="button"
+          onClick={() => setSelectedNoteOverlay({ title, note: text })}
+          style={{
+            border: "none",
+            background: "transparent",
+            color: "#0f766e",
+            textDecoration: "underline",
+            cursor: "pointer",
+            padding: 0,
+            font: "inherit",
+            fontWeight: 600,
+            justifySelf: "start",
+          }}
+        >
+          More
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={outerStyle}>
       <div style={cardStyle}>
@@ -184,7 +239,7 @@ export default function SubmitEstimate({ embedded = false }: { embedded?: boolea
                     <td className="num-cell" style={{ ...noWrapCellStyle, ...pageStyles.tdPercent }}>{Number(estimate.margin_percent || 0)}%</td>
                     <td className="amount-cell" style={noWrapCellStyle}>{formatINR(estimate.grand_total || 0, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
                     <td style={{ ...noWrapCellStyle, ...pageStyles.tdDateTime }}>{renderDateTime(estimate.submitted_at)}</td>
-                    <td style={wrapCellStyle}>{estimate.notes || "-"}</td>
+                    <td style={wrapCellStyle}>{renderNotesCell(estimate.notes, `${estimate.project_name} - Notes`)}</td>
                     <td style={{ ...noWrapCellStyle, ...pageStyles.tdCenter }}>
                       <button
                         style={pageStyles.secondaryBtn}
@@ -388,6 +443,73 @@ export default function SubmitEstimate({ embedded = false }: { embedded?: boolea
                   </tbody>
                 </table>
               </TableWrapper>
+            </div>
+          </div>
+        )}
+
+        {selectedNoteOverlay && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setSelectedNoteOverlay(null)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(2, 6, 23, 0.45)",
+              zIndex: 1100,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "1rem",
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "min(760px, 96vw)",
+                maxHeight: "85vh",
+                overflow: "auto",
+                background: "#ffffff",
+                borderRadius: "12px",
+                border: "1px solid #cbd5e1",
+                padding: "1rem",
+                display: "grid",
+                gap: "0.75rem",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem" }}>
+                <h3 style={{ margin: 0, color: "#0f172a" }}>{selectedNoteOverlay.title}</h3>
+                <button
+                  type="button"
+                  aria-label="Close notes overlay"
+                  onClick={() => setSelectedNoteOverlay(null)}
+                  style={{
+                    ...pageStyles.secondaryBtn,
+                    minWidth: 34,
+                    width: 34,
+                    height: 34,
+                    padding: 0,
+                    borderRadius: 999,
+                    fontSize: 18,
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              <div
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "8px",
+                  padding: "0.85rem",
+                  color: "#0f172a",
+                  lineHeight: 1.5,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
+              >
+                {selectedNoteOverlay.note}
+              </div>
             </div>
           </div>
         )}

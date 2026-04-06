@@ -5,7 +5,7 @@ import TableWrapper from "../../components/TableWrapper";
 import { getBasePricing } from "../../services/basePricingStore";
 import { apiUrl } from "../../services/api";
 import { formatINR } from "../../services/currency";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 interface Project {
   id: string;
@@ -77,6 +77,107 @@ interface ExpenseRecommendation {
   decision?: "increase" | "decrease" | "base" | "ignored";
 }
 
+type PwdStageId =
+  | "land_preparation"
+  | "foundation"
+  | "superstructure"
+  | "masonry_plaster"
+  | "joinery_flooring"
+  | "painting_finishing";
+
+interface StageMaterialRow {
+  material: string;
+  uom: string;
+  quantity: number;
+}
+
+interface StageBreakdown {
+  id: PwdStageId;
+  label: string;
+  materials: StageMaterialRow[];
+}
+
+interface SubmittedMaterialScreen {
+  projectName: string;
+  revisionNumber: number;
+  grandTotal: number;
+  stages: StageBreakdown[];
+}
+
+interface PwdStageRule {
+  stageId: PwdStageId;
+  label?: string;
+  match: string[];
+  materials: Array<{ material: string; uom: string; factor: number }>;
+}
+
+const PWD_STAGE_ORDER: Array<{ id: PwdStageId; label: string }> = [
+  { id: "land_preparation", label: "Land Preparation" },
+  { id: "foundation", label: "Foundation" },
+  { id: "superstructure", label: "Superstructure (RCC Frame)" },
+  { id: "masonry_plaster", label: "Masonry & Plaster" },
+  { id: "joinery_flooring", label: "Doors, Windows & Flooring" },
+  { id: "painting_finishing", label: "Painting & Final Finishing" },
+];
+
+const PWD_STAGE_RULES: PwdStageRule[] = [
+  {
+    stageId: "land_preparation",
+    match: ["excavation", "earthwork", "filling", "land levelling", "site clearing"],
+    materials: [
+      { material: "Earthwork / Filling", uom: "cum", factor: 1 },
+      { material: "Gravel / Soling", uom: "cum", factor: 0.2 },
+    ],
+  },
+  {
+    stageId: "foundation",
+    match: ["foundation", "footing", "pcc", "rcc footing", "pedestal"],
+    materials: [
+      { material: "Cement", uom: "bags", factor: 6 },
+      { material: "Sand", uom: "cum", factor: 0.45 },
+      { material: "Aggregate", uom: "cum", factor: 0.9 },
+      { material: "Steel", uom: "kg", factor: 12 },
+    ],
+  },
+  {
+    stageId: "superstructure",
+    match: ["column", "beam", "slab", "rcc", "lintel", "stair"],
+    materials: [
+      { material: "Cement", uom: "bags", factor: 7 },
+      { material: "Sand", uom: "cum", factor: 0.5 },
+      { material: "Aggregate", uom: "cum", factor: 1 },
+      { material: "Steel", uom: "kg", factor: 16 },
+    ],
+  },
+  {
+    stageId: "masonry_plaster",
+    match: ["brick", "block", "masonry", "plaster", "pointing"],
+    materials: [
+      { material: "Bricks / Blocks", uom: "nos", factor: 55 },
+      { material: "Cement", uom: "bags", factor: 1.8 },
+      { material: "Sand", uom: "cum", factor: 0.24 },
+    ],
+  },
+  {
+    stageId: "joinery_flooring",
+    match: ["door", "window", "joinery", "tile", "flooring", "granite", "marble", "dado"],
+    materials: [
+      { material: "Doors / Windows Units", uom: "nos", factor: 1 },
+      { material: "Tiles / Stone", uom: "sqm", factor: 1 },
+      { material: "Tile Adhesive", uom: "bags", factor: 0.18 },
+    ],
+  },
+  {
+    stageId: "painting_finishing",
+    match: ["paint", "primer", "putty", "distemper", "polish", "texture", "finishing"],
+    materials: [
+      { material: "Wall Putty", uom: "kg", factor: 0.2 },
+      { material: "Primer", uom: "ltr", factor: 0.1 },
+      { material: "Paint", uom: "ltr", factor: 0.12 },
+    ],
+  },
+];
+
 const FLOATING_BREAKDOWN_WIDTH = 360;
 const FLOATING_BREAKDOWN_COLLAPSED_WIDTH = 220;
 const FLOATING_BREAKDOWN_GAP = 32;
@@ -114,6 +215,7 @@ export default function ApplyBasePricing({
   onSubmitted?: () => void;
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [basePricing, setBasePricing] = useState<BasePriceItem[]>([]);
   const [pwdTemplateRates, setPwdTemplateRates] = useState<BasePriceItem[]>([]);
@@ -137,6 +239,8 @@ export default function ApplyBasePricing({
   const [optimizerBaseRatesByItem, setOptimizerBaseRatesByItem] = useState<Record<number, number>>({});
   const [basicMaterialCost, setBasicMaterialCost] = useState<string>("");
   const [activeRecommendationId, setActiveRecommendationId] = useState<string | null>(null);
+  const [submittedMaterialScreen, setSubmittedMaterialScreen] = useState<SubmittedMaterialScreen | null>(null);
+  const [pwdStageRules, setPwdStageRules] = useState<PwdStageRule[]>(PWD_STAGE_RULES);
   const [isLandscapeWide, setIsLandscapeWide] = useState(false);
   const [isFloatingBreakdownCollapsed, setIsFloatingBreakdownCollapsed] = useState(false);
   const suggestionsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -182,6 +286,7 @@ export default function ApplyBasePricing({
     fetchProjects();
     fetchBasePricing();
     fetchPwdTemplateRates();
+    fetchPwdStageFactors();
     loadMarginConfig();
   }, []);
 
@@ -360,6 +465,51 @@ export default function ApplyBasePricing({
     }
   }
 
+  async function fetchPwdStageFactors() {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(apiUrl("/api/base-pricing/stage-factors"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch PWD stage factors");
+      }
+
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.stages) ? payload.stages : [];
+
+      const allowedStageIds = new Set(PWD_STAGE_ORDER.map((stage) => stage.id));
+      const normalized = rows
+        .map((row: any) => ({
+          stageId: String(row?.stageId || "") as PwdStageId,
+          label: String(row?.label || "").trim() || undefined,
+          match: Array.isArray(row?.match)
+            ? row.match.map((x: any) => String(x || "").trim().toLowerCase()).filter(Boolean)
+            : [],
+          materials: Array.isArray(row?.materials)
+            ? row.materials
+                .map((m: any) => ({
+                  material: String(m?.material || "").trim(),
+                  uom: String(m?.uom || "").trim(),
+                  factor: Number(m?.factor || 0),
+                }))
+                .filter((m: any) => m.material && m.uom && Number.isFinite(m.factor) && m.factor > 0)
+            : [],
+        }))
+        .filter((row: PwdStageRule) =>
+          allowedStageIds.has(row.stageId) && row.match.length > 0 && row.materials.length > 0
+        );
+
+      if (normalized.length > 0) {
+        setPwdStageRules(normalized);
+      }
+    } catch (err) {
+      console.error("Fetch PWD stage factors error:", err);
+      setPwdStageRules(PWD_STAGE_RULES);
+    }
+  }
+
   async function handleProjectChange(projectId: string) {
     setSelectedProjectId(projectId);
     setTargetTotal("");
@@ -474,6 +624,54 @@ export default function ApplyBasePricing({
     if (s.includes("dealer")) return "Scraped (Dealer)";
     if (s.includes("pwd")) return "PWD";
     return "Scraped";
+  }
+
+  function derivePwdStageBreakdown(sourceItems: BOQItem[]): StageBreakdown[] {
+    const stageMap = new Map<string, number>();
+
+    sourceItems.forEach((row) => {
+      const qty = Number(row.qty || 0);
+      if (!Number.isFinite(qty) || qty <= 0) return;
+
+      const name = normalizeText(row.item || "");
+      if (!name) return;
+
+      const matchedRules = pwdStageRules.filter((rule) =>
+        rule.match.some((token) => name.includes(token))
+      );
+
+      if (!matchedRules.length) return;
+
+      matchedRules.forEach((rule) => {
+        rule.materials.forEach((material) => {
+          const derivedQty = qty * material.factor;
+          if (!Number.isFinite(derivedQty) || derivedQty <= 0) return;
+          const key = `${rule.stageId}|${material.material}|${material.uom}`;
+          stageMap.set(key, (stageMap.get(key) || 0) + derivedQty);
+        });
+      });
+    });
+
+    return PWD_STAGE_ORDER.map((stage) => {
+      const materials: StageMaterialRow[] = [];
+      stageMap.forEach((quantity, key) => {
+        const [stageId, material, uom] = key.split("|");
+        if (stageId === stage.id) {
+          materials.push({
+            material,
+            uom,
+            quantity: Number(quantity.toFixed(2)),
+          });
+        }
+      });
+
+      materials.sort((a, b) => b.quantity - a.quantity || a.material.localeCompare(b.material));
+      return {
+        id: stage.id,
+        label: stage.label,
+        materials,
+      };
+    });
   }
 
   function findBestMatch<T extends { item?: string; materialName?: string; uom?: string; unit?: string }>(
@@ -1081,6 +1279,14 @@ export default function ApplyBasePricing({
       const informationalSuffix = previousProjectIncreaseAlert
         ? `\n\nInfo Alert (can be ignored): ${previousProjectIncreaseAlert.itemCount || 0} material rate(s) are > ${Number(previousProjectIncreaseAlert.thresholdPercent || 10).toFixed(2)}% higher than previous project (${previousProjectIncreaseAlert.previousProjectName || "previous project"}).`
         : "";
+
+      const materialScreenPayload: SubmittedMaterialScreen = {
+        projectName: selectedProject?.name || "Selected Project",
+        revisionNumber: Number(result.revisionNumber || 1),
+        grandTotal: Number(result.grandTotal || 0),
+        stages: derivePwdStageBreakdown(pricedItems),
+      };
+
       alert(
         `Estimate submitted successfully!\nRevision: ${result.revisionNumber}\nGrand Total: ${formatINR(result.grandTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${informationalSuffix}`
       );
@@ -1088,6 +1294,7 @@ export default function ApplyBasePricing({
       // Refresh projects to update status
       fetchProjects();
       onSubmitted?.();
+      setSubmittedMaterialScreen(materialScreenPayload);
       
       // Clear form
       setSelectedProjectId("");
@@ -1353,6 +1560,68 @@ export default function ApplyBasePricing({
 
   const outerStyle = embedded ? { display: "block" as const } : pageStyles.page;
   const cardStyle = embedded ? { ...pageStyles.card, padding: "0" } : pageStyles.card;
+
+  if (submittedMaterialScreen) {
+    return (
+      <div style={outerStyle}>
+        <div style={cardStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+            <div>
+              <h2 style={pageStyles.title}>PWD Basic Material Requirement</h2>
+              <p style={pageStyles.subtitle}>
+                {submittedMaterialScreen.projectName} • Revision {submittedMaterialScreen.revisionNumber} • {formatINR(submittedMaterialScreen.grandTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+              <button type="button" style={pageStyles.secondaryBtn} onClick={() => navigate("/builder/submit")}>View Submissions</button>
+              <button type="button" style={pageStyles.secondaryBtn} onClick={() => setSubmittedMaterialScreen(null)}>Create Another Estimate</button>
+              <button type="button" style={pageStyles.primaryBtn} onClick={() => navigate("/builder")}>Back To Dashboard</button>
+            </div>
+          </div>
+
+          <div style={{ ...pageStyles.result, marginTop: "1rem" }}>
+            Stage-wise quantities are derived using PWD-style item-to-material factors from your submitted BOQ lines.
+          </div>
+
+          <div style={{ display: "grid", gap: "1rem", marginTop: "1rem" }}>
+            {submittedMaterialScreen.stages.map((stage) => (
+              <div key={stage.id} style={{ border: "1px solid #ccfbf1", borderRadius: "10px", overflow: "hidden" }}>
+                <div style={{ background: "#f0fdfa", borderBottom: "1px solid #ccfbf1", padding: "0.75rem 0.9rem", fontWeight: 700, color: "#0f766e" }}>
+                  {stage.label}
+                </div>
+                <TableWrapper>
+                  <table style={{ ...pageStyles.table, margin: 0, border: "none" }}>
+                    <thead>
+                      <tr>
+                        <th style={pageStyles.th}>Material</th>
+                        <th style={pageStyles.th}>UOM</th>
+                        <th className="num-header" style={pageStyles.th}>Quantity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stage.materials.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} style={pageStyles.empty}>No derived material quantities for this stage from current BOQ items.</td>
+                        </tr>
+                      ) : (
+                        stage.materials.map((row, idx) => (
+                          <tr key={`${stage.id}-${row.material}-${idx}`} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                            <td style={pageStyles.td}>{row.material}</td>
+                            <td style={{ ...pageStyles.td, textAlign: "center" }}>{row.uom}</td>
+                            <td className="num-cell" style={{ ...pageStyles.td, textAlign: "right", fontWeight: 600 }}>{row.quantity.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </TableWrapper>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={outerStyle}>

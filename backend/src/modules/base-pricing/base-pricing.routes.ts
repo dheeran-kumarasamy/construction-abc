@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import {
   getBasePricingTemplate,
+  getPwdStageFactors,
   parseBasePricing,
   uploadBasePricingFile,
 } from "./base-pricing.controller";
@@ -30,6 +31,9 @@ const upload = multer({ storage });
 
 // Get pre-populated starter template based on boq-base calculator rates
 router.get("/template", getBasePricingTemplate);
+
+// Get PWD stage/material quantity factors for post-submit breakdown
+router.get("/stage-factors", getPwdStageFactors);
 
 // Parse base pricing file - returns preview and suggested columns
 router.post("/parse", upload.single("file"), parseBasePricing);

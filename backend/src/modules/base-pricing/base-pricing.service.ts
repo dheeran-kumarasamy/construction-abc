@@ -76,6 +76,83 @@ const FALLBACK_BOQ_RATE_TEMPLATE: Record<string, number> = {
   frpManholecover2x2: 5200,
 };
 
+interface PwdStageMaterialFactor {
+  material: string;
+  uom: string;
+  factor: number;
+}
+
+interface PwdStageFactor {
+  stageId: string;
+  label: string;
+  match: string[];
+  materials: PwdStageMaterialFactor[];
+}
+
+const PWD_STAGE_FACTORS: PwdStageFactor[] = [
+  {
+    stageId: "land_preparation",
+    label: "Land Preparation",
+    match: ["excavation", "earthwork", "filling", "land levelling", "site clearing"],
+    materials: [
+      { material: "Earthwork / Filling", uom: "cum", factor: 1 },
+      { material: "Gravel / Soling", uom: "cum", factor: 0.2 },
+    ],
+  },
+  {
+    stageId: "foundation",
+    label: "Foundation",
+    match: ["foundation", "footing", "pcc", "rcc footing", "pedestal"],
+    materials: [
+      { material: "Cement", uom: "bags", factor: 6 },
+      { material: "Sand", uom: "cum", factor: 0.45 },
+      { material: "Aggregate", uom: "cum", factor: 0.9 },
+      { material: "Steel", uom: "kg", factor: 12 },
+    ],
+  },
+  {
+    stageId: "superstructure",
+    label: "Superstructure (RCC Frame)",
+    match: ["column", "beam", "slab", "rcc", "lintel", "stair"],
+    materials: [
+      { material: "Cement", uom: "bags", factor: 7 },
+      { material: "Sand", uom: "cum", factor: 0.5 },
+      { material: "Aggregate", uom: "cum", factor: 1 },
+      { material: "Steel", uom: "kg", factor: 16 },
+    ],
+  },
+  {
+    stageId: "masonry_plaster",
+    label: "Masonry & Plaster",
+    match: ["brick", "block", "masonry", "plaster", "pointing"],
+    materials: [
+      { material: "Bricks / Blocks", uom: "nos", factor: 55 },
+      { material: "Cement", uom: "bags", factor: 1.8 },
+      { material: "Sand", uom: "cum", factor: 0.24 },
+    ],
+  },
+  {
+    stageId: "joinery_flooring",
+    label: "Doors, Windows & Flooring",
+    match: ["door", "window", "joinery", "tile", "flooring", "granite", "marble", "dado"],
+    materials: [
+      { material: "Doors / Windows Units", uom: "nos", factor: 1 },
+      { material: "Tiles / Stone", uom: "sqm", factor: 1 },
+      { material: "Tile Adhesive", uom: "bags", factor: 0.18 },
+    ],
+  },
+  {
+    stageId: "painting_finishing",
+    label: "Painting & Final Finishing",
+    match: ["paint", "primer", "putty", "distemper", "polish", "texture", "finishing"],
+    materials: [
+      { material: "Wall Putty", uom: "kg", factor: 0.2 },
+      { material: "Primer", uom: "ltr", factor: 0.1 },
+      { material: "Paint", uom: "ltr", factor: 0.12 },
+    ],
+  },
+];
+
 interface ColumnMapping {
   item: string;
   rate: string;
@@ -334,6 +411,12 @@ export function getBasePricingStarterTemplate() {
     columns: ["Item Name", "Rate", "UOM", "Category", "Source Key"],
     rows,
     csv: toCsv(rows),
+  };
+}
+
+export function getPwdStageFactorTemplate() {
+  return {
+    stages: PWD_STAGE_FACTORS,
   };
 }
 

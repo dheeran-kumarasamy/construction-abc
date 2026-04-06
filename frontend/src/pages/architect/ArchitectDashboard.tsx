@@ -45,7 +45,16 @@ export default function ArchitectDashboard() {
     <div style={pageStyles.page}>
       <div style={pageStyles.card}>
         <div style={pageStyles.header}>
-          <h2 style={pageStyles.title}>Architect Dashboard</h2>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, width: "100%", flexWrap: "wrap" }}>
+            <h2 style={pageStyles.title}>Architect Dashboard</h2>
+            <button
+              type="button"
+              style={pageStyles.secondaryBtn}
+              onClick={() => navigate("/architect/plan-requirements")}
+            >
+              2D Plan & Requirements
+            </button>
+          </div>
         </div>
         {loading && <div>Loading projects...</div>}
         {error && <div style={{ color: "#dc2626" }}>{error}</div>}
