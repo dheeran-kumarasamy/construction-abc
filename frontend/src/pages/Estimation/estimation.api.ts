@@ -13,16 +13,37 @@ import type {
   ProjectSummary,
 } from "./types";
 
+let authRedirectTriggered = false;
+
+function clearSessionAndRedirectToLogin() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("role");
+  localStorage.removeItem("auth_user");
+  localStorage.removeItem("builder_profile_complete");
+
+  if (typeof window !== "undefined" && !authRedirectTriggered) {
+    authRedirectTriggered = true;
+    window.location.replace("/login");
+  }
+}
+
 function authHeaders(): HeadersInit {
   const token = localStorage.getItem("token");
+  if (!token) {
+    clearSessionAndRedirectToLogin();
+    throw new Error("Missing or invalid Authorization header");
+  }
   return {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    Authorization: `Bearer ${token}`,
   };
 }
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    if (res.status === 401) {
+      clearSessionAndRedirectToLogin();
+    }
     const body = await res.json().catch(() => ({}));
     throw new Error((body as any).error || `HTTP ${res.status}`);
   }
