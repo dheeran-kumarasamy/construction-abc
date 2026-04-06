@@ -90,6 +90,9 @@ export default function ProjectsList() {
             <button style={pageStyles.secondaryBtn} onClick={() => navigate("/architect/builders")}>
               Browse Builders
             </button>
+            <button style={pageStyles.secondaryBtn} onClick={() => navigate("/architect/plan-requirements")}>
+              2D Plan & Requirements
+            </button>
             {isArchitectHead ? (
               <button
                 style={pageStyles.secondaryBtn}

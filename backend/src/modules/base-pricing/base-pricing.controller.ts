@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import {
   getBasePricingStarterTemplate,
+  getPwdStageFactorTemplate,
   parseBasePricingFile,
   uploadBasePricing,
 } from "./base-pricing.service";
@@ -31,6 +32,18 @@ export async function parseBasePricing(req: Request, res: Response) {
     console.error("Parse base pricing error:", error);
     return res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to parse file",
+    });
+  }
+}
+
+export async function getPwdStageFactors(req: Request, res: Response) {
+  try {
+    const payload = getPwdStageFactorTemplate();
+    return res.json(payload);
+  } catch (error) {
+    console.error("Get PWD stage factors error:", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to load stage factors",
     });
   }
 }
