@@ -51,12 +51,15 @@ export default function CreateProject() {
       setLoading(true);
 
       const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Session expired. Please log in again.");
+      }
 
       const res = await fetch(apiUrl("/projects"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           name: projectName,
@@ -66,6 +69,15 @@ export default function CreateProject() {
           durationMonths,
         }),
       });
+
+      if (res.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("role");
+        localStorage.removeItem("auth_user");
+        localStorage.removeItem("builder_profile_complete");
+        navigate("/login", { replace: true });
+        return;
+      }
 
       const data = await res.json();
 
