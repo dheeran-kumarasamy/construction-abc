@@ -9,6 +9,53 @@ import { useAuth } from "../../auth/AuthContext";
 import { formatINR } from "../../services/currency";
 import { formatDate } from "../../services/dateTime";
 
+const BOQ_DRAFT_STORAGE_PREFIX = "boq_workspace_draft:";
+
+type BOQDraft = {
+  rows: BOQRow[];
+  savedAt: number;
+};
+
+function getDraftStorageKey(projectId: string) {
+  return `${BOQ_DRAFT_STORAGE_PREFIX}${projectId}`;
+}
+
+function hasMeaningfulDraftRows(rows: BOQRow[]) {
+  return rows.some((row) => {
+    const quantity = String(row.quantity || "").trim();
+    if ("customId" in row) {
+      const name = String(row.customName || "").trim();
+      return Boolean(name || quantity);
+    }
+
+    return Boolean(quantity);
+  });
+}
+
+function readDraft(projectId: string): BOQDraft | null {
+  try {
+    const raw = localStorage.getItem(getDraftStorageKey(projectId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<BOQDraft>;
+    if (!Array.isArray(parsed.rows) || typeof parsed.savedAt !== "number") return null;
+    return { rows: parsed.rows as BOQRow[], savedAt: parsed.savedAt };
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(projectId: string, rows: BOQRow[]) {
+  const payload: BOQDraft = {
+    rows,
+    savedAt: Date.now(),
+  };
+  localStorage.setItem(getDraftStorageKey(projectId), JSON.stringify(payload));
+}
+
+function clearDraft(projectId: string) {
+  localStorage.removeItem(getDraftStorageKey(projectId));
+}
+
 
 type BOQRow =
   | { template: RateTemplate; quantity: string; uom: string; rate?: number; amount?: number }
@@ -91,6 +138,8 @@ export default function BOQWorkspacePage() {
   const [boqError, setBoqError] = useState<string>("");
   const [hasExistingBoq, setHasExistingBoq] = useState<boolean>(false);
   const [isEditingBoq, setIsEditingBoq] = useState<boolean>(!isViewMode);
+  const [lastAutoSavedAt, setLastAutoSavedAt] = useState<number | null>(null);
+  const [restoredFromAutoSave, setRestoredFromAutoSave] = useState<boolean>(false);
   const [marketDistricts, setMarketDistricts] = useState<api.MarketDistrict[]>([]);
   const [marketCategories, setMarketCategories] = useState<api.MarketCategory[]>([]);
   const [selectedDistrictId, setSelectedDistrictId] = useState<string>("");
@@ -112,6 +161,8 @@ export default function BOQWorkspacePage() {
   useEffect(() => {
     setIsEditingBoq(!isViewMode);
     setEstimate(null);
+    setRestoredFromAutoSave(false);
+    setLastAutoSavedAt(null);
   }, [isViewMode, projectId]);
 
   useEffect(() => {
@@ -134,15 +185,22 @@ export default function BOQWorkspacePage() {
           }
         } else {
           setHasExistingBoq(false);
-          setBoqRows(
-            tmpls.map((t) => ({
-              template: t,
-              quantity: "",
-              uom: t.unit || UOM_OPTIONS[0],
-              rate: undefined,
-              amount: undefined,
-            }))
-          );
+          const defaultRows: BOQRow[] = tmpls.map((t) => ({
+            template: t,
+            quantity: "",
+            uom: t.unit || UOM_OPTIONS[0],
+            rate: undefined,
+            amount: undefined,
+          }));
+
+          const draft = projectId ? readDraft(projectId) : null;
+          if (draft?.rows?.length) {
+            setBoqRows(draft.rows);
+            setRestoredFromAutoSave(true);
+            setLastAutoSavedAt(draft.savedAt);
+          } else {
+            setBoqRows(defaultRows);
+          }
         }
       } catch (err) {
         if (!isAuthMissingError(err)) {
@@ -223,6 +281,25 @@ export default function BOQWorkspacePage() {
     loadMarketRates();
   }, [isArchitectFlow, selectedDistrictId, selectedCategoryName]);
 
+  useEffect(() => {
+    if (!projectId || isViewMode || !isEditingBoq) return;
+
+    const persistDraft = () => {
+      if (!hasMeaningfulDraftRows(boqRows)) return;
+      writeDraft(projectId, boqRows);
+      setLastAutoSavedAt(Date.now());
+    };
+
+    const intervalId = window.setInterval(persistDraft, 30_000);
+    const onBeforeUnload = () => persistDraft();
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [projectId, isViewMode, isEditingBoq, boqRows]);
+
   if (loading) {
     return (
       <div style={{ ...pageStyles.page, alignItems: "flex-start", paddingTop: 32 }}>
@@ -271,6 +348,16 @@ export default function BOQWorkspacePage() {
           )}
         </div>
         {boqError && <div style={{ ...pageStyles.error, marginTop: 12 }}>{boqError}</div>}
+        {!isViewMode && restoredFromAutoSave && lastAutoSavedAt ? (
+          <div style={{ marginTop: 10, color: "#0f766e", fontSize: 13, fontWeight: 600 }}>
+            Restored auto-saved BOQ draft from {formatDate(new Date(lastAutoSavedAt))}
+          </div>
+        ) : null}
+        {!isViewMode && isEditingBoq && lastAutoSavedAt ? (
+          <div style={{ marginTop: 6, color: "#64748b", fontSize: 12 }}>
+            Auto-saved every 30 seconds. Last saved at {formatDate(new Date(lastAutoSavedAt))}
+          </div>
+        ) : null}
         <div style={{ margin: "24px 0" }}>
           <table style={{ ...pageStyles.table, fontSize: 13 }}>
             <thead>
@@ -451,6 +538,7 @@ export default function BOQWorkspacePage() {
                 if (isViewMode && projectId) {
                   const items = boqRows.map(toSubmittedItem).filter((row): row is api.SubmittedBOQItem => Boolean(row));
                   await api.updateSubmittedBOQ(projectId, items);
+                  clearDraft(projectId);
                   alert("BOQ updated successfully!");
                   setHasExistingBoq(items.length > 0);
                   setBoqRows(mapSubmittedItemsToRows(items, templates));
@@ -469,12 +557,13 @@ export default function BOQWorkspacePage() {
                   .filter((row): row is api.SubmittedBOQItem => Boolean(row));
 
                 if (!items.length) {
-                  alert("Please fill in at least one item quantity before submitting.");
+                  alert("Please fill in at least one item quantity before saving.");
                   return;
                 }
 
                 await api.submitNewBOQ(projectId, items);
-                alert("BOQ submitted successfully!");
+                clearDraft(projectId);
+                alert("BOQ saved successfully!");
                 navigate(backPath);
               } finally {
                 setSubmitting(false);
@@ -482,7 +571,7 @@ export default function BOQWorkspacePage() {
             }}
             disabled={submitting || loading}
           >
-            {isViewMode ? "Save Updated BOQ" : "Submit BOQ"}
+            {isViewMode ? "Save Updated BOQ" : "Save BOQ"}
           </button>
         </div>
         )}

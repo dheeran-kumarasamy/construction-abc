@@ -87,22 +87,22 @@ export default function ProjectsList() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
             <ConstructionIllustration type="building" size={80} />
+            <button style={pageStyles.primaryBtn} onClick={() => navigate("/architect/create")}>
+              New Project
+            </button>
             <button style={pageStyles.secondaryBtn} onClick={() => navigate("/architect/builders")}>
               Browse Builders
-            </button>
-            <button style={pageStyles.secondaryBtn} onClick={() => navigate("/architect/plan-requirements")}>
-              2D Plan & Requirements
             </button>
             {isArchitectHead ? (
               <button
                 style={pageStyles.secondaryBtn}
                 onClick={() => navigate("/architect/invite?role=architect")}
               >
-                Invite Architects
+                Architect Team Invite
               </button>
             ) : null}
-            <button style={pageStyles.primaryBtn} onClick={() => navigate("/architect/create")}>
-              New Project
+            <button style={pageStyles.secondaryBtn} onClick={() => navigate("/architect/plan-requirements")}>
+              2D Plan & Requirements
             </button>
           </div>
         </div>
