@@ -65,6 +65,11 @@ function toSubmittedItem(row: BOQRow): api.SubmittedBOQItem | null {
   };
 }
 
+function isAuthMissingError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err || "");
+  return /missing or invalid authorization header|unauthorized|invalid token/i.test(message);
+}
+
 
 
 
@@ -140,7 +145,9 @@ export default function BOQWorkspacePage() {
           );
         }
       } catch (err) {
-        console.error("Failed to load project/templates:", err);
+        if (!isAuthMissingError(err)) {
+          console.error("Failed to load project/templates:", err);
+        }
         if (isViewMode) {
           setBoqError("Unable to load the submitted BOQ for this project.");
           setBoqRows([]);
@@ -183,7 +190,9 @@ export default function BOQWorkspacePage() {
           setSelectedCategoryName(categories[0].name);
         }
       } catch (err) {
-        console.error("Failed to load market rate filters:", err);
+        if (!isAuthMissingError(err)) {
+          console.error("Failed to load market rate filters:", err);
+        }
       }
     }
 
@@ -202,7 +211,9 @@ export default function BOQWorkspacePage() {
         const rows = await api.fetchMarketDistrictCategoryPrices(selectedDistrictId, selectedCategoryName);
         setMarketRates(rows);
       } catch (err) {
-        console.error("Failed to load market rates:", err);
+        if (!isAuthMissingError(err)) {
+          console.error("Failed to load market rates:", err);
+        }
         setMarketRates([]);
       } finally {
         setLoadingRates(false);
