@@ -1,3 +1,27 @@
+type DbQueryClient = { query: (text: string, params?: any[]) => Promise<any> };
+
+let templateLineItemColumnsCache: { wastageColumn: string; remarksColumn: string } | null = null;
+
+async function resolveTemplateLineItemColumns(client: DbQueryClient = pool) {
+  if (templateLineItemColumnsCache) {
+    return templateLineItemColumnsCache;
+  }
+
+  const result = await client.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'template_line_items'`
+  );
+
+  const columns = new Set((result.rows || []).map((row: any) => String(row.column_name || "").toLowerCase()));
+
+  const wastageColumn = columns.has("wastage_percent") ? "wastage_percent" : "wastage_override";
+  const remarksColumn = columns.has("remarks") ? "remarks" : "notes";
+
+  templateLineItemColumnsCache = { wastageColumn, remarksColumn };
+  return templateLineItemColumnsCache;
+}
 import pool from "../../db/pool";
 import { computeRate, computeRateBatch, priceLookup } from "../../services/rateEngine";
 import { ComputeRateInput } from "../../services/rateEngine/types";
@@ -209,10 +233,12 @@ export async function createCustomLineItemTemplateRequest(
     );
 
     const template = createdTemplate.rows[0];
+    const { wastageColumn, remarksColumn } = await resolveTemplateLineItemColumns(client);
+
     await client.query(
       `INSERT INTO template_line_items (
         template_id, resource_id, sub_template_id,
-        coefficient, wastage_percent, remarks, sort_order
+        coefficient, ${wastageColumn}, ${remarksColumn}, sort_order
       )
       VALUES ($1,$2,NULL,$3,$4,$5,1)`,
       [
@@ -236,6 +262,7 @@ export async function createCustomLineItemTemplateRequest(
 }
 
 export async function listPendingTemplateApprovals() {
+  const { wastageColumn, remarksColumn } = await resolveTemplateLineItemColumns();
   const { rows } = await pool.query(
     `SELECT rt.id, rt.code, rt.name, rt.category, rt.sub_category, rt.unit,
             rt.overhead_percent, rt.profit_percent, rt.gst_percent,
@@ -247,7 +274,8 @@ export async function listPendingTemplateApprovals() {
             tli.resource_id,
             tli.coefficient,
             tli.wastage_percent,
-            tli.remarks,
+            tli.${wastageColumn} AS wastage_percent,
+            tli.${remarksColumn} AS remarks,
             r.name AS resource_name,
             r.unique_code AS resource_code
      FROM rate_templates rt
@@ -378,13 +406,15 @@ export async function addLineItem(templateId: string, data: {
   wastage_percent?: number;
   remarks?: string;
 }) {
+  const { wastageColumn, remarksColumn } = await resolveTemplateLineItemColumns();
+
   // Get max sort order
   const { rows: [maxRow] } = await pool.query(
     `SELECT COALESCE(MAX(sort_order), 0) + 1 as next FROM template_line_items WHERE template_id = $1`,
     [templateId]
   );
   const { rows } = await pool.query(
-    `INSERT INTO template_line_items (template_id, resource_id, sub_template_id, coefficient, wastage_percent, remarks, sort_order)
+    `INSERT INTO template_line_items (template_id, resource_id, sub_template_id, coefficient, ${wastageColumn}, ${remarksColumn}, sort_order)
      VALUES ($1,$2,$3,$4,$5,$6,$7)
      RETURNING *`,
     [templateId, data.resource_id || null, data.sub_template_id || null,
@@ -402,11 +432,14 @@ export async function updateLineItem(lineItemId: string, data: {
   remarks?: string;
   sort_order?: number;
 }) {
+  const { wastageColumn, remarksColumn } = await resolveTemplateLineItemColumns();
+
   const fields: string[] = [];
   const params: any[] = [];
   let idx = 1;
-  for (const [key, val] of Object.entries(data)) {
+  for (const [rawKey, val] of Object.entries(data)) {
     if (val !== undefined) {
+      const key = rawKey === "wastage_percent" ? wastageColumn : rawKey === "remarks" ? remarksColumn : rawKey;
       fields.push(`${key} = $${idx++}`);
       params.push(val);
     }
