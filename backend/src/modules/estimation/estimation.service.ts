@@ -777,8 +777,9 @@ export async function getProject(projectId: string, userId: string) {
     return sourceRes.rows[0];
   }
 
-  // 3) Architect fallback: if caller passed projects.id, seed boq_projects row on demand
-  const architectSourceRes = await pool.query(
+  // 3) Source project fallback: if caller passed projects.id, seed boq_projects row on demand.
+  // Supports architect-owned projects and builder-invited projects.
+  const sourceProjectRes = await pool.query(
     `SELECT p.id, p.name, p.description,
             pr.site_address AS project_location
      FROM projects p
@@ -791,20 +792,44 @@ export async function getProject(projectId: string, userId: string) {
        ORDER BY revision_number DESC
        LIMIT 1
      ) pr ON true
+     LEFT JOIN user_invites ui
+       ON ui.project_id = p.id
+      AND ui.role = 'builder'
+      AND (
+        ui.user_id = requester.id
+        OR LOWER(TRIM(ui.email)) = LOWER(TRIM(requester.email))
+        OR (
+          ui.organization_id IS NOT NULL
+          AND ui.organization_id = requester.organization_id
+        )
+      )
+      AND (ui.accepted_at IS NOT NULL OR ui.expires_at > NOW())
+     LEFT JOIN builder_invitations bi
+       ON bi.project_id = p.id
+      AND bi.builder_org_id = requester.organization_id
+      AND bi.status IN ('pending', 'accepted')
      WHERE p.id = $1
-       AND requester.role = 'architect'
        AND (
-         p.architect_id = requester.id
+         (
+           requester.role = 'architect'
+           AND (
+             p.architect_id = requester.id
+             OR (
+               requester.organization_id IS NOT NULL
+               AND requester.organization_id = project_architect.organization_id
+             )
+           )
+         )
          OR (
-           requester.organization_id IS NOT NULL
-           AND requester.organization_id = project_architect.organization_id
+           requester.role = 'builder'
+           AND (ui.id IS NOT NULL OR bi.id IS NOT NULL)
          )
        )
      LIMIT 1`,
     [projectId, userId]
   );
 
-  const sourceProject = architectSourceRes.rows[0];
+  const sourceProject = sourceProjectRes.rows[0];
   if (!sourceProject) {
     return null;
   }
