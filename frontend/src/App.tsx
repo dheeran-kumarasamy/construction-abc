@@ -37,6 +37,7 @@ import AdminBOQsPage from "./pages/admin/AdminBOQsPage";
 import AdminEstimationProjectsPage from "./pages/admin/AdminEstimationProjectsPage";
 import AdminEstimatesPage from "./pages/admin/AdminEstimatesPage";
 import FingerInAirEstimator from "./components/FingerInAirEstimator";
+import { BackButton } from "./components/BackButton";
 
 // Auth
 import LoginPage from "./pages/Login";
@@ -332,6 +333,7 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <FlowBackgroundController />
+        <BackButton />
         <DashboardButton />
         <Routes>
           {/* Public */}
