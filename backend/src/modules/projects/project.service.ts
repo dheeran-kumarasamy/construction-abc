@@ -8,6 +8,9 @@ interface CreateProjectInput {
   longitude?: number;
   startDate: string;
   durationMonths: number;
+  buildingType: string;
+  floorsAboveGround: number;
+  floorsBelowGround: number;
   userId: string | null;
 }
 
@@ -35,8 +38,11 @@ export async function createProjectWithRevision(input: CreateProjectInput) {
         longitude,
         tentative_start_date,
         duration_months,
+        building_type,
+        floors_above_ground,
+        floors_below_ground,
         issued_by
-      ) VALUES ($1, 1, $2, $3, $4, $5, $6, $7)`,
+      ) VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         projectId,
         input.siteAddress,
@@ -44,6 +50,9 @@ export async function createProjectWithRevision(input: CreateProjectInput) {
         input.longitude || null,
         input.startDate,
         input.durationMonths,
+        input.buildingType,
+        input.floorsAboveGround,
+        input.floorsBelowGround,
         input.userId,
       ]
     );
@@ -129,11 +138,14 @@ export async function getProjects(architectId: string | null) {
            p.boq_id,
            pr.site_address,
            pr.tentative_start_date,
-           pr.duration_months
+           pr.duration_months,
+           pr.building_type,
+           pr.floors_above_ground,
+           pr.floors_below_ground
          FROM projects p
          JOIN users project_architect ON project_architect.id = p.architect_id
          LEFT JOIN LATERAL (
-           SELECT site_address, tentative_start_date, duration_months
+           SELECT site_address, tentative_start_date, duration_months, building_type, floors_above_ground, floors_below_ground
            FROM project_revisions
            WHERE project_id = p.id
            ORDER BY revision_number DESC
@@ -158,10 +170,13 @@ export async function getProjects(architectId: string | null) {
            p.boq_id,
            pr.site_address,
            pr.tentative_start_date,
-           pr.duration_months
+           pr.duration_months,
+           pr.building_type,
+           pr.floors_above_ground,
+           pr.floors_below_ground
          FROM projects p
          LEFT JOIN LATERAL (
-           SELECT site_address, tentative_start_date, duration_months
+           SELECT site_address, tentative_start_date, duration_months, building_type, floors_above_ground, floors_below_ground
            FROM project_revisions
            WHERE project_id = p.id
            ORDER BY revision_number DESC
@@ -199,10 +214,13 @@ export async function getProjects(architectId: string | null) {
        p.boq_id,
        pr.site_address,
        pr.tentative_start_date,
-       pr.duration_months
+       pr.duration_months,
+       pr.building_type,
+       pr.floors_above_ground,
+       pr.floors_below_ground
      FROM projects p
      LEFT JOIN LATERAL (
-       SELECT site_address, tentative_start_date, duration_months
+       SELECT site_address, tentative_start_date, duration_months, building_type, floors_above_ground, floors_below_ground
        FROM project_revisions
        WHERE project_id = p.id
        ORDER BY revision_number DESC
