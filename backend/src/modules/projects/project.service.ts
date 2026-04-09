@@ -1,5 +1,24 @@
 import { pool } from "../../config/db";
 
+let hasBuildingMetadataColumnsCache: boolean | null = null;
+
+async function hasBuildingMetadataColumns() {
+  if (hasBuildingMetadataColumnsCache !== null) {
+    return hasBuildingMetadataColumnsCache;
+  }
+
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS count
+     FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = 'project_revisions'
+       AND column_name IN ('building_type', 'floors_above_ground', 'floors_below_ground')`
+  );
+
+  hasBuildingMetadataColumnsCache = Number(rows[0]?.count || 0) >= 3;
+  return hasBuildingMetadataColumnsCache;
+}
+
 interface CreateProjectInput {
   name: string;
   description?: string;
@@ -16,6 +35,7 @@ interface CreateProjectInput {
 
 export async function createProjectWithRevision(input: CreateProjectInput) {
   const client = await pool.connect();
+  const hasBuildingMetadata = await hasBuildingMetadataColumns();
 
   try {
     await client.query("BEGIN");
@@ -29,33 +49,57 @@ export async function createProjectWithRevision(input: CreateProjectInput) {
 
     const projectId = projectRes.rows[0].id;
 
-    await client.query(
-      `INSERT INTO project_revisions (
-        project_id,
-        revision_number,
-        site_address,
-        latitude,
-        longitude,
-        tentative_start_date,
-        duration_months,
-        building_type,
-        floors_above_ground,
-        floors_below_ground,
-        issued_by
-      ) VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        projectId,
-        input.siteAddress,
-        input.latitude || null,
-        input.longitude || null,
-        input.startDate,
-        input.durationMonths,
-        input.buildingType,
-        input.floorsAboveGround,
-        input.floorsBelowGround,
-        input.userId,
-      ]
-    );
+    if (hasBuildingMetadata) {
+      await client.query(
+        `INSERT INTO project_revisions (
+          project_id,
+          revision_number,
+          site_address,
+          latitude,
+          longitude,
+          tentative_start_date,
+          duration_months,
+          building_type,
+          floors_above_ground,
+          floors_below_ground,
+          issued_by
+        ) VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          projectId,
+          input.siteAddress,
+          input.latitude || null,
+          input.longitude || null,
+          input.startDate,
+          input.durationMonths,
+          input.buildingType,
+          input.floorsAboveGround,
+          input.floorsBelowGround,
+          input.userId,
+        ]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO project_revisions (
+          project_id,
+          revision_number,
+          site_address,
+          latitude,
+          longitude,
+          tentative_start_date,
+          duration_months,
+          issued_by
+        ) VALUES ($1, 1, $2, $3, $4, $5, $6, $7)`,
+        [
+          projectId,
+          input.siteAddress,
+          input.latitude || null,
+          input.longitude || null,
+          input.startDate,
+          input.durationMonths,
+          input.userId,
+        ]
+      );
+    }
 
     await client.query(
       `INSERT INTO audit_logs (project_id, user_id, action, metadata)
@@ -75,6 +119,31 @@ export async function createProjectWithRevision(input: CreateProjectInput) {
 }
 
 export async function getProjects(architectId: string | null) {
+  const hasBuildingMetadata = await hasBuildingMetadataColumns();
+
+  const buildingProjection = hasBuildingMetadata
+    ? `pr.building_type,
+           pr.floors_above_ground,
+           pr.floors_below_ground`
+    : `NULL::text AS building_type,
+           NULL::int AS floors_above_ground,
+           NULL::int AS floors_below_ground`;
+
+  const revisionProjection = hasBuildingMetadata
+    ? `SELECT site_address, tentative_start_date, duration_months, building_type, floors_above_ground, floors_below_ground
+           FROM project_revisions
+           WHERE project_id = p.id
+           ORDER BY revision_number DESC
+           LIMIT 1`
+    : `SELECT site_address, tentative_start_date, duration_months,
+              NULL::text AS building_type,
+              NULL::int AS floors_above_ground,
+              NULL::int AS floors_below_ground
+           FROM project_revisions
+           WHERE project_id = p.id
+           ORDER BY revision_number DESC
+           LIMIT 1`;
+
   if (!architectId) {
     return [];
   }
@@ -139,17 +208,11 @@ export async function getProjects(architectId: string | null) {
            pr.site_address,
            pr.tentative_start_date,
            pr.duration_months,
-           pr.building_type,
-           pr.floors_above_ground,
-           pr.floors_below_ground
+           ${buildingProjection}
          FROM projects p
          JOIN users project_architect ON project_architect.id = p.architect_id
          LEFT JOIN LATERAL (
-           SELECT site_address, tentative_start_date, duration_months, building_type, floors_above_ground, floors_below_ground
-           FROM project_revisions
-           WHERE project_id = p.id
-           ORDER BY revision_number DESC
-           LIMIT 1
+           ${revisionProjection}
          ) pr ON true
          WHERE project_architect.organization_id = $1
             OR p.architect_id = $2
@@ -171,16 +234,10 @@ export async function getProjects(architectId: string | null) {
            pr.site_address,
            pr.tentative_start_date,
            pr.duration_months,
-           pr.building_type,
-           pr.floors_above_ground,
-           pr.floors_below_ground
+           ${buildingProjection}
          FROM projects p
          LEFT JOIN LATERAL (
-           SELECT site_address, tentative_start_date, duration_months, building_type, floors_above_ground, floors_below_ground
-           FROM project_revisions
-           WHERE project_id = p.id
-           ORDER BY revision_number DESC
-           LIMIT 1
+           ${revisionProjection}
          ) pr ON true
          WHERE (
            -- Project they created
@@ -215,16 +272,10 @@ export async function getProjects(architectId: string | null) {
        pr.site_address,
        pr.tentative_start_date,
        pr.duration_months,
-       pr.building_type,
-       pr.floors_above_ground,
-       pr.floors_below_ground
+       ${buildingProjection}
      FROM projects p
      LEFT JOIN LATERAL (
-       SELECT site_address, tentative_start_date, duration_months, building_type, floors_above_ground, floors_below_ground
-       FROM project_revisions
-       WHERE project_id = p.id
-       ORDER BY revision_number DESC
-       LIMIT 1
+       ${revisionProjection}
      ) pr ON true
      WHERE p.architect_id = $1
      ORDER BY p.created_at DESC`,
