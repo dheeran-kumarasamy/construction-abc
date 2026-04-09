@@ -405,7 +405,7 @@ export async function getProjectSummary(req: Request, res: Response) {
 export async function exportProject(req: Request, res: Response) {
   try {
     const userId = getUserId(req);
-    const { exportProjectExcel } = await import("./excelExport");
+    const { exportProjectExcel } = await import("./excelExport.js");
     await exportProjectExcel(param(req, "projectId"), userId, res);
   } catch (err: any) {
     console.error("exportProject error:", err);
