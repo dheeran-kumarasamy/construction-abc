@@ -1,10 +1,86 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { unlink } from "fs/promises";
 import { pool } from "../../config/db";
-import { authenticate, requireAdmin } from "../auth/auth.middleware";
+import { authenticate, requireAdmin, requireSuperAdmin } from "../auth/auth.middleware";
 import { runScrapers } from "../../services/scrapers";
+
+// Canonical list of admin module keys — must stay in sync with frontend navItems
+const ALL_MODULE_KEYS = [
+  "overview",
+  "users",
+  "organizations",
+  "projects",
+  "boqs",
+  "invites",
+  "dealers",
+  "estimation-projects",
+  "estimates",
+  "deviations",
+  "rates-analysis",
+  "prices",
+  "audit",
+] as const;
+
+type ModuleKey = (typeof ALL_MODULE_KEYS)[number];
+
+// Maps request path prefixes to module keys for access control
+const MODULE_PATH_MAP: Array<{ pattern: RegExp; key: ModuleKey }> = [
+  { pattern: /^\/dashboard/, key: "overview" },
+  { pattern: /^\/users/, key: "users" },
+  { pattern: /^\/organizations/, key: "organizations" },
+  { pattern: /^\/projects/, key: "projects" },
+  { pattern: /^\/boqs/, key: "boqs" },
+  { pattern: /^\/invites/, key: "invites" },
+  { pattern: /^\/dealers/, key: "dealers" },
+  { pattern: /^\/estimation-projects/, key: "estimation-projects" },
+  { pattern: /^\/estimates/, key: "estimates" },
+  { pattern: /^\/deviation-alerts/, key: "deviations" },
+  { pattern: /^\/rates-analysis/, key: "rates-analysis" },
+  { pattern: /^\/prices/, key: "prices" },
+  { pattern: /^\/audit-logs/, key: "audit" },
+  { pattern: /^\/scrapers/, key: "overview" },
+];
+
+async function moduleAccessGuard(req: Request, res: Response, next: NextFunction) {
+  const user = (req as any).user;
+
+  // Super admin (and legacy tokens without adminRole) get full access.
+  const adminRole = String(user?.adminRole || "super_admin");
+  if (adminRole === "super_admin") {
+    return next();
+  }
+
+  // team and my-permissions endpoints are always accessible to any admin
+  if (/^\/(team|my-permissions)/.test(req.path)) {
+    return next();
+  }
+
+  const matched = MODULE_PATH_MAP.find(({ pattern }) => pattern.test(req.path));
+  if (!matched) {
+    // Unknown path — allow; the route handler will decide what to return
+    return next();
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM admin_module_permissions
+       WHERE user_id = $1 AND module_key = $2
+       LIMIT 1`,
+      [user.userId, matched.key]
+    );
+
+    if (!rows.length) {
+      return res.status(403).json({ error: "Access to this module is restricted" });
+    }
+
+    return next();
+  } catch (err) {
+    console.error("Module access check failed", err);
+    return res.status(500).json({ error: "Access check failed" });
+  }
+}
 
 const router = Router();
 
@@ -45,7 +121,202 @@ async function logAdminAction(req: Request, action: string, metadata: Record<str
   );
 }
 
-router.use(authenticate, requireAdmin);
+router.use(authenticate, requireAdmin, moduleAccessGuard);
+
+// --- My permissions (any admin) ---
+router.get("/my-permissions", async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const adminRole = String(user?.adminRole || "super_admin");
+
+  if (adminRole === "super_admin") {
+    return res.json({ adminRole: "super_admin", modules: [...ALL_MODULE_KEYS] });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT module_key FROM admin_module_permissions WHERE user_id = $1`,
+      [user.userId]
+    );
+    return res.json({
+      adminRole: "admin_team",
+      modules: rows.map((r: any) => r.module_key as ModuleKey),
+    });
+  } catch (err) {
+    console.error("Failed to fetch permissions", err);
+    return res.status(500).json({ error: "Failed to fetch permissions" });
+  }
+});
+
+// --- Admin team management (super_admin only) ---
+router.get("/team", requireSuperAdmin, async (_req: Request, res: Response) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.id, u.email, u.admin_role, u.is_active, u.created_at, u.last_login_at,
+              COALESCE(
+                json_agg(amp.module_key ORDER BY amp.module_key)
+                  FILTER (WHERE amp.module_key IS NOT NULL),
+                '[]'
+              ) AS modules
+       FROM users u
+       LEFT JOIN admin_module_permissions amp ON amp.user_id = u.id
+       WHERE u.role = 'admin'
+       GROUP BY u.id
+       ORDER BY u.admin_role ASC, u.created_at ASC`
+    );
+    return res.json({ items: rows });
+  } catch (err) {
+    console.error("Failed to list admin team", err);
+    return res.status(500).json({ error: "Failed to list admin team" });
+  }
+});
+
+router.post("/team", requireSuperAdmin, async (req: Request, res: Response) => {
+  const { email, password, modules } = req.body || {};
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const plainPassword = String(password || "").trim();
+  const moduleKeys: string[] = Array.isArray(modules) ? modules : [];
+
+  if (!normalizedEmail || !plainPassword) {
+    return res.status(400).json({ error: "email and password are required" });
+  }
+
+  if (plainPassword.length < 6) {
+    return res.status(400).json({ error: "Password must be at least 6 characters" });
+  }
+
+  const invalidKeys = moduleKeys.filter((k) => !(ALL_MODULE_KEYS as readonly string[]).includes(k));
+  if (invalidKeys.length) {
+    return res.status(400).json({ error: `Invalid module keys: ${invalidKeys.join(", ")}` });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const existing = await client.query(
+      `SELECT id FROM users WHERE LOWER(TRIM(email)) = $1 LIMIT 1`,
+      [normalizedEmail]
+    );
+    if (existing.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "A user with this email already exists" });
+    }
+
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
+    const grantedBy = getAdminUserId(req);
+
+    const userRes = await client.query(
+      `INSERT INTO users (email, password_hash, role, admin_role, is_active)
+       VALUES ($1, $2, 'admin', 'admin_team', true)
+       RETURNING id, email, admin_role, is_active, created_at`,
+      [normalizedEmail, passwordHash]
+    );
+    const newUser = userRes.rows[0];
+
+    if (moduleKeys.length) {
+      const values = moduleKeys
+        .map((_, i) => `($1, $${i + 2}, $${moduleKeys.length + 2})`)
+        .join(", ");
+      await client.query(
+        `INSERT INTO admin_module_permissions (user_id, module_key, granted_by) VALUES ${values}`,
+        [newUser.id, ...moduleKeys, grantedBy || null]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    await logAdminAction(req, "admin.team.create", { newUserId: newUser.id, email: normalizedEmail, modules: moduleKeys });
+
+    return res.status(201).json({ ...newUser, modules: moduleKeys });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Failed to create admin team user", err);
+    return res.status(500).json({ error: "Failed to create admin team user" });
+  } finally {
+    client.release();
+  }
+});
+
+router.put("/team/:userId/permissions", requireSuperAdmin, async (req: Request, res: Response) => {
+  const userId = String(req.params.userId || "");
+  const { modules } = req.body || {};
+  const moduleKeys: string[] = Array.isArray(modules) ? modules : [];
+
+  const invalidKeys = moduleKeys.filter((k) => !(ALL_MODULE_KEYS as readonly string[]).includes(k));
+  if (invalidKeys.length) {
+    return res.status(400).json({ error: `Invalid module keys: ${invalidKeys.join(", ")}` });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const userCheck = await client.query(
+      `SELECT id, admin_role FROM users WHERE id = $1 AND role = 'admin' LIMIT 1`,
+      [userId]
+    );
+    if (!userCheck.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Admin team user not found" });
+    }
+    if (userCheck.rows[0].admin_role !== "admin_team") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Permissions can only be set on admin_team users" });
+    }
+
+    const grantedBy = getAdminUserId(req);
+
+    await client.query(`DELETE FROM admin_module_permissions WHERE user_id = $1`, [userId]);
+
+    if (moduleKeys.length) {
+      const values = moduleKeys
+        .map((_, i) => `($1, $${i + 2}, $${moduleKeys.length + 2})`)
+        .join(", ");
+      await client.query(
+        `INSERT INTO admin_module_permissions (user_id, module_key, granted_by) VALUES ${values}`,
+        [userId, ...moduleKeys, grantedBy || null]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    await logAdminAction(req, "admin.team.permissions_update", { targetUserId: userId, modules: moduleKeys });
+
+    return res.json({ success: true, userId, modules: moduleKeys });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Failed to update permissions", err);
+    return res.status(500).json({ error: "Failed to update permissions" });
+  } finally {
+    client.release();
+  }
+});
+
+router.delete("/team/:userId", requireSuperAdmin, async (req: Request, res: Response) => {
+  const userId = String(req.params.userId || "");
+  const requesterId = getAdminUserId(req);
+
+  if (userId === requesterId) {
+    return res.status(400).json({ error: "You cannot remove yourself from the admin team" });
+  }
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM users WHERE id = $1 AND role = 'admin' AND admin_role = 'admin_team' RETURNING id, email`,
+      [userId]
+    );
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Admin team user not found" });
+    }
+
+    await logAdminAction(req, "admin.team.delete", { targetUserId: userId, email: result.rows[0].email });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Failed to delete admin team user", err);
+    return res.status(500).json({ error: "Failed to delete admin team user" });
+  }
+});
 
 router.get("/dashboard", async (_req: Request, res: Response) => {
   try {

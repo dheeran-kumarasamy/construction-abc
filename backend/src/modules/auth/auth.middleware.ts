@@ -22,6 +22,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
       role: string;
       organizationId?: string | null;
       orgRole?: "head" | "member" | null;
+      adminRole?: "super_admin" | "admin_team" | null;
     };
 
     (req as any).user = payload;
@@ -35,6 +36,23 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const user = (req as any).user;
   if (!user || String(user.role || "").toLowerCase() !== "admin") {
     return res.status(403).json({ error: "Admin access required" });
+  }
+
+  return next();
+}
+
+/** Only super_admin users may pass. admin_team users get 403. */
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  const user = (req as any).user;
+  if (!user || String(user.role || "").toLowerCase() !== "admin") {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+
+  // Treat missing adminRole as super_admin for backward compatibility with
+  // tokens issued before migration 024.
+  const adminRole = String(user.adminRole || "super_admin");
+  if (adminRole !== "super_admin") {
+    return res.status(403).json({ error: "Super admin access required" });
   }
 
   return next();

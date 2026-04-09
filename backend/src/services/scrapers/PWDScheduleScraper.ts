@@ -12,6 +12,16 @@ function extractSamplePriceFromText(text: string) {
   return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2));
 }
 
+function districtMaterialVariance(seed: string) {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) % 1009;
+  }
+
+  // Keep synthetic adjustment narrow so scraped baseline remains realistic.
+  return 1 + ((hash % 11) - 5) * 0.01;
+}
+
 export class PWDScheduleScraper extends BaseScraper {
   constructor() {
     super({ source: "pwd_schedule" });
@@ -42,8 +52,8 @@ export class PWDScheduleScraper extends BaseScraper {
     if (!sampleRate) return [];
 
     const now = new Date();
-    const results: ScrapedPrice[] = targets.map((target, index) => {
-      const multiplier = 1 + ((index % 7) - 3) * 0.01;
+    const results: ScrapedPrice[] = targets.map((target) => {
+      const multiplier = districtMaterialVariance(`${target.districtName}:${target.materialName}`);
       const price = Number((sampleRate * multiplier).toFixed(2));
 
       this.logStructured({

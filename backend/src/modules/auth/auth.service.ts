@@ -293,7 +293,7 @@ export async function loginUser(email: string, password: string) {
 
   try {
         const { rows } = await pool.query(
-        `SELECT u.id, u.password_hash, u.role, u.organization_id, u.org_role
+        `SELECT u.id, u.password_hash, u.role, u.organization_id, u.org_role, u.admin_role
      FROM users u
      WHERE LOWER(TRIM(u.email)) = $1`,
     [normalizedEmail]
@@ -328,12 +328,15 @@ export async function loginUser(email: string, password: string) {
       // Ignore if migration 014 has not yet been applied.
     }
 
+    const adminRole: string | null = user.role === "admin" ? (user.admin_role || "super_admin") : null;
+
     const token = jwt.sign(
       {
         userId: user.id,
         role: user.role,
         organizationId: user.organization_id,
         orgRole: user.org_role,
+        ...(adminRole ? { adminRole } : {}),
       },
       JWT_SECRET,
       { expiresIn: "7d" }
@@ -360,7 +363,7 @@ export async function loginUser(email: string, password: string) {
       }
     }
 
-    return { token, role: user.role, organizationId: user.organization_id, orgRole: user.org_role, profileComplete };
+    return { token, role: user.role, organizationId: user.organization_id, orgRole: user.org_role, adminRole: adminRole || undefined, profileComplete };
   } catch (err: any) {
     if (err.message === "Invalid credentials" || err.message === "User not activated" || err.message === "Email and password required") {
       throw err;

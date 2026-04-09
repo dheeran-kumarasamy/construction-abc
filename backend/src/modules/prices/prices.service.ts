@@ -446,14 +446,14 @@ export async function getMaterialPricesWithDealers(materialId: string, districtF
   const marketPricesResult = await pool.query(
     `
       WITH latest AS (
-        SELECT DISTINCT ON (pr.material_id)
+        SELECT DISTINCT ON (pr.material_id, pr.district_id)
           pr.price,
           pr.source,
           pr.scraped_at,
           pr.district_id
         FROM price_records pr
         WHERE pr.material_id = $1
-        ORDER BY pr.material_id, pr.scraped_at DESC
+        ORDER BY pr.material_id, pr.district_id, pr.scraped_at DESC
       )
       SELECT 
         'market' as source_type,

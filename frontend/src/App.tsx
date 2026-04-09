@@ -36,6 +36,7 @@ import AdminDeviationAlertsPage from "./pages/admin/AdminDeviationAlertsPage";
 import AdminBOQsPage from "./pages/admin/AdminBOQsPage";
 import AdminEstimationProjectsPage from "./pages/admin/AdminEstimationProjectsPage";
 import AdminEstimatesPage from "./pages/admin/AdminEstimatesPage";
+import AdminTeamPage from "./pages/admin/AdminTeamPage";
 import FingerInAirEstimator from "./components/FingerInAirEstimator";
 import { BackButton } from "./components/BackButton";
 
@@ -443,6 +444,14 @@ export default function App() {
             element={
               <RequireAuth role="admin">
                 <AdminAuditPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/team"
+            element={
+              <RequireAuth role="admin">
+                <AdminTeamPage />
               </RequireAuth>
             }
           />
