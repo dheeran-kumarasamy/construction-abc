@@ -8,6 +8,7 @@ import { useAuth } from "../../auth/AuthContext";
 interface ProjectRow {
   id: string; // UUID
   name: string;
+  building_type?: string | null;
   description?: string | null;
   site_address?: string | null;
   tentative_start_date?: string | null;
@@ -32,6 +33,12 @@ function resolveProjectRef(project: ProjectRow): string {
   }
 
   return project.id;
+}
+
+function getBoqEntryPath(project: ProjectRow) {
+  const projectRef = resolveProjectRef(project);
+  const isResidential = String(project.building_type || "").toLowerCase() === "residential";
+  return isResidential ? `/estimation/${projectRef}?template=residential` : `/estimation/${projectRef}`;
 }
 
 export default function ProjectsList() {
@@ -146,7 +153,7 @@ export default function ProjectsList() {
                         <button
                           type="button"
                           style={hasSubmittedBoq ? pageStyles.secondaryBtn : pageStyles.primaryBtn}
-                          onClick={() => navigate(`/estimation/${projectRef}`)}
+                          onClick={() => navigate(getBoqEntryPath(p))}
                         >
                           Enter New BOQ
                         </button>

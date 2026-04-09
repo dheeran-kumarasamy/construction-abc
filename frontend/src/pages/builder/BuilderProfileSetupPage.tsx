@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { apiUrl } from "../../services/api";
@@ -29,6 +29,7 @@ const EMPTY: ProfileForm = {
 
 export default function BuilderProfileSetupPage() {
   const navigate = useNavigate();
+  const didLoadRef = useRef(false);
   const [form, setForm] = useState<ProfileForm>(EMPTY);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -36,16 +37,37 @@ export default function BuilderProfileSetupPage() {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
+    if (didLoadRef.current) return;
+    didLoadRef.current = true;
     void loadExisting();
   }, []);
+
+  function clearSessionAndRedirect() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("auth_user");
+    localStorage.removeItem("builder_profile_complete");
+    navigate("/login", { replace: true });
+  }
 
   async function loadExisting() {
     setInitialLoading(true);
     try {
       const token = localStorage.getItem("token");
+      if (!token || token === "undefined" || token === "null") {
+        clearSessionAndRedirect();
+        return;
+      }
+
       const res = await fetch(apiUrl("/api/builder/profile"), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { Authorization: `Bearer ${token}` },
       });
+
+      if (res.status === 401) {
+        clearSessionAndRedirect();
+        return;
+      }
+
       if (res.ok) {
         const data = await res.json();
         if (data) {
@@ -86,11 +108,16 @@ export default function BuilderProfileSetupPage() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
+      if (!token || token === "undefined" || token === "null") {
+        clearSessionAndRedirect();
+        return;
+      }
+
       const res = await fetch(apiUrl("/api/builder/profile"), {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           companyName: form.companyName.trim(),
@@ -104,6 +131,11 @@ export default function BuilderProfileSetupPage() {
           isVisibleToArchitects: form.isVisibleToArchitects,
         }),
       });
+
+      if (res.status === 401) {
+        clearSessionAndRedirect();
+        return;
+      }
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save profile");

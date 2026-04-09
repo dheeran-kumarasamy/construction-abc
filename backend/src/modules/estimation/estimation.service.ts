@@ -629,6 +629,7 @@ export async function listProjects(userId: string) {
       (SELECT COUNT(*) FROM boq_items bi WHERE bi.project_id = p.id) as item_count,
       (SELECT COALESCE(SUM(bi.computed_amount), 0) FROM boq_items bi WHERE bi.project_id = p.id) as total_amount,
       pr.boq_id,
+      source_pr.building_type,
       COALESCE(
         p.source_project_id,
         CASE
@@ -646,6 +647,13 @@ export async function listProjects(userId: string) {
         ELSE NULL
       END
     )
+    LEFT JOIN LATERAL (
+      SELECT building_type
+      FROM project_revisions
+      WHERE project_id = pr.id
+      ORDER BY revision_number DESC
+      LIMIT 1
+    ) source_pr ON true
     WHERE p.user_id = $1
       ${sourceFilter}
     ORDER BY p.updated_at DESC
@@ -655,6 +663,7 @@ export async function listProjects(userId: string) {
       (SELECT COUNT(*) FROM boq_items bi WHERE bi.project_id = p.id) as item_count,
       (SELECT COALESCE(SUM(bi.computed_amount), 0) FROM boq_items bi WHERE bi.project_id = p.id) as total_amount,
       pr.boq_id,
+      source_pr.building_type,
       CASE
         WHEN p.notes ~ 'source_project_id:[0-9a-fA-F-]{36}'
         THEN substring(p.notes from 'source_project_id:([0-9a-fA-F-]{36})')::uuid
@@ -666,6 +675,13 @@ export async function listProjects(userId: string) {
       THEN substring(p.notes from 'source_project_id:([0-9a-fA-F-]{36})')::uuid
       ELSE NULL
     END
+    LEFT JOIN LATERAL (
+      SELECT building_type
+      FROM project_revisions
+      WHERE project_id = pr.id
+      ORDER BY revision_number DESC
+      LIMIT 1
+    ) source_pr ON true
     WHERE p.user_id = $1
       ${sourceFilter}
     ORDER BY p.updated_at DESC

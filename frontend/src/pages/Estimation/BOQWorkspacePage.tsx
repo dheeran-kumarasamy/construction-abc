@@ -9,6 +9,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { formatINR } from "../../services/currency";
 import { formatDate } from "../../services/dateTime";
 
+const RESIDENTIAL_TEMPLATE_URL = new URL("../../data/boq-residential.json", import.meta.url).href;
 const BOQ_DRAFT_STORAGE_PREFIX = "boq_workspace_draft:";
 
 type BOQDraft = {
@@ -59,13 +60,119 @@ function clearDraft(projectId: string) {
 
 type BOQRow =
   | { template: RateTemplate; quantity: string; uom: string; rate?: number; amount?: number }
-  | { customId: string; customName: string; quantity: string; uom: string; rate?: number; amount?: number };
+  | { customId: string; customName: string; stageName?: string; quantity: string; uom: string; rate?: number; amount?: number };
+
+const STAGE_SEQUENCE = [
+  "Basement",
+  "Ground Floor",
+  "First Floor",
+  "Second Floor",
+  "Third Floor",
+  "Terrace",
+  "OHT",
+  "Compound",
+  "Finishing & Misc",
+] as const;
+
+function classifyResidentialStage(description: string) {
+  const text = String(description || "").toLowerCase();
+
+  if (/oht|overhead\s*tank|over\s*head\s*tank/.test(text)) {
+    return "OHT";
+  }
+
+  if (/third\s*floor|3rd\s*floor/.test(text)) {
+    return "Third Floor";
+  }
+
+  if (/second\s*floor|2nd\s*floor/.test(text)) {
+    return "Second Floor";
+  }
+
+  if (/first\s*floor|1st\s*floor/.test(text)) {
+    return "First Floor";
+  }
+
+  if (/terrace|roof|oht|waterproof/.test(text)) {
+    return "Terrace";
+  }
+
+  if (/compound|gate|fenc|boundary|pavement|driveway/.test(text)) {
+    return "Compound";
+  }
+
+  if (/basement|excavat|earth filling|footing|plinth|retaining/.test(text)) {
+    return "Basement";
+  }
+
+  if (/electrical|plumbing|drain|sanitary|conduit|wiring|switch|fixture/.test(text)) {
+    return "Electrical & Plumbing";
+  }
+
+  if (/plaster|paint|floor|tile|finishing|joinery|wood|door|window/.test(text)) {
+    return "Finishing & Misc";
+  }
+
+  return "Ground Floor";
+}
 
 function normalizeBoqLabel(value: string) {
   return String(value || "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function tokenizeBoqLabel(value: string) {
+  const stopWords = new Set([
+    "the", "and", "for", "with", "from", "into", "over", "under", "per", "all", "work", "works", "item",
+    "floor", "inch", "in", "of", "to", "at", "on", "or", "by", "a", "an",
+  ]);
+
+  return normalizeBoqLabel(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2 && !stopWords.has(token));
+}
+
+function computeTemplateMatchScore(sourceName: string, templateName: string) {
+  const source = normalizeBoqLabel(sourceName);
+  const target = normalizeBoqLabel(templateName);
+  if (!source || !target) return 0;
+  if (source === target) return 1;
+  if (source.includes(target) || target.includes(source)) return 0.9;
+
+  const sourceTokens = tokenizeBoqLabel(sourceName);
+  const targetTokens = tokenizeBoqLabel(templateName);
+  if (!sourceTokens.length || !targetTokens.length) return 0;
+
+  const targetSet = new Set(targetTokens);
+  const sourceSet = new Set(sourceTokens);
+
+  let overlap = 0;
+  sourceSet.forEach((token) => {
+    if (targetSet.has(token)) overlap += 1;
+  });
+
+  if (!overlap) return 0;
+  const precision = overlap / sourceSet.size;
+  const recall = overlap / targetSet.size;
+  return Number((0.6 * precision + 0.4 * recall).toFixed(4));
+}
+
+function findBestTemplateForItemName(itemName: string, templates: RateTemplate[]) {
+  let best: RateTemplate | null = null;
+  let bestScore = 0;
+
+  for (const template of templates) {
+    const score = computeTemplateMatchScore(itemName, template.name);
+    if (score > bestScore) {
+      bestScore = score;
+      best = template;
+    }
+  }
+
+  return bestScore >= 0.45 ? best : null;
 }
 
 function mapSubmittedItemsToRows(items: api.SubmittedBOQItem[], templates: RateTemplate[]): BOQRow[] {
@@ -117,6 +224,67 @@ function isAuthMissingError(err: unknown) {
   return /missing or invalid authorization header|unauthorized|invalid token/i.test(message);
 }
 
+async function loadResidentialBoqRows(): Promise<BOQRow[]> {
+  const response = await fetch(RESIDENTIAL_TEMPLATE_URL);
+  if (!response.ok) {
+    throw new Error("Failed to load residential BOQ template");
+  }
+
+  const raw = await response.text();
+  if (!raw.trim()) {
+    throw new Error("Residential BOQ template file is empty");
+  }
+
+  let payload: any;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    throw new Error("Residential BOQ template JSON is invalid");
+  }
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+
+  const lineItems = rows
+    .filter((row: any) => String(row?.type || "") === "line_item")
+    .map((row: any, index: number) => ({
+      id: index + 1,
+      description: String(row?.description || "").trim(),
+      unit: String(row?.unit || "Nos").trim() || "Nos",
+      stage: String(row?.stage || "").trim(),
+    }))
+    .filter((row: { description: string }) => row.description.length > 0);
+
+  const grouped = new Map<string, Array<{ id: number; description: string; unit: string }>>();
+  for (const stageName of STAGE_SEQUENCE) {
+    grouped.set(stageName, []);
+  }
+
+  for (const item of lineItems) {
+    const stage = item.stage || classifyResidentialStage(item.description);
+    if (!grouped.has(stage)) grouped.set(stage, []);
+    grouped.get(stage)!.push(item);
+  }
+
+  const output: BOQRow[] = [];
+  for (const stageName of STAGE_SEQUENCE) {
+    const stageItems = grouped.get(stageName) || [];
+    if (!stageItems.length) continue;
+
+    for (const item of stageItems) {
+      output.push({
+        customId: `residential-${item.id}`,
+        customName: item.description,
+        stageName,
+        quantity: "",
+        uom: item.unit,
+        rate: undefined,
+        amount: undefined,
+      });
+    }
+  }
+
+  return output;
+}
+
 
 
 
@@ -126,6 +294,7 @@ export default function BOQWorkspacePage() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const isViewMode = searchParams.get("mode") === "view";
+  const isResidentialTemplatePreset = searchParams.get("template") === "residential";
   const { user } = useAuth();
   const isArchitectFlow = user?.role === "architect";
   const isGenericEstimationRoute = location.pathname.startsWith("/estimation/");
@@ -133,6 +302,7 @@ export default function BOQWorkspacePage() {
   const [templates, setTemplates] = useState<RateTemplate[]>([]);
   const [boqRows, setBoqRows] = useState<BOQRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [checkingEstimate, setCheckingEstimate] = useState<boolean>(false);
   const [estimate, setEstimate] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [boqError, setBoqError] = useState<string>("");
@@ -150,6 +320,26 @@ export default function BOQWorkspacePage() {
   const projectViewPath = projectId ? `/architect/project/${projectId}` : "/architect/projects";
   const showRateColumns = isEditingBoq;
   const isReadOnlyView = isViewMode && !isEditingBoq;
+  let lastInsertedStageName = "";
+  const tableRows = boqRows.reduce<Array<
+    | { type: "stage"; stageName: string }
+    | { type: "item"; row: BOQRow; originalIndex: number; serial: number }
+  >>((acc, row, originalIndex) => {
+    const currentItemCount = acc.filter((entry) => entry.type === "item").length;
+    const nextSerial = currentItemCount + 1;
+
+    if (isResidentialTemplatePreset && "customId" in row) {
+      const stageName = String(row.stageName || "General").trim() || "General";
+      if (lastInsertedStageName !== stageName) {
+        acc.push({ type: "stage", stageName });
+        lastInsertedStageName = stageName;
+      }
+    }
+
+    acc.push({ type: "item", row, originalIndex, serial: nextSerial });
+    return acc;
+  }, []);
+
   const backPath = isGenericEstimationRoute
     ? "/architect"
     : isArchitectFlow
@@ -157,6 +347,37 @@ export default function BOQWorkspacePage() {
     : user?.role === "builder"
     ? "/builder"
     : "/estimation";
+  const projectDetails = [
+    { label: "Project", value: project?.name || "-" },
+    { label: "Client", value: project?.client_name || "-" },
+    { label: "Location", value: project?.project_location || "-" },
+    { label: "Terrain", value: project?.terrain ? project.terrain.charAt(0).toUpperCase() + project.terrain.slice(1) : "-" },
+    { label: "Status", value: project?.status ? project.status.replace(/_/g, " ") : "-" },
+    { label: "Created", value: project?.created_at ? formatDate(project.created_at) : "-" },
+    { label: "Updated", value: project?.updated_at ? formatDate(project.updated_at) : "-" },
+  ];
+
+  const insertCustomRowAfter = (afterIndex: number, stageName?: string) => {
+    const newRow: BOQRow = {
+      customId: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      customName: "",
+      stageName,
+      quantity: "",
+      uom: "Nos",
+      rate: undefined,
+      amount: undefined,
+    };
+
+    setBoqRows((prev) => [
+      ...prev.slice(0, afterIndex + 1),
+      newRow,
+      ...prev.slice(afterIndex + 1),
+    ]);
+  };
+
+  const removeRowAt = (indexToRemove: number) => {
+    setBoqRows((prev) => prev.filter((_, index) => index !== indexToRemove));
+  };
 
   useEffect(() => {
     setIsEditingBoq(!isViewMode);
@@ -198,6 +419,18 @@ export default function BOQWorkspacePage() {
             setBoqRows(draft.rows);
             setRestoredFromAutoSave(true);
             setLastAutoSavedAt(draft.savedAt);
+          } else if (isResidentialTemplatePreset) {
+            try {
+              const residentialRows = await loadResidentialBoqRows();
+              if (residentialRows.length > 0) {
+                setBoqRows(residentialRows);
+              } else {
+                setBoqRows(defaultRows);
+              }
+            } catch (templateErr) {
+              console.error("Failed to load residential template rows:", templateErr);
+              setBoqRows(defaultRows);
+            }
           } else {
             setBoqRows(defaultRows);
           }
@@ -216,7 +449,7 @@ export default function BOQWorkspacePage() {
       }
     }
     load();
-  }, [projectId, isViewMode]);
+  }, [projectId, isViewMode, isResidentialTemplatePreset]);
 
   useEffect(() => {
     if (!isArchitectFlow) {
@@ -339,7 +572,7 @@ export default function BOQWorkspacePage() {
             )}
           </div>
           <h1 style={{ ...pageStyles.title, fontSize: 22, textAlign: "center", margin: 0 }}>
-            Bill of Quantity for '{project?.name || "Project"}'
+            Bill of Quantity(BOQ)
           </h1>
           {project?.client_name && (
             <p style={{ ...pageStyles.subtitle, margin: "6px 0 0", textAlign: "center" }}>
@@ -347,14 +580,35 @@ export default function BOQWorkspacePage() {
             </p>
           )}
         </div>
+        <div
+          style={{
+            marginTop: 16,
+            padding: 16,
+            border: "1px solid var(--border)",
+            borderRadius: 12,
+            background: "#f8fafc",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 12,
+          }}
+        >
+          {projectDetails.map((detail) => (
+            <div key={detail.label} style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                {detail.label}
+              </div>
+              <div style={{ marginTop: 4, color: "#0f172a", fontSize: 14, fontWeight: 600, overflowWrap: "anywhere" }}>
+                {detail.value}
+              </div>
+            </div>
+          ))}
+        </div>
         {boqError && <div style={{ ...pageStyles.error, marginTop: 12 }}>{boqError}</div>}
-        {!isViewMode && restoredFromAutoSave && lastAutoSavedAt ? (
-          <div style={{ marginTop: 10, color: "#0f766e", fontSize: 13, fontWeight: 600 }}>
-            Restored auto-saved BOQ draft from {formatDate(new Date(lastAutoSavedAt))}
-          </div>
-        ) : null}
         {!isViewMode && isEditingBoq && lastAutoSavedAt ? (
-          <div style={{ marginTop: 6, color: "#64748b", fontSize: 12 }}>
+          <div style={{ marginTop: 10, color: restoredFromAutoSave ? "#0f766e" : "#64748b", fontSize: 12, fontWeight: restoredFromAutoSave ? 600 : 500 }}>
+            {restoredFromAutoSave
+              ? `Restored auto-saved BOQ draft from ${formatDate(new Date(lastAutoSavedAt))} | `
+              : ""}
             Auto-saved every 30 seconds. Last saved at {formatDate(new Date(lastAutoSavedAt))}
           </div>
         ) : null}
@@ -378,92 +632,174 @@ export default function BOQWorkspacePage() {
                   </td>
                 </tr>
               )}
-              {boqRows.map((row, idx) => {
-                if ('customId' in row) {
+              {tableRows.map((entry) => {
+                if (entry.type === "stage") {
+                  return (
+                    <tr key={`stage-${entry.stageName}`}>
+                      <td
+                        colSpan={showRateColumns ? 6 : 4}
+                        style={{
+                          ...pageStyles.td,
+                          background: "#f8fafc",
+                          fontWeight: 700,
+                          color: "#0f172a",
+                        }}
+                      >
+                        {entry.stageName}
+                      </td>
+                    </tr>
+                  );
+                }
+
+                const { row, originalIndex, serial } = entry;
+                if ("customId" in row) {
                   return (
                     <tr key={row.customId}>
-                      <td style={{ ...pageStyles.td, textAlign: "center", fontSize: 12 }}>{idx + 1}</td>
-                      <td style={{ ...pageStyles.td }}>{row.customName}</td>
-                      <td style={{ ...pageStyles.td }}>
-                        {isEditingBoq ? (
-                          <input
-                            type="number"
-                            min="0"
-                            style={{ ...pageStyles.input, width: 80, fontSize: 13 }}
-                            value={row.quantity}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setBoqRows(prev => prev.map((r, i) => i === idx ? { ...r, quantity: val } : r));
-                            }}
-                          />
-                        ) : (
-                          <span>{row.quantity || "-"}</span>
-                        )}
-                      </td>
-                      <td style={{ ...pageStyles.td }}>
-                        {isEditingBoq ? (
-                          <select
-                            style={{ ...pageStyles.select, width: 80, fontSize: 13 }}
-                            value={row.uom}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setBoqRows(prev => prev.map((r, i) => i === idx ? { ...r, uom: val } : r));
-                            }}
-                          >
-                            {[row.uom, ...UOM_OPTIONS.filter(u => u !== row.uom)].map(u => (
-                              <option key={u} value={u}>{u}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span>{row.uom || "-"}</span>
-                        )}
-                      </td>
-                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace" }}>{row.rate != null ? formatINR(row.rate, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
-                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{row.amount != null ? formatINR(row.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
-                    </tr>
+                        <td style={{ ...pageStyles.td, textAlign: "center", fontSize: 12 }}>{serial}</td>
+                        <td style={{ ...pageStyles.td }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ flex: 1 }}>
+                              {isEditingBoq ? (
+                                <input
+                                  type="text"
+                                  placeholder="Custom BOQ item"
+                                  style={{ ...pageStyles.input, width: "100%", fontSize: 13 }}
+                                  value={row.customName}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setBoqRows(prev => prev.map((r, i) => i === originalIndex ? { ...r, customName: val } : r));
+                                  }}
+                                />
+                              ) : (
+                                row.customName
+                              )}
+                            </div>
+                            {isArchitectFlow && isEditingBoq ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                <button
+                                  type="button"
+                                  aria-label="Remove BOQ item"
+                                  style={{ ...pageStyles.secondaryBtn, minWidth: 28, width: 28, height: 28, padding: 0, fontSize: 16, lineHeight: 1 }}
+                                  onClick={() => removeRowAt(originalIndex)}
+                                >
+                                  -
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label="Insert BOQ item"
+                                  style={{ ...pageStyles.secondaryBtn, minWidth: 28, width: 28, height: 28, padding: 0, fontSize: 16, lineHeight: 1 }}
+                                  onClick={() => insertCustomRowAfter(originalIndex, row.stageName)}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td style={{ ...pageStyles.td }}>
+                          {isEditingBoq ? (
+                            <input
+                              type="number"
+                              min="0"
+                              style={{ ...pageStyles.input, width: 80, fontSize: 13 }}
+                              value={row.quantity}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setBoqRows(prev => prev.map((r, i) => i === originalIndex ? { ...r, quantity: val } : r));
+                              }}
+                            />
+                          ) : (
+                            <span>{row.quantity || "-"}</span>
+                          )}
+                        </td>
+                        <td style={{ ...pageStyles.td }}>
+                          {isEditingBoq ? (
+                            <select
+                              style={{ ...pageStyles.select, width: 80, fontSize: 13 }}
+                              value={row.uom}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setBoqRows(prev => prev.map((r, i) => i === originalIndex ? { ...r, uom: val } : r));
+                              }}
+                            >
+                              {[row.uom, ...UOM_OPTIONS.filter(u => u !== row.uom)].map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span>{row.uom || "-"}</span>
+                          )}
+                        </td>
+                        {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace" }}>{row.rate != null ? formatINR(row.rate, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
+                        {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{row.amount != null ? formatINR(row.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
+                      </tr>
                   );
                 } else {
                   return (
                     <tr key={row.template.id}>
-                      <td style={{ ...pageStyles.td, textAlign: "center", fontSize: 12 }}>{idx + 1}</td>
-                      <td style={{ ...pageStyles.td }}>{row.template.name}</td>
-                      <td style={{ ...pageStyles.td }}>
-                        {isEditingBoq ? (
-                          <input
-                            type="number"
-                            min="0"
-                            style={{ ...pageStyles.input, width: 80, fontSize: 13 }}
-                            value={row.quantity}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setBoqRows(prev => prev.map((r, i) => i === idx ? { ...r, quantity: val } : r));
-                            }}
-                          />
-                        ) : (
-                          <span>{row.quantity || "-"}</span>
-                        )}
-                      </td>
-                      <td style={{ ...pageStyles.td }}>
-                        {isEditingBoq ? (
-                          <select
-                            style={{ ...pageStyles.select, width: 80, fontSize: 13 }}
-                            value={row.uom}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setBoqRows(prev => prev.map((r, i) => i === idx ? { ...r, uom: val } : r));
-                            }}
-                          >
-                            {[row.uom, ...UOM_OPTIONS.filter(u => u !== row.uom)].map(u => (
-                              <option key={u} value={u}>{u}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span>{row.uom || "-"}</span>
-                        )}
-                      </td>
-                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace" }}>{row.rate != null ? formatINR(row.rate, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
-                      {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{row.amount != null ? formatINR(row.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
-                    </tr>
+                        <td style={{ ...pageStyles.td, textAlign: "center", fontSize: 12 }}>{serial}</td>
+                        <td style={{ ...pageStyles.td }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ flex: 1 }}>{row.template.name}</div>
+                            {isArchitectFlow && isEditingBoq ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                <button
+                                  type="button"
+                                  aria-label="Remove BOQ item"
+                                  style={{ ...pageStyles.secondaryBtn, minWidth: 28, width: 28, height: 28, padding: 0, fontSize: 16, lineHeight: 1 }}
+                                  onClick={() => removeRowAt(originalIndex)}
+                                >
+                                  -
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label="Insert BOQ item"
+                                  style={{ ...pageStyles.secondaryBtn, minWidth: 28, width: 28, height: 28, padding: 0, fontSize: 16, lineHeight: 1 }}
+                                  onClick={() => insertCustomRowAfter(originalIndex)}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td style={{ ...pageStyles.td }}>
+                          {isEditingBoq ? (
+                            <input
+                              type="number"
+                              min="0"
+                              style={{ ...pageStyles.input, width: 80, fontSize: 13 }}
+                              value={row.quantity}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setBoqRows(prev => prev.map((r, i) => i === originalIndex ? { ...r, quantity: val } : r));
+                              }}
+                            />
+                          ) : (
+                            <span>{row.quantity || "-"}</span>
+                          )}
+                        </td>
+                        <td style={{ ...pageStyles.td }}>
+                          {isEditingBoq ? (
+                            <select
+                              style={{ ...pageStyles.select, width: 80, fontSize: 13 }}
+                              value={row.uom}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setBoqRows(prev => prev.map((r, i) => i === originalIndex ? { ...r, uom: val } : r));
+                              }}
+                            >
+                              {[row.uom, ...UOM_OPTIONS.filter(u => u !== row.uom)].map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span>{row.uom || "-"}</span>
+                          )}
+                        </td>
+                        {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace" }}>{row.rate != null ? formatINR(row.rate, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
+                        {showRateColumns && <td style={{ ...pageStyles.td, textAlign: "right", fontFamily: "monospace", fontWeight: 600 }}>{row.amount != null ? formatINR(row.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>}
+                      </tr>
                   );
                 }
               })}
@@ -491,19 +827,27 @@ export default function BOQWorkspacePage() {
           <button
             style={{ ...pageStyles.primaryBtn, fontSize: 15 }}
             onClick={async () => {
-              setLoading(true);
+              setCheckingEstimate(true);
               try {
+                const templatesByName = new Map(
+                  templates.map((template) => [normalizeBoqLabel(template.name), template])
+                );
+
                 const updatedRows = await Promise.all(boqRows.map(async (row) => {
                   const qty = parseFloat(row.quantity);
                   if (!qty || isNaN(qty)) return { ...row, rate: undefined, amount: undefined };
+
                   if ('customId' in row) {
-                    // Custom line item: no rate calculation
-                    return { ...row, rate: undefined, amount: undefined };
-                  } else {
-                    // Fetch computed PWD/SOR rate from backend rate engine.
+                    const matchedTemplate =
+                      templatesByName.get(normalizeBoqLabel(row.customName)) ||
+                      findBestTemplateForItemName(row.customName, templates);
+                    if (!matchedTemplate) {
+                      return { ...row, rate: undefined, amount: undefined };
+                    }
+
                     try {
                       const computed = await api.computeRate({
-                        template_id: row.template.id,
+                        template_id: matchedTemplate.id,
                         location_zone_id: project.location_zone_id,
                         conveyance_distance_km: project.default_conveyance_distance_km,
                         terrain: project.terrain,
@@ -515,20 +859,39 @@ export default function BOQWorkspacePage() {
                         amount: Number.isFinite(rate) ? rate * qty : undefined,
                       };
                     } catch (err) {
-                      console.error("Failed to compute PWD rate for template:", row.template.id, err);
+                      console.error("Failed to compute PWD rate for custom item:", row.customName, err);
                       return { ...row, rate: undefined, amount: undefined };
                     }
+                  }
+
+                  // Fetch computed PWD/SOR rate from backend rate engine.
+                  try {
+                    const computed = await api.computeRate({
+                      template_id: row.template.id,
+                      location_zone_id: project.location_zone_id,
+                      conveyance_distance_km: project.default_conveyance_distance_km,
+                      terrain: project.terrain,
+                    });
+                    const rate = Number(computed.final_rate);
+                    return {
+                      ...row,
+                      rate: Number.isFinite(rate) ? rate : undefined,
+                      amount: Number.isFinite(rate) ? rate * qty : undefined,
+                    };
+                  } catch (err) {
+                    console.error("Failed to compute PWD rate for template:", row.template.id, err);
+                    return { ...row, rate: undefined, amount: undefined };
                   }
                 }));
                 setBoqRows(updatedRows);
                 setEstimate(updatedRows.reduce((sum, r) => sum + (r.amount || 0), 0));
               } finally {
-                setLoading(false);
+                setCheckingEstimate(false);
               }
             }}
-            disabled={loading}
+            disabled={loading || checkingEstimate}
           >
-            Check Estimate
+            {checkingEstimate ? "Checking..." : "Check Estimate"}
           </button>
           <button
             style={{ ...pageStyles.secondaryBtn, fontSize: 15 }}

@@ -96,6 +96,20 @@ const CATEGORIES = [
       { name: "Plywood 12mm Commercial", unit: "per sqft" },
     ],
   },
+  {
+    name: "Labour",
+    icon: "👷",
+    materials: [
+      { name: "Mason", unit: "per day" },
+      { name: "Helper", unit: "per day" },
+      { name: "Bar Bender", unit: "per day" },
+      { name: "Carpenter", unit: "per day" },
+      { name: "Electrician", unit: "per day" },
+      { name: "Plumber", unit: "per day" },
+      { name: "Painter", unit: "per day" },
+      { name: "Tile Layer", unit: "per day" },
+    ],
+  },
 ];
 
 const BASE_PRICES: Record<string, number> = {
@@ -128,6 +142,14 @@ const BASE_PRICES: Record<string, number> = {
   Pine: 1100,
   "Plywood 19mm BWR": 112,
   "Plywood 12mm Commercial": 72,
+  Mason: 1200,
+  Helper: 750,
+  "Bar Bender": 1100,
+  Carpenter: 1300,
+  Electrician: 1400,
+  Plumber: 1350,
+  Painter: 1000,
+  "Tile Layer": 1250,
 };
 
 const REGION_FACTOR: Record<Region, number> = {
