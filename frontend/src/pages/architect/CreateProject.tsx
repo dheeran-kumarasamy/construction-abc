@@ -259,15 +259,6 @@ export default function CreateProject() {
         }),
       });
 
-      if (res.status === 401) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("role");
-        localStorage.removeItem("auth_user");
-        localStorage.removeItem("builder_profile_complete");
-        navigate("/login", { replace: true });
-        return;
-      }
-
       const data = await res.json();
 
       if (!res.ok) {
@@ -276,15 +267,6 @@ export default function CreateProject() {
 
       navigate("/architect/projects");
     } catch (err: any) {
-      const message = String(err?.message || "");
-      if (/session expired|unauthorized|invalid token/i.test(message)) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("role");
-        localStorage.removeItem("auth_user");
-        localStorage.removeItem("builder_profile_complete");
-        navigate("/login", { replace: true });
-        return;
-      }
       setError(err.message || "Something went wrong");
     } finally {
       setLoading(false);

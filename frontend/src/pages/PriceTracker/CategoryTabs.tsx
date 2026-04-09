@@ -8,7 +8,7 @@ interface Props {
 
 export default function CategoryTabs({ categories, activeCategoryId, onSelect }: Props) {
   return (
-    <div className="pt-tabs" role="tablist" aria-label="Material Categories">
+    <div className="pt-tabs" role="tablist" aria-label="Price Categories">
       {categories.map((category) => {
         const active = category.id === activeCategoryId;
         return (

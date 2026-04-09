@@ -48,7 +48,7 @@ export default function DistrictPricePanel({
         <table>
           <thead>
             <tr>
-              <th>Material</th>
+              <th>Item</th>
               <th>Brand</th>
               <th>Unit</th>
               <th>Price</th>

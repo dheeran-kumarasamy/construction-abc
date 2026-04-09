@@ -1,0 +1,60 @@
+{
+	"header": {
+		"projectTitle": "Residential BOQ Template",
+		"source": "Seed template"
+	},
+	"rows": [
+		{ "type": "line_item", "stage": "Basement", "description": "Earth Excavation in foundation", "quantity": 16106, "unit": "cft" },
+		{ "type": "line_item", "stage": "Basement", "description": "Earth Filling for column pits", "quantity": 8230, "unit": "cft" },
+		{ "type": "line_item", "stage": "Basement", "description": "PCC 9 inch for foundation", "quantity": 513, "unit": "cft" },
+		{ "type": "line_item", "stage": "Basement", "description": "RCC footing", "quantity": 638, "unit": "cft" },
+		{ "type": "line_item", "stage": "Basement", "description": "RCC column up to basement", "quantity": 294, "unit": "cft" },
+		{ "type": "line_item", "stage": "Basement", "description": "Basement drainage pipe and fittings", "quantity": 1, "unit": "LS" },
+		{ "type": "line_item", "stage": "Basement", "description": "Sump and septic tank construction", "quantity": 1, "unit": "LS" },
+
+		{ "type": "line_item", "stage": "Ground Floor", "description": "RCC plinth beam", "quantity": 605, "unit": "cft" },
+		{ "type": "line_item", "stage": "Ground Floor", "description": "Ground floor RCC slab", "quantity": 1212, "unit": "cft" },
+		{ "type": "line_item", "stage": "Ground Floor", "description": "Flyash brick wall 9 inch", "quantity": 1065, "unit": "cft" },
+		{ "type": "line_item", "stage": "Ground Floor", "description": "Flyash brick wall 4.5 inch", "quantity": 145, "unit": "sft" },
+		{ "type": "line_item", "stage": "Ground Floor", "description": "PCC 6 inch for flooring", "quantity": 672, "unit": "cft" },
+		{ "type": "line_item", "stage": "Ground Floor", "description": "Ground floor electrical conduit and wiring", "quantity": 1, "unit": "LS" },
+		{ "type": "line_item", "stage": "Ground Floor", "description": "Ground floor plumbing lines and fittings", "quantity": 1, "unit": "LS" },
+
+		{ "type": "line_item", "stage": "First Floor", "description": "First floor RCC column", "quantity": 248, "unit": "cft" },
+		{ "type": "line_item", "stage": "First Floor", "description": "First floor RCC beam", "quantity": 430, "unit": "cft" },
+		{ "type": "line_item", "stage": "First Floor", "description": "First floor RCC slab", "quantity": 980, "unit": "cft" },
+		{ "type": "line_item", "stage": "First Floor", "description": "First floor 4.5 inch partition wall", "quantity": 510, "unit": "sft" },
+		{ "type": "line_item", "stage": "First Floor", "description": "First floor electrical conduit and wiring", "quantity": 1, "unit": "LS" },
+		{ "type": "line_item", "stage": "First Floor", "description": "First floor plumbing lines and fittings", "quantity": 1, "unit": "LS" },
+
+		{ "type": "line_item", "stage": "Second Floor", "description": "Second floor RCC column", "quantity": 210, "unit": "cft" },
+		{ "type": "line_item", "stage": "Second Floor", "description": "Second floor RCC beam", "quantity": 390, "unit": "cft" },
+		{ "type": "line_item", "stage": "Second Floor", "description": "Second floor RCC slab", "quantity": 920, "unit": "cft" },
+		{ "type": "line_item", "stage": "Second Floor", "description": "Second floor 4.5 inch partition wall", "quantity": 470, "unit": "sft" },
+		{ "type": "line_item", "stage": "Second Floor", "description": "Second floor electrical conduit and wiring", "quantity": 1, "unit": "LS" },
+		{ "type": "line_item", "stage": "Second Floor", "description": "Second floor plumbing lines and fittings", "quantity": 1, "unit": "LS" },
+
+		{ "type": "line_item", "stage": "Third Floor", "description": "Third floor RCC column", "quantity": 190, "unit": "cft" },
+		{ "type": "line_item", "stage": "Third Floor", "description": "Third floor RCC beam", "quantity": 360, "unit": "cft" },
+		{ "type": "line_item", "stage": "Third Floor", "description": "Third floor RCC slab", "quantity": 860, "unit": "cft" },
+		{ "type": "line_item", "stage": "Third Floor", "description": "Third floor 4.5 inch partition wall", "quantity": 430, "unit": "sft" },
+		{ "type": "line_item", "stage": "Third Floor", "description": "Third floor electrical conduit and wiring", "quantity": 1, "unit": "LS" },
+		{ "type": "line_item", "stage": "Third Floor", "description": "Third floor plumbing lines and fittings", "quantity": 1, "unit": "LS" },
+
+		{ "type": "line_item", "stage": "Terrace", "description": "RCC roof slab", "quantity": 971, "unit": "cft" },
+		{ "type": "line_item", "stage": "Terrace", "description": "Terrace waterproofing", "quantity": 1240, "unit": "sft" },
+
+		{ "type": "line_item", "stage": "OHT", "description": "Overhead tank RCC base and walls", "quantity": 85, "unit": "cft" },
+		{ "type": "line_item", "stage": "OHT", "description": "Overhead tank waterproofing", "quantity": 160, "unit": "sft" },
+
+		{ "type": "line_item", "stage": "Finishing & Misc", "description": "Wall plastering inner surface", "quantity": 1489, "unit": "sft" },
+		{ "type": "line_item", "stage": "Finishing & Misc", "description": "Wall plastering outer surface", "quantity": 398, "unit": "sft" },
+		{ "type": "line_item", "stage": "Finishing & Misc", "description": "Wall plastering outer surface above basement", "quantity": 587, "unit": "sft" },
+		{ "type": "line_item", "stage": "Finishing & Misc", "description": "Steel reinforcement for RCC works", "quantity": 8.9, "unit": "MT" },
+
+		{ "type": "line_item", "stage": "Compound", "description": "Compound wall footing", "quantity": 540, "unit": "cft" },
+		{ "type": "line_item", "stage": "Compound", "description": "Compound wall masonry", "quantity": 1380, "unit": "sft" },
+		{ "type": "line_item", "stage": "Compound", "description": "Main gate and wicket gate", "quantity": 1, "unit": "LS" },
+		{ "type": "line_item", "stage": "Compound", "description": "Driveway and paving", "quantity": 720, "unit": "sft" }
+	]
+}
