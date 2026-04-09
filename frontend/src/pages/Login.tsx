@@ -79,7 +79,7 @@ export default function Login() {
       }
 
       // Store session in context AND localStorage
-      login(normalizedEmail, data.role, data.orgRole || null);
+      login(normalizedEmail, data.role, data.orgRole || null, data.adminRole || null);
       localStorage.setItem("token", data.token);
       localStorage.setItem("role", data.role);
       if (data.role === "builder") {

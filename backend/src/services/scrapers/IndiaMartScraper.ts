@@ -53,12 +53,23 @@ export class IndiaMartScraper extends BaseScraper {
     super({ source: "indiamart_scraper" });
   }
 
+  private buildQuery(target: ScrapeTarget) {
+    const category = String(target.categoryName || "").toLowerCase();
+    const labourIntent = category.includes("labour") || category.includes("labor");
+
+    if (labourIntent) {
+      return `${target.materialName} labour rate per day ${target.districtName} Tamil Nadu`;
+    }
+
+    return `${target.materialName} ${target.districtName} Tamil Nadu market price`;
+  }
+
   async scrape(targets: ScrapeTarget[]): Promise<ScrapedPrice[]> {
     const results: ScrapedPrice[] = [];
 
     for (const target of targets) {
       try {
-        const query = encodeURIComponent(`${target.materialName} ${target.districtName} Tamil Nadu price`);
+        const query = encodeURIComponent(this.buildQuery(target));
         const url = `https://dir.indiamart.com/search.mp?ss=${query}`;
         const html = await this.fetchWithRetry(url);
 

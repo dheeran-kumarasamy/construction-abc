@@ -529,6 +529,7 @@ export async function createProject(userId: string, data: {
 }
 
 let hasBoqSourceProjectIdColumnCache: boolean | null = null;
+let hasProjectRevisionBuildingTypeColumnCache: boolean | null = null;
 
 async function hasBoqSourceProjectIdColumn() {
   if (hasBoqSourceProjectIdColumnCache !== null) {
@@ -548,10 +549,29 @@ async function hasBoqSourceProjectIdColumn() {
   return hasBoqSourceProjectIdColumnCache;
 }
 
+async function hasProjectRevisionBuildingTypeColumn() {
+  if (hasProjectRevisionBuildingTypeColumnCache !== null) {
+    return hasProjectRevisionBuildingTypeColumnCache;
+  }
+
+  const { rowCount } = await pool.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = 'project_revisions'
+       AND column_name = 'building_type'
+     LIMIT 1`
+  );
+
+  hasProjectRevisionBuildingTypeColumnCache = (rowCount ?? 0) > 0;
+  return hasProjectRevisionBuildingTypeColumnCache;
+}
+
 export async function listProjects(userId: string) {
   const userRes = await pool.query(`SELECT role FROM users WHERE id = $1`, [userId]);
   const role = String(userRes.rows[0]?.role || "");
   const hasSourceProjectIdColumn = await hasBoqSourceProjectIdColumn();
+  const hasBuildingTypeColumn = await hasProjectRevisionBuildingTypeColumn();
 
   if (role === "architect") {
     const architectProjects = await pool.query(
@@ -648,11 +668,13 @@ export async function listProjects(userId: string) {
       END
     )
     LEFT JOIN LATERAL (
-      SELECT building_type
+      ${hasBuildingTypeColumn
+        ? `SELECT building_type
       FROM project_revisions
       WHERE project_id = pr.id
       ORDER BY revision_number DESC
-      LIMIT 1
+      LIMIT 1`
+        : `SELECT NULL::text AS building_type`}
     ) source_pr ON true
     WHERE p.user_id = $1
       ${sourceFilter}
@@ -676,19 +698,49 @@ export async function listProjects(userId: string) {
       ELSE NULL
     END
     LEFT JOIN LATERAL (
-      SELECT building_type
+      ${hasBuildingTypeColumn
+        ? `SELECT building_type
       FROM project_revisions
       WHERE project_id = pr.id
       ORDER BY revision_number DESC
-      LIMIT 1
+      LIMIT 1`
+        : `SELECT NULL::text AS building_type`}
     ) source_pr ON true
     WHERE p.user_id = $1
       ${sourceFilter}
     ORDER BY p.updated_at DESC
   `;
 
-  const { rows } = await pool.query(projectListQuery, [userId]);
-  return rows;
+  try {
+    const { rows } = await pool.query(projectListQuery, [userId]);
+    return rows;
+  } catch (error: any) {
+    // Safety net for partially migrated environments (e.g., missing optional
+    // columns in joined tables). Keep list endpoint functional.
+    if (String(error?.code || "") !== "42703") {
+      throw error;
+    }
+
+    const fallbackQuery = `
+      SELECT p.*,
+        (SELECT COUNT(*) FROM boq_items bi WHERE bi.project_id = p.id) as item_count,
+        (SELECT COALESCE(SUM(bi.computed_amount), 0) FROM boq_items bi WHERE bi.project_id = p.id) as total_amount,
+        NULL::uuid AS boq_id,
+        NULL::text AS building_type,
+        CASE
+          WHEN p.notes ~ 'source_project_id:[0-9a-fA-F-]{36}'
+          THEN substring(p.notes from 'source_project_id:([0-9a-fA-F-]{36})')::uuid
+          ELSE NULL
+        END AS resolved_source_project_id
+      FROM boq_projects p
+      WHERE p.user_id = $1
+        ${sourceFilter}
+      ORDER BY p.updated_at DESC
+    `;
+
+    const fallback = await pool.query(fallbackQuery, [userId]);
+    return fallback.rows;
+  }
 }
 
 export async function listInvitedProjects(userId: string) {

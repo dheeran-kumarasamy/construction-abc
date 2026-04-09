@@ -6,6 +6,7 @@ export interface ScrapeTarget {
   districtName: string;
   materialId: string;
   materialName: string;
+  categoryName?: string;
 }
 
 export interface ScrapedPrice {
