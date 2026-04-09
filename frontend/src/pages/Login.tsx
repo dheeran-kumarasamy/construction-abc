@@ -307,7 +307,7 @@ export default function Login() {
                 style={registerRole === "dealer" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
                 onClick={() => setRegisterRole("dealer")}
               >
-                Dealer
+                Supplier
               </button>
             </div>
 

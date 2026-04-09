@@ -106,7 +106,7 @@ async function resolveCategoryId(input: string) {
   return rows[0] || null;
 }
 
-export async function getDistrictCategoryPrices(districtInput: string, categoryInput: string) {
+export async function getDistrictCategoryPrices(districtInput: string, categoryInput: string, options?: { hierarchy?: boolean }) {
   const district = await resolveDistrictId(districtInput);
   if (!district) {
     throw new Error("District not found");
@@ -115,6 +115,82 @@ export async function getDistrictCategoryPrices(districtInput: string, categoryI
   const category = await resolveCategoryId(categoryInput);
   if (!category) {
     throw new Error("Category not found");
+  }
+
+  if (options?.hierarchy) {
+    const hierarchyRows = await pool.query(
+      `
+        WITH admin_prices AS (
+          SELECT DISTINCT ON (pr.material_id)
+            pr.material_id, pr.price, pr.brand_name, pr.scraped_at
+          FROM price_records pr
+          WHERE pr.district_id = $1
+            AND pr.source ILIKE '%admin%'
+          ORDER BY pr.material_id, pr.scraped_at DESC
+        ),
+        dealer_avg AS (
+          SELECT dp.material_id, AVG(dp.price) AS price
+          FROM dealer_prices dp
+          JOIN dealers d ON d.id = dp.dealer_id
+          WHERE d.is_approved = true
+            AND dp.is_active = true
+            AND LOWER(d.city) = LOWER($3)
+          GROUP BY dp.material_id
+        ),
+        scraped AS (
+          SELECT DISTINCT ON (pr.material_id)
+            pr.material_id, pr.price, pr.brand_name, pr.scraped_at
+          FROM price_records pr
+          WHERE pr.district_id = $1
+            AND pr.source NOT ILIKE '%admin%'
+          ORDER BY pr.material_id, pr.scraped_at DESC
+        )
+        SELECT
+          m.id AS material_id,
+          m.name AS material_name,
+          m.unit,
+          COALESCE(ap.price, da.price, sc.price) AS latest_price,
+          CASE
+            WHEN ap.price IS NOT NULL THEN ap.brand_name
+            WHEN da.price IS NOT NULL THEN NULL
+            ELSE sc.brand_name
+          END AS brand_name,
+          CASE
+            WHEN ap.price IS NOT NULL THEN 'admin'
+            WHEN da.price IS NOT NULL THEN 'dealer_avg'
+            ELSE 'scraped'
+          END AS source,
+          CASE
+            WHEN ap.price IS NOT NULL THEN ap.scraped_at
+            WHEN da.price IS NOT NULL THEN NOW()
+            ELSE sc.scraped_at
+          END AS last_updated
+        FROM materials m
+        JOIN material_categories c ON c.id = m.category_id
+        LEFT JOIN admin_prices ap ON ap.material_id = m.id
+        LEFT JOIN dealer_avg da ON da.material_id = m.id
+        LEFT JOIN scraped sc ON sc.material_id = m.id
+        WHERE c.id = $2
+          AND (ap.price IS NOT NULL OR da.price IS NOT NULL OR sc.price IS NOT NULL)
+        ORDER BY m.sort_order ASC, m.name ASC
+      `,
+      [district.id, category.id, district.name]
+    );
+
+    const hierarchyPrices: PriceWithTrend[] = hierarchyRows.rows.map((row) => ({
+      materialPriceId: `${row.material_id}:${String(row.brand_name || "generic").toLowerCase()}`,
+      materialId: row.material_id,
+      materialName: row.material_name,
+      brandName: row.brand_name || null,
+      unit: row.unit,
+      price: row.latest_price ? Number(row.latest_price) : 0,
+      trend: "stable" as const,
+      percentChange: 0,
+      source: row.source || "scraped",
+      lastUpdated: row.last_updated ? new Date(row.last_updated).toISOString() : "",
+    }));
+
+    return { district, category, prices: hierarchyPrices };
   }
 
   const latestRows = await pool.query(

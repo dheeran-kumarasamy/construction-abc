@@ -621,7 +621,8 @@ export default function ApplyBasePricing({
   function resolveRateLabel(source: string) {
     const s = normalizeText(source);
     if (!s) return "Scraped";
-    if (s.includes("dealer")) return "Scraped (Dealer)";
+    if (s === "admin") return "Admin Price";
+    if (s === "dealer_avg" || s.includes("dealer")) return "Dealer Avg";
     if (s.includes("pwd")) return "PWD";
     return "Scraped";
   }
@@ -759,7 +760,7 @@ export default function ApplyBasePricing({
       await Promise.all(
         categoryNames.map(async (categoryName: string) => {
           const response = await fetch(
-            apiUrl(`/api/prices/district/${district.id}?category=${encodeURIComponent(categoryName)}`)
+            apiUrl(`/api/prices/district/${district.id}?category=${encodeURIComponent(categoryName)}&hierarchy=true`)
           );
           if (!response.ok) return;
           const data = await response.json();

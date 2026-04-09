@@ -41,6 +41,18 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   return <label style={fieldLabelStyle}>{children}</label>;
 }
 
+const BUILDING_CLASS_DESCRIPTIONS: Record<string, string> = {
+  "I-A": "Multi-storey apartment or office building with a flat concrete (RCC) roof — the strongest and most common modern construction.",
+  "I-B": "House or bungalow with a concrete (RCC) frame and sloped clay tile roof — typical south Indian home.",
+  "II-A": "Solid brick-wall house with a flat concrete (RCC) roof. Walls carry the load; no separate concrete columns.",
+  "II-B": "Brick-wall building with a sloped fibre cement (AC) sheet roof — commonly used in older homes and simple sheds.",
+  "II-C": "Traditional brick-wall house with a sloped clay tile roof — the classic rural or semi-urban home.",
+  "III-A": "Basic semi-permanent house with a sloped tile roof. Simple construction, not built for very long-term use.",
+  "III-B": "Basic semi-permanent shed or shelter with a galvanised iron (GI) sheet roof.",
+  "IV-A": "Temporary hut or seasonal shelter with a thatched roof (grass, palm leaves, or similar).",
+  "IV-B": "Temporary structure with a tin or plain metal sheet roof — very basic and low-cost.",
+};
+
 function formatINR(value: number | null | undefined) {
   if (value == null) return "-";
   return new Intl.NumberFormat("en-IN", {
@@ -131,16 +143,21 @@ export default function FingerInAirEstimator() {
           <div style={fieldStackStyle}>
             <FieldLabel>Building Class</FieldLabel>
             <select style={pageStyles.select} value={buildingClass} onChange={(e) => setBuildingClass(e.target.value)}>
-              <option value="I-A">I-A (RCC Framed)</option>
-              <option value="I-B">I-B (RCC + Mangalore Tile)</option>
-              <option value="II-A">II-A (Load Bearing RCC)</option>
-              <option value="II-B">II-B (Load Bearing AC Sheet)</option>
-              <option value="II-C">II-C (Load Bearing Mangalore Tile)</option>
-              <option value="III-A">III-A (Semi-permanent Tiled)</option>
-              <option value="III-B">III-B (Semi-permanent GI Sheet)</option>
-              <option value="IV-A">IV-A (Temporary Thatched)</option>
-              <option value="IV-B">IV-B (Temporary Tin Sheet)</option>
+              <option value="I-A">I-A — Apartment / Office (RCC flat roof)</option>
+              <option value="I-B">I-B — Bungalow / House (RCC + tile roof)</option>
+              <option value="II-A">II-A — Brick house, flat concrete roof</option>
+              <option value="II-B">II-B — Brick house / shed (AC sheet roof)</option>
+              <option value="II-C">II-C — Traditional brick house (tile roof)</option>
+              <option value="III-A">III-A — Basic house (semi-permanent, tiled)</option>
+              <option value="III-B">III-B — Basic shed (semi-permanent, GI sheet)</option>
+              <option value="IV-A">IV-A — Temporary hut (thatched roof)</option>
+              <option value="IV-B">IV-B — Temporary structure (tin sheet roof)</option>
             </select>
+            {BUILDING_CLASS_DESCRIPTIONS[buildingClass] && (
+              <p style={{ margin: 0, fontSize: 11, color: "#475569", lineHeight: 1.5 }}>
+                {BUILDING_CLASS_DESCRIPTIONS[buildingClass]}
+              </p>
+            )}
           </div>
 
           <div style={fieldStackStyle}>
