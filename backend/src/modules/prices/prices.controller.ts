@@ -67,8 +67,9 @@ export async function getDistrictPrices(req: Request, res: Response) {
   try {
     const districtId = asString(req.params.districtId);
     const category = String(req.query.category || "Cement");
+    const hierarchy = req.query.hierarchy === "true";
 
-    const data = await getDistrictCategoryPrices(districtId, category);
+    const data = await getDistrictCategoryPrices(districtId, category, { hierarchy });
     return res.json(data);
   } catch (error) {
     if (error instanceof Error && /(District|Category) not found/.test(error.message)) {

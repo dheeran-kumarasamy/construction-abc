@@ -333,7 +333,7 @@ export async function fetchMarketDistrictCategoryPrices(
   categoryName: string
 ): Promise<MarketPriceRow[]> {
   const res = await fetch(
-    apiUrl(`/api/prices/district/${districtId}?category=${encodeURIComponent(categoryName)}`),
+    apiUrl(`/api/prices/district/${districtId}?category=${encodeURIComponent(categoryName)}&hierarchy=true`),
     {
       headers: authHeaders(),
     }
