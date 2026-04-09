@@ -5,16 +5,18 @@ import { Navigate } from "react-router-dom";
 // --- Types ---
 export type Role = "architect" | "builder" | "client" | "dealer" | "admin";
 export type OrgRole = "head" | "member";
+export type AdminRole = "super_admin" | "admin_team";
 
 interface User {
   email: string;
   role: Role;
   orgRole?: OrgRole | null;
+  adminRole?: AdminRole | null;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, role: Role, orgRole?: OrgRole | null) => void;
+  login: (email: string, role: Role, orgRole?: OrgRole | null, adminRole?: AdminRole | null) => void;
   logout: () => void;
 }
 
@@ -33,8 +35,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  function login(email: string, role: Role, orgRole?: OrgRole | null) {
-    const newUser = { email, role, orgRole: orgRole || null };
+  function login(email: string, role: Role, orgRole?: OrgRole | null, adminRole?: AdminRole | null) {
+    const newUser = { email, role, orgRole: orgRole || null, adminRole: adminRole || null };
     setUser(newUser);
     localStorage.setItem("auth_user", JSON.stringify(newUser));
     console.log("User logged in:", newUser);

@@ -12,27 +12,34 @@ export class ScraperManager {
   private readonly pwd = new PWDScheduleScraper();
   private readonly aggregator = new MaterialTreeScraper();
 
-  private async getTargets(limit = 200): Promise<ScrapeTarget[]> {
-    const { rows } = await pool.query(
-      `
-        SELECT
-          d.id AS district_id,
-          d.name AS district_name,
-          m.id AS material_id,
-          m.name AS material_name
-        FROM districts d
-        CROSS JOIN materials m
-        ORDER BY d.name ASC, m.name ASC
-        LIMIT $1
-      `,
-      [limit]
-    );
+  private async getTargets(): Promise<ScrapeTarget[]> {
+    const limit = Number.parseInt(String(process.env.SCRAPER_TARGET_LIMIT || "0"), 10);
+    const hasLimit = Number.isFinite(limit) && limit > 0;
+
+    const query = `
+      SELECT
+        d.id AS district_id,
+        d.name AS district_name,
+        m.id AS material_id,
+        m.name AS material_name,
+        c.name AS category_name
+      FROM districts d
+      CROSS JOIN materials m
+      JOIN material_categories c ON c.id = m.category_id
+      ORDER BY d.name ASC, c.sort_order ASC, m.sort_order ASC, m.name ASC
+      ${hasLimit ? "LIMIT $1" : ""}
+    `;
+
+    const { rows } = hasLimit
+      ? await pool.query(query, [limit])
+      : await pool.query(query);
 
     return rows.map((row) => ({
       districtId: row.district_id,
       districtName: row.district_name,
       materialId: row.material_id,
       materialName: row.material_name,
+      categoryName: row.category_name,
     }));
   }
 

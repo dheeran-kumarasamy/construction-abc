@@ -5,12 +5,23 @@ export class MaterialTreeScraper extends BaseScraper {
     super({ source: "aggregator_scraper" });
   }
 
+  private buildQuery(target: ScrapeTarget) {
+    const category = String(target.categoryName || "").toLowerCase();
+    const labourIntent = category.includes("labour") || category.includes("labor");
+
+    if (labourIntent) {
+      return `${target.materialName} labour wages per day ${target.districtName} Tamil Nadu`;
+    }
+
+    return `${target.materialName} price ${target.districtName} Tamil Nadu`;
+  }
+
   async scrape(targets: ScrapeTarget[]): Promise<ScrapedPrice[]> {
     const results: ScrapedPrice[] = [];
 
     for (const target of targets) {
       try {
-        const query = encodeURIComponent(`${target.materialName} price tamil nadu`);
+        const query = encodeURIComponent(this.buildQuery(target));
         const url = `https://www.materialtree.com/search?q=${query}`;
 
         const html = await this.fetchWithRetry(url);
