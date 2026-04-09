@@ -1,21 +1,26 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
+import { useAuth } from "../../auth/AuthContext";
+import { adminFetch } from "./adminApi";
 
-const navItems = [
-  { label: "Overview", path: "/admin" },
-  { label: "Users", path: "/admin/users" },
-  { label: "Organizations", path: "/admin/organizations" },
-  { label: "Projects", path: "/admin/projects" },
-  { label: "BOQs", path: "/admin/boqs" },
-  { label: "Invites", path: "/admin/invites" },
-  { label: "Dealers", path: "/admin/dealers" },
-  { label: "Est. Projects", path: "/admin/estimation-projects" },
-  { label: "Estimates", path: "/admin/estimates" },
-  { label: "Deviation Alerts", path: "/admin/deviations" },
-  { label: "Rates & Analysis", path: "/admin/rates-analysis" },
-  { label: "Prices", path: "/admin/prices" },
-  { label: "Audit", path: "/admin/audit" },
+type PermissionsResponse = { adminRole: string; modules: string[] };
+
+// Module key → nav item mapping (key must match backend ALL_MODULE_KEYS)
+const ALL_NAV_ITEMS = [
+  { label: "Overview", path: "/admin", moduleKey: "overview" },
+  { label: "Users", path: "/admin/users", moduleKey: "users" },
+  { label: "Organizations", path: "/admin/organizations", moduleKey: "organizations" },
+  { label: "Projects", path: "/admin/projects", moduleKey: "projects" },
+  { label: "BOQs", path: "/admin/boqs", moduleKey: "boqs" },
+  { label: "Invites", path: "/admin/invites", moduleKey: "invites" },
+  { label: "Dealers", path: "/admin/dealers", moduleKey: "dealers" },
+  { label: "Est. Projects", path: "/admin/estimation-projects", moduleKey: "estimation-projects" },
+  { label: "Estimates", path: "/admin/estimates", moduleKey: "estimates" },
+  { label: "Deviation Alerts", path: "/admin/deviations", moduleKey: "deviations" },
+  { label: "Rates & Analysis", path: "/admin/rates-analysis", moduleKey: "rates-analysis" },
+  { label: "Prices", path: "/admin/prices", moduleKey: "prices" },
+  { label: "Audit", path: "/admin/audit", moduleKey: "audit" },
 ];
 
 export function AdminShell({
@@ -30,6 +35,33 @@ export function AdminShell({
   actions?: React.ReactNode;
 }) {
   const location = useLocation();
+  const { user } = useAuth();
+  const isSuperAdmin = !user?.adminRole || user.adminRole === "super_admin";
+
+  const [allowedModules, setAllowedModules] = React.useState<string[] | null>(null);
+
+  React.useEffect(() => {
+    if (isSuperAdmin) {
+      setAllowedModules(ALL_NAV_ITEMS.map((n) => n.moduleKey));
+      return;
+    }
+    adminFetch<PermissionsResponse>("/api/admin/my-permissions")
+      .then((data) => setAllowedModules(data.modules))
+      .catch(() => setAllowedModules([]));
+  }, [isSuperAdmin]);
+
+  const navItems = React.useMemo(() => {
+    const filtered = allowedModules === null
+      ? [] // loading — show nothing until resolved
+      : ALL_NAV_ITEMS.filter((n) => allowedModules.includes(n.moduleKey));
+
+    // Super admin gets the Admin Team management entry too
+    if (isSuperAdmin && allowedModules !== null) {
+      filtered.push({ label: "Admin Team", path: "/admin/team", moduleKey: "admin_team" });
+    }
+
+    return filtered;
+  }, [allowedModules, isSuperAdmin]);
 
   return (
     <div
@@ -58,17 +90,28 @@ export function AdminShell({
             overflow: "hidden",
           }}
         >
-          <div
-            style={{
-              padding: "18px 20px",
-              background: "linear-gradient(135deg, rgba(15,118,110,0.14), rgba(255,253,248,0.96))",
-              borderBottom: "1px solid var(--border)",
-            }}
-          >
+          <div style={{ padding: "18px 20px", background: "linear-gradient(135deg, rgba(15,118,110,0.14), rgba(255,253,248,0.96))", borderBottom: "1px solid var(--border)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
               <div>
-                <div style={{ fontSize: 12, letterSpacing: 1.2, textTransform: "uppercase", color: "#0f766e", fontWeight: 700 }}>
-                  Construction ABC Admin
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontSize: 12, letterSpacing: 1.2, textTransform: "uppercase", color: "#0f766e", fontWeight: 700 }}>
+                    Construction ABC Admin
+                  </div>
+                  {user?.adminRole && (
+                    <span style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: 0.5,
+                      background: user.adminRole === "super_admin" ? "#0f766e" : "#7c3aed",
+                      color: "#fff",
+                    }}>
+                      {user.adminRole === "super_admin" ? "SUPER ADMIN" : "ADMIN TEAM"}
+                    </span>
+                  )}
                 </div>
                 <h1 style={{ margin: "8px 0 0", fontSize: "clamp(24px, 4vw, 34px)", lineHeight: 1.05, color: "#0f172a" }}>{title}</h1>
                 {subtitle && <p style={{ margin: "8px 0 0", color: "#475569", maxWidth: 780 }}>{subtitle}</p>}
