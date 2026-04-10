@@ -293,20 +293,20 @@ export default function FingerInAirEstimator() {
       {error && <div style={pageStyles.error}>{error}</div>}
 
       {result && (
-        <div style={{ borderTop: "1px solid #bae6fd", paddingTop: 12, display: "grid", gap: 8 }}>
+        <div style={{ borderTop: "1px solid #bae6fd", paddingTop: 12, display: "grid", gap: 8, color: "#0f172a" }}>
           <div style={{ fontWeight: 700, color: "#0f172a" }}>{result.message}</div>
           <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-              <div style={{ color: "#64748b", fontSize: 12 }}>Per sq.ft rate</div>
-              <div style={{ fontWeight: 800, fontSize: 20 }}>{formatINR(result.per_sqft_rate)}</div>
+            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10, padding: 10, color: "#0f172a" }}>
+              <div style={{ color: "#475569", fontSize: 12 }}>Per sq.ft rate</div>
+              <div style={{ fontWeight: 800, fontSize: 20, color: "#0f172a" }}>{formatINR(result.per_sqft_rate)}</div>
             </div>
-            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-              <div style={{ color: "#64748b", fontSize: 12 }}>Total project cost</div>
-              <div style={{ fontWeight: 800, fontSize: 20 }}>{formatINR(result.total_project_cost)}</div>
+            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10, padding: 10, color: "#0f172a" }}>
+              <div style={{ color: "#475569", fontSize: 12 }}>Total project cost</div>
+              <div style={{ fontWeight: 800, fontSize: 20, color: "#0f172a" }}>{formatINR(result.total_project_cost)}</div>
             </div>
-            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-              <div style={{ color: "#64748b", fontSize: 12 }}>Total area</div>
-              <div style={{ fontWeight: 700 }}>
+            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10, padding: 10, color: "#0f172a" }}>
+              <div style={{ color: "#475569", fontSize: 12 }}>Total area</div>
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>
                 {(result.total_area_sqft || 0).toLocaleString("en-IN")} sq.ft
               </div>
             </div>
