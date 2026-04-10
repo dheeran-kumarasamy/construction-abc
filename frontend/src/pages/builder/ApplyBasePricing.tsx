@@ -24,6 +24,7 @@ interface BOQItem {
   total: number;
   category?: string;
   rateSource?: string;
+  lineItemOrigin?: "architect_standard" | "architect_additional" | "builder_added";
 }
 
 interface BasePriceItem {
@@ -109,6 +110,18 @@ interface PwdStageRule {
   label?: string;
   match: string[];
   materials: Array<{ material: string; uom: string; factor: number }>;
+}
+
+interface BuilderAutosaveSnapshot {
+  projectId: string;
+  pricedItems: BOQItem[];
+  notes: string;
+  basicMaterialCost: string;
+  marginConfig: MarginConfig;
+  targetTotal: string;
+  selectedGuardrails: string[];
+  marketRates: MarketRateItem[];
+  savedAt: string;
 }
 
 const PWD_STAGE_ORDER: Array<{ id: PwdStageId; label: string }> = [
@@ -204,6 +217,10 @@ const STANDARD_GUARDRAILS = [
     label: "Avoid unavailable/non-standard materials",
   },
 ] as const;
+
+function autosaveKey(projectId: string) {
+  return `builder-pricing-autosave:${projectId}`;
+}
 
 export default function ApplyBasePricing({
   initialProjectId,
@@ -311,6 +328,29 @@ export default function ApplyBasePricing({
       setIsFloatingBreakdownCollapsed(false);
     }
   }, [isLandscapeWide]);
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      saveAutosnapshot(selectedProjectId);
+    }, 30000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [
+    selectedProjectId,
+    pricedItems,
+    notes,
+    basicMaterialCost,
+    marginConfig,
+    targetTotal,
+    selectedGuardrails,
+    marketRates,
+  ]);
 
   function loadMarginConfig() {
     const overallMargin = Number(sessionStorage.getItem("overallMargin") || 10);
@@ -510,6 +550,72 @@ export default function ApplyBasePricing({
     }
   }
 
+  function loadAutosavedSnapshot(projectId: string): BuilderAutosaveSnapshot | null {
+    if (!projectId) return null;
+
+    try {
+      const raw = localStorage.getItem(autosaveKey(projectId));
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw) as Partial<BuilderAutosaveSnapshot>;
+      if (!parsed || parsed.projectId !== projectId || !Array.isArray(parsed.pricedItems)) {
+        return null;
+      }
+
+      return {
+        projectId,
+        pricedItems: parsed.pricedItems as BOQItem[],
+        notes: String(parsed.notes || ""),
+        basicMaterialCost: String(parsed.basicMaterialCost || ""),
+        marginConfig: {
+          overallMargin: Number(parsed.marginConfig?.overallMargin ?? 10),
+          laborUplift: Number(parsed.marginConfig?.laborUplift ?? 5),
+          machineryUplift: Number(parsed.marginConfig?.machineryUplift ?? 5),
+        },
+        targetTotal: String(parsed.targetTotal || ""),
+        selectedGuardrails: Array.isArray(parsed.selectedGuardrails) && parsed.selectedGuardrails.length
+          ? parsed.selectedGuardrails.map((item) => String(item))
+          : STANDARD_GUARDRAILS.map((item) => item.id),
+        marketRates: Array.isArray(parsed.marketRates) ? (parsed.marketRates as MarketRateItem[]) : [],
+        savedAt: String(parsed.savedAt || ""),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function saveAutosnapshot(projectId: string) {
+    if (!projectId || pricedItems.length === 0) {
+      return;
+    }
+
+    const payload: BuilderAutosaveSnapshot = {
+      projectId,
+      pricedItems,
+      notes,
+      basicMaterialCost,
+      marginConfig,
+      targetTotal,
+      selectedGuardrails,
+      marketRates,
+      savedAt: new Date().toISOString(),
+    };
+
+    localStorage.setItem(autosaveKey(projectId), JSON.stringify(payload));
+  }
+
+  async function markProjectAsInProgress(projectId: string) {
+    try {
+      const token = localStorage.getItem("token");
+      await fetch(apiUrl(`/api/builder/projects/${projectId}/in-progress`), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (err) {
+      console.warn("Failed to mark project in progress:", err);
+    }
+  }
+
   async function handleProjectChange(projectId: string) {
     setSelectedProjectId(projectId);
     setTargetTotal("");
@@ -531,6 +637,8 @@ export default function ApplyBasePricing({
 
     setLoading(true);
     try {
+      await markProjectAsInProgress(projectId);
+
       const token = localStorage.getItem("token");
       const response = await fetch(
         apiUrl(`/api/builder/projects/${projectId}/boq-items`),
@@ -541,13 +649,42 @@ export default function ApplyBasePricing({
 
       if (!response.ok) throw new Error("Failed to fetch BOQ items");
 
-      const items = await response.json();
+      const rawItems = await response.json();
+      const items: BOQItem[] = Array.isArray(rawItems)
+        ? rawItems.map((row: any, index: number) => ({
+            id: Number(row?.id || index + 1),
+            item: String(row?.item || "").trim(),
+            qty: Number(row?.qty || 0),
+            uom: String(row?.uom || "").trim(),
+            rate: Number(row?.rate || 0),
+            total: Number(row?.total || 0),
+            category: String(row?.category || "Material").trim() || "Material",
+            rateSource: String(row?.rateSource || row?.rate_source || "PWD"),
+            lineItemOrigin:
+              String(row?.line_item_origin || row?.lineItemOrigin || "architect_standard") === "architect_additional"
+                ? "architect_additional"
+                : "architect_standard",
+          }))
+        : [];
       const loadedMarketRates = await loadMarketRatesForProject(projectId);
       setMarketRates(loadedMarketRates);
       setBoqItems(items);
 
       // Auto-match pricing
       autoMatchPricing(items, [...basePricing, ...pwdTemplateRates], loadedMarketRates);
+
+      const autosaved = loadAutosavedSnapshot(projectId);
+      if (autosaved) {
+        setPricedItems(autosaved.pricedItems);
+        setNotes(autosaved.notes);
+        setBasicMaterialCost(autosaved.basicMaterialCost);
+        setMarginConfig(autosaved.marginConfig);
+        setTargetTotal(autosaved.targetTotal);
+        setSelectedGuardrails(autosaved.selectedGuardrails);
+        if (Array.isArray(autosaved.marketRates) && autosaved.marketRates.length > 0) {
+          setMarketRates(autosaved.marketRates);
+        }
+      }
     } catch (err) {
       console.error("Fetch BOQ error:", err);
       alert(err instanceof Error ? err.message : "Failed to fetch BOQ");
@@ -836,6 +973,56 @@ export default function ApplyBasePricing({
     updated[index].total = updated[index].qty * newRate;
     updated[index].rateSource = "Manual Override";
     setPricedItems(updated);
+  }
+
+  function addBuilderLineItem() {
+    const syntheticId = Date.now();
+    setPricedItems((prev) => [
+      ...prev,
+      {
+        id: syntheticId,
+        item: "",
+        qty: 1,
+        uom: "Nos",
+        rate: 0,
+        total: 0,
+        category: "Material",
+        rateSource: "Builder Added Item",
+        lineItemOrigin: "builder_added",
+      },
+    ]);
+  }
+
+  function removeBuilderLineItem(index: number) {
+    setPricedItems((prev) => prev.filter((_, idx) => idx !== index));
+  }
+
+  function updateBuilderLineItemField(
+    index: number,
+    field: "item" | "qty" | "uom" | "rate" | "category",
+    value: string | number
+  ) {
+    setPricedItems((prev) => {
+      const next = [...prev];
+      const current = next[index];
+      if (!current || current.lineItemOrigin !== "builder_added") {
+        return prev;
+      }
+
+      if (field === "item" || field === "uom" || field === "category") {
+        (next[index] as any)[field] = String(value);
+      } else {
+        const parsed = Number(value);
+        (next[index] as any)[field] = Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
+      }
+
+      next[index] = {
+        ...next[index],
+        total: Number((Number(next[index].qty || 0) * Number(next[index].rate || 0)).toFixed(2)),
+      };
+
+      return next;
+    });
   }
 
   function handleMarketRateChange(index: number, newRate: number) {
@@ -1311,6 +1498,8 @@ export default function ApplyBasePricing({
       setBasicMaterialCost("");
       setActiveRecommendationId(null);
       loadMarginConfig();
+
+      localStorage.removeItem(autosaveKey(selectedProjectId));
     } catch (err) {
       console.error("Submit estimate error:", err);
       alert(err instanceof Error ? err.message : "Failed to submit estimate");
@@ -1977,6 +2166,24 @@ export default function ApplyBasePricing({
                 <h3 style={{ ...pageStyles.subtitle, marginTop: 0 }}>
                   BOQ Items & Pricing
                 </h3>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "#ffedd5", color: "#9a3412", fontWeight: 600 }}>
+                      Architect Additional BOQ Item
+                    </span>
+                    <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "#e0f2fe", color: "#0c4a6e", fontWeight: 600 }}>
+                      Builder Added BOQ Item
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    style={pageStyles.secondaryBtn}
+                    onClick={addBuilderLineItem}
+                    disabled={isUiLocked}
+                  >
+                    + Add BOQ Item
+                  </button>
+                </div>
                 <TableWrapper>
                   <table style={pageStyles.table}>
                     <thead>
@@ -1993,20 +2200,67 @@ export default function ApplyBasePricing({
                     <tbody>
                       {pricedItems.map((item, index) => {
                         const llmSuggestion = llmSuggestionByBoqItem.get(item.id);
+                        const rowBaseStyle =
+                          item.lineItemOrigin === "architect_additional"
+                            ? { backgroundColor: "#fff7ed" }
+                            : item.lineItemOrigin === "builder_added"
+                              ? { backgroundColor: "#e0f2fe" }
+                              : (index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd);
+
                         return (
                           <Fragment key={item.id}>
-                            <tr style={index % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                            <tr style={rowBaseStyle}>
                               <td className="num-cell" style={pageStyles.td}>{index + 1}</td>
-                              <td style={pageStyles.td}>{item.item}</td>
-                              <td className="num-cell" style={pageStyles.td}>{item.qty}</td>
-                              <td style={pageStyles.td}>{item.uom}</td>
+                              <td style={pageStyles.td}>
+                                {item.lineItemOrigin === "builder_added" ? (
+                                  <input
+                                    type="text"
+                                    value={item.item}
+                                    onChange={(e) => updateBuilderLineItemField(index, "item", e.target.value)}
+                                    disabled={isUiLocked}
+                                    placeholder="Enter BOQ item"
+                                    style={{ ...pageStyles.input, width: "100%", minWidth: 180 }}
+                                  />
+                                ) : (
+                                  item.item
+                                )}
+                              </td>
+                              <td className="num-cell" style={pageStyles.td}>
+                                {item.lineItemOrigin === "builder_added" ? (
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={Number.isFinite(item.qty) ? item.qty : 0}
+                                    onChange={(e) => updateBuilderLineItemField(index, "qty", e.target.value)}
+                                    disabled={isUiLocked}
+                                    style={{ ...pageStyles.input, width: "90px" }}
+                                  />
+                                ) : (
+                                  item.qty
+                                )}
+                              </td>
+                              <td style={pageStyles.td}>
+                                {item.lineItemOrigin === "builder_added" ? (
+                                  <input
+                                    type="text"
+                                    value={item.uom}
+                                    onChange={(e) => updateBuilderLineItemField(index, "uom", e.target.value)}
+                                    disabled={isUiLocked}
+                                    style={{ ...pageStyles.input, width: "90px" }}
+                                  />
+                                ) : (
+                                  item.uom
+                                )}
+                              </td>
                               <td className="amount-cell" style={pageStyles.td}>
                                 <input
                                   type="number"
                                   value={Number.isFinite(item.rate) ? item.rate : 0}
                                   disabled={isUiLocked}
                                   onChange={(e) =>
-                                    handleRateChange(index, Number(e.target.value))
+                                    item.lineItemOrigin === "builder_added"
+                                      ? updateBuilderLineItemField(index, "rate", e.target.value)
+                                      : handleRateChange(index, Number(e.target.value))
                                   }
                                   style={{
                                     ...pageStyles.input,
@@ -2015,7 +2269,21 @@ export default function ApplyBasePricing({
                                   }}
                                 />
                               </td>
-                              <td style={pageStyles.td}>{item.rateSource || "PWD"}</td>
+                              <td style={pageStyles.td}>
+                                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                                  <span>{item.rateSource || "PWD"}</span>
+                                  {item.lineItemOrigin === "builder_added" ? (
+                                    <button
+                                      type="button"
+                                      style={{ ...pageStyles.secondaryBtn, padding: "0 8px", minHeight: 26, fontSize: 12 }}
+                                      onClick={() => removeBuilderLineItem(index)}
+                                      disabled={isUiLocked}
+                                    >
+                                      Remove
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </td>
                               <td className="amount-cell" style={pageStyles.td}>{formatINR(item.total, { minimumFractionDigits: 2, maximumFractionDigits: 2, withSymbol: false })}</td>
                             </tr>
 

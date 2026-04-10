@@ -303,6 +303,7 @@ export interface SubmittedBOQItem {
   item: string;
   qty: number | string;
   uom: string;
+  source?: "architect_standard" | "architect_additional";
 }
 
 export interface SubmittedBOQResponse {

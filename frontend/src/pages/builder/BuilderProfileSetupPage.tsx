@@ -13,6 +13,7 @@ interface ProfileForm {
   teamSize: string;
   minProjectBudget: string;
   isVisibleToArchitects: boolean;
+  portfolioPhotos: string[];
 }
 
 const EMPTY: ProfileForm = {
@@ -25,6 +26,7 @@ const EMPTY: ProfileForm = {
   teamSize: "",
   minProjectBudget: "",
   isVisibleToArchitects: false,
+  portfolioPhotos: [],
 };
 
 export default function BuilderProfileSetupPage() {
@@ -35,6 +37,7 @@ export default function BuilderProfileSetupPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
 
   useEffect(() => {
     if (didLoadRef.current) return;
@@ -78,6 +81,7 @@ export default function BuilderProfileSetupPage() {
             specialties: data.specialties || "",
             pastProjects: data.pastProjects || "",
             portfolioLinks: data.portfolioLinks || "",
+            portfolioPhotos: Array.isArray(data.portfolioPhotos) ? data.portfolioPhotos : [],
             teamSize: data.teamSize != null ? String(data.teamSize) : "",
             minProjectBudget: data.minProjectBudget != null ? String(data.minProjectBudget) : "",
             isVisibleToArchitects: Boolean(data.isVisibleToArchitects),
@@ -93,6 +97,40 @@ export default function BuilderProfileSetupPage() {
 
   function set(field: keyof ProfileForm, value: string | boolean) {
     setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function removePortfolioPhoto(photoPath: string) {
+    setForm((prev) => ({
+      ...prev,
+      portfolioPhotos: prev.portfolioPhotos.filter((item) => item !== photoPath),
+    }));
+  }
+
+  function handlePhotoSelection(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const oversized = files.find((file) => file.size > 5 * 1024 * 1024);
+    if (oversized) {
+      setError("Each portfolio photo must be 5MB or smaller");
+      e.target.value = "";
+      return;
+    }
+
+    const total = form.portfolioPhotos.length + pendingPhotos.length + files.length;
+    if (total > 10) {
+      setError("You can keep a maximum of 10 portfolio photos");
+      e.target.value = "";
+      return;
+    }
+
+    setError("");
+    setPendingPhotos((prev) => [...prev, ...files]);
+    e.target.value = "";
+  }
+
+  function removePendingPhoto(index: number) {
+    setPendingPhotos((prev) => prev.filter((_, idx) => idx !== index));
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -126,6 +164,7 @@ export default function BuilderProfileSetupPage() {
           specialties: form.specialties.trim(),
           pastProjects: form.pastProjects.trim() || null,
           portfolioLinks: form.portfolioLinks.trim() || null,
+          portfolioPhotos: form.portfolioPhotos,
           teamSize: form.teamSize ? parseInt(form.teamSize, 10) : null,
           minProjectBudget: form.minProjectBudget ? parseFloat(form.minProjectBudget) : null,
           isVisibleToArchitects: form.isVisibleToArchitects,
@@ -139,6 +178,34 @@ export default function BuilderProfileSetupPage() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save profile");
+
+      let mergedPhotos = Array.isArray(data.portfolioPhotos) ? data.portfolioPhotos : form.portfolioPhotos;
+
+      if (pendingPhotos.length > 0) {
+        const uploadForm = new FormData();
+        pendingPhotos.forEach((file) => uploadForm.append("photos", file));
+
+        const uploadRes = await fetch(apiUrl("/api/builder/profile/photos"), {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: uploadForm,
+        });
+
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) {
+          throw new Error(uploadData.error || "Failed to upload portfolio photos");
+        }
+
+        mergedPhotos = Array.isArray(uploadData.portfolioPhotos) ? uploadData.portfolioPhotos : mergedPhotos;
+        setPendingPhotos([]);
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        portfolioPhotos: mergedPhotos,
+      }));
 
       // Mark profile as complete in local storage
       localStorage.setItem("builder_profile_complete", "1");
@@ -240,6 +307,71 @@ export default function BuilderProfileSetupPage() {
             value={form.portfolioLinks}
             onChange={(e) => set("portfolioLinks", e.target.value)}
           />
+
+          <label style={labelStyle}>Portfolio Photos (max 10, up to 5MB each)</label>
+          <input
+            style={pageStyles.input}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handlePhotoSelection}
+          />
+
+          {form.portfolioPhotos.length > 0 && (
+            <div style={{ display: "grid", gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Saved Photos</span>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 10 }}>
+                {form.portfolioPhotos.map((photoPath) => (
+                  <div key={photoPath} style={{ display: "grid", gap: 6 }}>
+                    <img
+                      src={apiUrl(`/uploads/${photoPath}`)}
+                      alt="Portfolio"
+                      style={{ width: "100%", height: 88, objectFit: "cover", borderRadius: 8, border: "1px solid #d1d5db" }}
+                    />
+                    <button
+                      type="button"
+                      style={{ ...pageStyles.secondaryBtn, fontSize: 12, minHeight: 30 }}
+                      onClick={() => removePortfolioPhoto(photoPath)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {pendingPhotos.length > 0 && (
+            <div style={{ display: "grid", gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Pending Upload</span>
+              <div style={{ display: "grid", gap: 6 }}>
+                {pendingPhotos.map((file, index) => (
+                  <div
+                    key={`${file.name}-${index}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 10,
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 8,
+                      padding: "8px 10px",
+                      background: "#f9fafb",
+                    }}
+                  >
+                    <span style={{ fontSize: 12, color: "#374151", overflowWrap: "anywhere" }}>{file.name}</span>
+                    <button
+                      type="button"
+                      style={{ ...pageStyles.secondaryBtn, fontSize: 12, minHeight: 28, padding: "0 10px" }}
+                      onClick={() => removePendingPhoto(index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <label style={labelStyle}>Team Size (optional)</label>
           <input

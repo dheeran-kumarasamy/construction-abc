@@ -158,10 +158,18 @@ export async function submitBOQItems(req: Request, res: Response) {
         item: String(row?.item || "").trim(),
         qty: row?.qty,
         uom: String(row?.uom || "").trim(),
+        source: String(row?.source || "architect_standard").trim().toLowerCase(),
       }))
-      .filter((row: { item: string; qty: number | string; uom: string }) =>
+      .filter((row: { item: string; qty: number | string; uom: string; source: string }) =>
         row.item && row.uom && String(row.qty).trim()
-      );
+      )
+      .map((row: { item: string; qty: number | string; uom: string; source: string }) => ({
+        ...row,
+        source:
+          row.source === "architect_additional" || row.source === "architect_standard"
+            ? row.source
+            : "architect_standard",
+      }));
 
     if (!items.length) {
       return res.status(400).json({ error: "At least one BOQ item with quantity is required" });
@@ -202,8 +210,16 @@ export async function updateBOQItems(req: Request, res: Response) {
         item: String(row?.item || "").trim(),
         qty: row?.qty,
         uom: String(row?.uom || "").trim(),
+        source: String(row?.source || "architect_standard").trim().toLowerCase(),
       }))
-      .filter((row: { item: string; qty: number | string; uom: string }) => row.item && row.uom && String(row.qty).trim());
+      .filter((row: { item: string; qty: number | string; uom: string; source: string }) => row.item && row.uom && String(row.qty).trim())
+      .map((row: { item: string; qty: number | string; uom: string; source: string }) => ({
+        ...row,
+        source:
+          row.source === "architect_additional" || row.source === "architect_standard"
+            ? row.source
+            : "architect_standard",
+      }));
 
     if (!items.length) {
       return res.status(400).json({ error: "At least one BOQ item is required" });

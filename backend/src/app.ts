@@ -1,5 +1,6 @@
 import express from "express";
 import cors, { CorsOptions } from "cors";
+import path from "path";
 import authRoutes from "./modules/auth/auth.routes";
 import projectRoutes from "./modules/projects/project.routes";
 import boqRoutes from "./modules/boq/boq.routes";
@@ -51,6 +52,9 @@ const corsOptions: CorsOptions = {
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.json());
+
+const uploadRoot = process.env.UPLOAD_ROOT || path.join(process.cwd(), "uploads");
+app.use("/uploads", express.static(uploadRoot));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: Date.now() });

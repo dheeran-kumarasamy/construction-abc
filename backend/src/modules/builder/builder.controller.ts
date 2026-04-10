@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import * as service from "./builder.service";
 import { pool } from "../../config/db";
+import fs from "fs";
 
 async function resolveBuilderOrganizationId(userId: string, projectId?: string): Promise<string | null> {
   const userOrg = await pool.query(
@@ -81,6 +82,33 @@ export async function getProjectBOQItems(req: Request, res: Response) {
     console.error("Get BOQ items error:", error);
     return res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to fetch BOQ items",
+    });
+  }
+}
+
+export async function markProjectInProgress(req: Request, res: Response) {
+  try {
+    const { projectId } = req.params;
+    const projectIdStr = Array.isArray(projectId) ? projectId[0] : projectId;
+    const user = (req as any).user;
+    const userId = user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const builderOrgId = user?.organizationId || (await resolveBuilderOrganizationId(userId, projectIdStr));
+
+    if (!builderOrgId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const result = await service.markEstimateInProgress(projectIdStr, userId, builderOrgId);
+    return res.json(result);
+  } catch (error) {
+    console.error("Mark project in progress error:", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to update project status",
     });
   }
 }
@@ -300,6 +328,7 @@ export async function updateMyBuilderProfile(req: Request, res: Response) {
       specialties,
       pastProjects,
       portfolioLinks,
+      portfolioPhotos,
       teamSize,
       minProjectBudget,
       isVisibleToArchitects,
@@ -312,6 +341,9 @@ export async function updateMyBuilderProfile(req: Request, res: Response) {
       specialties,
       pastProjects,
       portfolioLinks,
+      portfolioPhotos: Array.isArray(portfolioPhotos)
+        ? portfolioPhotos.map((item) => String(item || "").trim()).filter(Boolean)
+        : undefined,
       teamSize: teamSize !== undefined ? Number(teamSize) : undefined,
       minProjectBudget: minProjectBudget !== undefined ? Number(minProjectBudget) : undefined,
       isVisibleToArchitects,
@@ -333,5 +365,49 @@ export async function listBuildersForArchitect(req: Request, res: Response) {
   } catch (err: any) {
     console.error("listBuildersForArchitect error:", err);
     return res.status(500).json({ error: "Failed to fetch builder directory" });
+  }
+}
+
+export async function uploadMyBuilderPortfolioPhotos(req: Request, res: Response) {
+  const uploadedFiles = ((req.files as Express.Multer.File[]) || []);
+
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    if (!uploadedFiles.length) {
+      return res.status(400).json({ error: "No photos uploaded" });
+    }
+
+    const existing = await service.getBuilderProfile(userId);
+    const existingPhotos = Array.isArray(existing?.portfolioPhotos) ? existing.portfolioPhotos : [];
+    if (existingPhotos.length + uploadedFiles.length > 10) {
+      uploadedFiles.forEach((file) => {
+        if (file.path && fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+      return res.status(400).json({ error: "Portfolio can contain at most 10 photos" });
+    }
+
+    const newPhotoPaths = uploadedFiles.map((file) => `builder-portfolio/${file.filename}`);
+    const mergedPhotos = [...existingPhotos, ...newPhotoPaths];
+
+    const profile = await service.upsertBuilderProfile(userId, {
+      portfolioPhotos: mergedPhotos,
+    });
+
+    return res.json({
+      message: "Portfolio photos uploaded",
+      portfolioPhotos: profile.portfolioPhotos || [],
+    });
+  } catch (err: any) {
+    uploadedFiles.forEach((file) => {
+      if (file.path && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
+    });
+    console.error("uploadMyBuilderPortfolioPhotos error:", err);
+    return res.status(500).json({ error: "Failed to upload portfolio photos" });
   }
 }

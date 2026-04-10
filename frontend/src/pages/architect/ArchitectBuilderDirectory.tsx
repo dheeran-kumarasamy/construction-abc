@@ -12,6 +12,7 @@ interface BuilderProfile {
   specialties: string | null;
   pastProjects: string | null;
   portfolioLinks: string | null;
+  portfolioPhotos: string[];
   teamSize: number | null;
   minProjectBudget: number | null;
 }
@@ -153,7 +154,7 @@ function BuilderCard({ builder: b }: { builder: BuilderProfile }) {
       </div>
 
       {/* Expand/collapse for extra info */}
-      {(b.pastProjects || b.portfolioLinks) && (
+      {(b.pastProjects || b.portfolioLinks || (Array.isArray(b.portfolioPhotos) && b.portfolioPhotos.length > 0)) && (
         <button
           style={expandBtnStyle}
           onClick={() => setExpanded((v) => !v)}
@@ -183,6 +184,35 @@ function BuilderCard({ builder: b }: { builder: BuilderProfile }) {
                     style={{ fontSize: 13, color: "#0f766e", wordBreak: "break-all" }}
                   >
                     {link}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+          {Array.isArray(b.portfolioPhotos) && b.portfolioPhotos.length > 0 && (
+            <div>
+              <span style={detailLabel}>Portfolio Photos</span>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10 }}>
+                {b.portfolioPhotos.map((photoPath) => (
+                  <a
+                    key={photoPath}
+                    href={apiUrl(`/uploads/${photoPath}`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: "block" }}
+                  >
+                    <img
+                      src={apiUrl(`/uploads/${photoPath}`)}
+                      alt={`${b.companyName || "Builder"} portfolio`}
+                      style={{
+                        width: "100%",
+                        height: 96,
+                        objectFit: "cover",
+                        borderRadius: 8,
+                        border: "1px solid #d1d5db",
+                        background: "#f8fafc",
+                      }}
+                    />
                   </a>
                 ))}
               </div>
