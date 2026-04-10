@@ -292,12 +292,30 @@ export async function loginUser(email: string, password: string) {
   }
 
   try {
-        const { rows } = await pool.query(
+    let rows: any[] = [];
+
+    try {
+      const result = await pool.query(
         `SELECT u.id, u.password_hash, u.role, u.organization_id, u.org_role, u.admin_role
-     FROM users u
-     WHERE LOWER(TRIM(u.email)) = $1`,
-    [normalizedEmail]
-  );
+         FROM users u
+         WHERE LOWER(TRIM(u.email)) = $1`,
+        [normalizedEmail]
+      );
+      rows = result.rows;
+    } catch (queryErr: any) {
+      // Backward compatibility for DBs that have not applied migration 024 yet.
+      if (queryErr?.code !== "42703") {
+        throw queryErr;
+      }
+
+      const legacyResult = await pool.query(
+        `SELECT u.id, u.password_hash, u.role, u.organization_id, u.org_role
+         FROM users u
+         WHERE LOWER(TRIM(u.email)) = $1`,
+        [normalizedEmail]
+      );
+      rows = legacyResult.rows;
+    }
 
   if (rows.length === 0) {
     console.warn("Login failed: user not found", { email: normalizedEmail });
