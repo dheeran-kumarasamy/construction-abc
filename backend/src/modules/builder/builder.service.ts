@@ -2302,29 +2302,58 @@ export async function upsertBuilderProfile(userId: string, data: BuilderProfileD
   let row: any;
 
   if (existing.rows.length === 0) {
-    const res = await pool.query(
-      `INSERT INTO builder_profiles
-         (user_id, company_name, contact_phone, service_locations, specialties,
-          past_projects, portfolio_links, portfolio_photos, team_size, min_project_budget, is_visible_to_architects)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       RETURNING *`,
-      [
-        userId,
-        data.companyName ?? null,
-        data.contactPhone ?? null,
-        data.serviceLocations ?? null,
-        data.specialties ?? null,
-        data.pastProjects ?? null,
-        data.portfolioLinks ?? null,
-        data.portfolioPhotos ?? [],
-        data.teamSize ?? null,
-        data.minProjectBudget ?? null,
-        data.isVisibleToArchitects ?? false,
-      ]
-    );
-    row = res.rows[0];
+    try {
+      // Try INSERT with portfolio_photos (migration 025+)
+      const res = await pool.query(
+        `INSERT INTO builder_profiles
+           (user_id, company_name, contact_phone, service_locations, specialties,
+            past_projects, portfolio_links, portfolio_photos, team_size, min_project_budget, is_visible_to_architects)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         RETURNING *`,
+        [
+          userId,
+          data.companyName ?? null,
+          data.contactPhone ?? null,
+          data.serviceLocations ?? null,
+          data.specialties ?? null,
+          data.pastProjects ?? null,
+          data.portfolioLinks ?? null,
+          data.portfolioPhotos ?? [],
+          data.teamSize ?? null,
+          data.minProjectBudget ?? null,
+          data.isVisibleToArchitects ?? false,
+        ]
+      );
+      row = res.rows[0];
+    } catch (err: any) {
+      // If portfolio_photos column doesn't exist (column code 42703), retry without it
+      if (err.code === '42703') {
+        const res = await pool.query(
+          `INSERT INTO builder_profiles
+             (user_id, company_name, contact_phone, service_locations, specialties,
+              past_projects, portfolio_links, team_size, min_project_budget, is_visible_to_architects)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           RETURNING *`,
+          [
+            userId,
+            data.companyName ?? null,
+            data.contactPhone ?? null,
+            data.serviceLocations ?? null,
+            data.specialties ?? null,
+            data.pastProjects ?? null,
+            data.portfolioLinks ?? null,
+            data.teamSize ?? null,
+            data.minProjectBudget ?? null,
+            data.isVisibleToArchitects ?? false,
+          ]
+        );
+        row = res.rows[0];
+      } else {
+        throw err;
+      }
+    }
   } else {
-    const fields: string[] = [];
+    let fields: string[] = [];
     const params: any[] = [];
     let idx = 1;
 
@@ -2357,11 +2386,40 @@ export async function upsertBuilderProfile(userId: string, data: BuilderProfileD
     } else {
       fields.push(`updated_at = NOW()`);
       params.push(userId);
-      const res = await pool.query(
-        `UPDATE builder_profiles SET ${fields.join(", ")} WHERE user_id = $${idx} RETURNING *`,
-        params
-      );
-      row = res.rows[0];
+      
+      try {
+        const res = await pool.query(
+          `UPDATE builder_profiles SET ${fields.join(", ")} WHERE user_id = $${idx} RETURNING *`,
+          params
+        );
+        row = res.rows[0];
+      } catch (err: any) {
+        // If portfolio_photos column doesn't exist (column code 42703), retry without it
+        if (err.code === '42703') {
+          // Rebuild without portfolio_photos
+          fields = [];
+          const filteredParams: any[] = [];
+          let newIdx = 1;
+          
+          for (const [key, col] of mapping) {
+            if (data[key] !== undefined && col !== 'portfolio_photos') {
+              fields.push(`${col} = $${newIdx++}`);
+              filteredParams.push(data[key] ?? null);
+            }
+          }
+          
+          fields.push(`updated_at = NOW()`);
+          filteredParams.push(userId);
+          
+          const res = await pool.query(
+            `UPDATE builder_profiles SET ${fields.join(", ")} WHERE user_id = $${newIdx} RETURNING *`,
+            filteredParams
+          );
+          row = res.rows[0];
+        } else {
+          throw err;
+        }
+      }
     }
   }
 
