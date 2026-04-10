@@ -1540,6 +1540,27 @@ export async function getFingerInAirEstimate(input: FingerInAirInput) {
     escalation_percent: toPercentNumber(input.escalation_percent, defaults.escalation_percent),
   };
 
+  const fallbackPlinthRates: Array<{
+    class_code: string;
+    roof_type: string;
+    floor: string;
+    rate: number;
+    additional_floor_rate: number;
+    rate_per_sqm?: number;
+  }> = [
+    { class_code: "I-A", roof_type: "RCC Slab", floor: "Ground Floor", rate: 24500, additional_floor_rate: 2450 },
+    { class_code: "I-A", roof_type: "RCC Slab", floor: "First Floor+", rate: 26950, additional_floor_rate: 2695 },
+    { class_code: "I-B", roof_type: "Mangalore Tile", floor: "Ground Floor", rate: 21000, additional_floor_rate: 2100 },
+    { class_code: "II-A", roof_type: "RCC Slab", floor: "Ground Floor", rate: 20500, additional_floor_rate: 2050 },
+    { class_code: "II-A", roof_type: "RCC Slab", floor: "First Floor+", rate: 22550, additional_floor_rate: 2255 },
+    { class_code: "II-B", roof_type: "AC Sheet", floor: "Ground Floor", rate: 16800, additional_floor_rate: 1680 },
+    { class_code: "II-C", roof_type: "Mangalore Tile", floor: "Ground Floor", rate: 17500, additional_floor_rate: 1750 },
+    { class_code: "III-A", roof_type: "Country Tile", floor: "Ground Floor", rate: 12000, additional_floor_rate: 0 },
+    { class_code: "III-B", roof_type: "GI Sheet", floor: "Ground Floor", rate: 13500, additional_floor_rate: 0 },
+    { class_code: "IV-A", roof_type: "Thatch", floor: "Ground Floor", rate: 6500, additional_floor_rate: 0 },
+    { class_code: "IV-B", roof_type: "Tin Sheet", floor: "Ground Floor", rate: 8000, additional_floor_rate: 0 },
+  ];
+
   const loadPlinthRates = async (classCode: string, roofType?: string | null) => {
     const { rows } = await pool.query(
       `SELECT *
@@ -1555,7 +1576,14 @@ export async function getFingerInAirEstimate(input: FingerInAirInput) {
          floor`,
       [classCode, roofType || null]
     );
-    return rows;
+    if (rows.length) return rows;
+
+    // Runtime fallback for environments where SOR seed data is not loaded.
+    return fallbackPlinthRates.filter((row) => {
+      if (row.class_code !== classCode) return false;
+      if (!roofType) return true;
+      return String(row.roof_type).toLowerCase() === String(roofType).toLowerCase();
+    });
   };
 
   let plinthRates = await loadPlinthRates(normalized.building_class, normalized.roof_type);
