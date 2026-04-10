@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { unlink } from "fs/promises";
 import { pool } from "../../config/db";
 import { authenticate, requireAdmin, requireSuperAdmin } from "../auth/auth.middleware";
-import { runScrapers } from "../../services/scrapers";
+import { runScrapers, runLabourScraper, runAllMaterialsScraper } from "../../services/scrapers";
 
 // Canonical list of admin module keys — must stay in sync with frontend navItems
 const ALL_MODULE_KEYS = [
@@ -2094,4 +2094,27 @@ router.post("/scrapers/run", async (req: Request, res: Response) => {
   }
 });
 
+router.post("/scrapers/run-labour", async (req: Request, res: Response) => {
+  try {
+    const result = await runLabourScraper();
+    await logAdminAction(req, "admin.scrapers.run-labour", { result });
+    return res.json(result);
+  } catch (error) {
+    console.error("Manual labour scraper run failed", error);
+    return res.status(500).json({ error: "Failed to run labour scraper" });
+  }
+});
+
 export default router;
+router.post("/scrapers/run-all-materials", async (req: Request, res: Response) => {
+  try {
+    const result = await runAllMaterialsScraper();
+    await logAdminAction(req, "admin.scrapers.run-all-materials", { result });
+    return res.json(result);
+  } catch (error) {
+    console.error("Manual all-materials scraper run failed", error);
+    return res.status(500).json({ error: "Failed to run all-materials scraper" });
+  }
+});
+
+

@@ -1,11 +1,23 @@
 import cron from "node-cron";
 import { ScraperManager } from "./ScraperManager";
+import { LabourScraper } from "./LabourScraper";
+import { AllMaterialsScraper } from "./AllMaterialsScraper";
 
 const manager = new ScraperManager();
+const labourScraper = new LabourScraper();
+const allMaterialsScraper = new AllMaterialsScraper();
 const CRON_TIMEZONE = process.env.CRON_TIMEZONE || "Asia/Kolkata";
 
 export async function runScrapers(source?: "indiamart" | "pwd" | "aggregator") {
   return manager.run(source);
+}
+
+export async function runLabourScraper() {
+  return labourScraper.run();
+}
+
+export async function runAllMaterialsScraper() {
+  return allMaterialsScraper.run();
 }
 
 export function startScraperScheduler() {
@@ -54,6 +66,17 @@ export function startScraperScheduler() {
 
   scheduleTask("aggregator", "15 2 * * *", async () => {
     await manager.run("aggregator");
+  });
+
+  // Weekly comprehensive materials scraper: runs on Sunday at 4:00 AM
+  // Scrapes ALL materials from multiple sources with brand name enrichment
+  scheduleTask("all-materials-weekly", "0 4 * * 0", async () => {
+    const result = await allMaterialsScraper.run();
+    console.log(
+      `[all-materials-weekly] completed: inserted=${result.inserted}, ` +
+      `districts=${result.districtsWithData}/${result.targets}, ` +
+      `sources=${result.sourcesUsed.join(",")}`
+    );
   });
 
   console.log(`✅ Price scraper schedules initialized (timezone: ${CRON_TIMEZONE})`);
