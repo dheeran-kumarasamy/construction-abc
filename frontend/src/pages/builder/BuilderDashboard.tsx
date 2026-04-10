@@ -44,26 +44,43 @@ export default function BuilderDashboard() {
   }
 
   const submittedProjectIds = useMemo(
-    () => new Set(submitted.map((item) => item.project_id)),
-    [submitted]
+    () =>
+      new Set([
+        ...submitted.map((item) => item.project_id),
+        ...projects
+          .filter((project) => {
+            const status = String(project.estimate_status || "").toLowerCase();
+            return status === "submitted" || status === "approved" || status === "awarded";
+          })
+          .map((project) => project.id),
+      ]),
+    [submitted, projects]
   );
 
   const invitedProjects = useMemo(
     () =>
       projects.filter((project) => {
         const status = String(project.estimate_status || "").toLowerCase();
-        return !status || status === "invited";
+        return !submittedProjectIds.has(project.id) && (!status || status === "invited");
       }),
-    [projects]
+    [projects, submittedProjectIds]
   );
 
   const inProgressProjects = useMemo(
     () =>
       projects.filter((project) => {
         const status = String(project.estimate_status || "").toLowerCase();
-        return !!status && status !== "submitted" && status !== "approved";
+        if (submittedProjectIds.has(project.id)) {
+          return false;
+        }
+
+        if (!status || status === "invited") {
+          return false;
+        }
+
+        return true;
       }),
-    [projects]
+    [projects, submittedProjectIds]
   );
 
   const submittedProjects = useMemo(

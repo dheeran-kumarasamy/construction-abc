@@ -505,7 +505,7 @@ export async function getBOQByProject(projectId: string) {
 export async function saveJsonBOQ(
   projectId: string,
   userId: string,
-  items: Array<{ item: string; qty: number | string; uom: string }>
+  items: Array<{ item: string; qty: number | string; uom: string; source?: string }>
 ) {
   const client = await pool.connect();
   try {
@@ -583,7 +583,7 @@ export async function saveJsonBOQ(
 export async function updateBOQItems(
   projectId: string,
   userId: string,
-  items: Array<{ item: string; qty: number | string; uom: string }>
+  items: Array<{ item: string; qty: number | string; uom: string; source?: string }>
 ) {
   const result = await pool.query(
     `UPDATE boqs

@@ -60,7 +60,16 @@ function clearDraft(projectId: string) {
 
 type BOQRow =
   | { template: RateTemplate; quantity: string; uom: string; rate?: number; amount?: number }
-  | { customId: string; customName: string; stageName?: string; quantity: string; uom: string; rate?: number; amount?: number };
+  | {
+      customId: string;
+      customName: string;
+      stageName?: string;
+      source?: "architect_standard" | "architect_additional";
+      quantity: string;
+      uom: string;
+      rate?: number;
+      amount?: number;
+    };
 
 const STAGE_SEQUENCE = [
   "Basement",
@@ -193,6 +202,7 @@ function mapSubmittedItemsToRows(items: api.SubmittedBOQItem[], templates: RateT
     return {
       customId: `existing-${index}`,
       customName: item.item,
+      source: item.source === "architect_standard" ? "architect_standard" : "architect_additional",
       quantity: String(item.qty ?? ""),
       uom: item.uom || "Nos",
       rate: undefined,
@@ -209,13 +219,21 @@ function toSubmittedItem(row: BOQRow): api.SubmittedBOQItem | null {
 
   if ("customId" in row) {
     const item = String(row.customName || "").trim();
-    return item ? { item, qty: quantity, uom: row.uom } : null;
+    return item
+      ? {
+          item,
+          qty: quantity,
+          uom: row.uom,
+          source: row.source === "architect_standard" ? "architect_standard" : "architect_additional",
+        }
+      : null;
   }
 
   return {
     item: row.template.name,
     qty: quantity,
     uom: row.uom,
+    source: "architect_standard",
   };
 }
 
@@ -274,6 +292,7 @@ async function loadResidentialBoqRows(): Promise<BOQRow[]> {
         customId: `residential-${item.id}`,
         customName: item.description,
         stageName,
+        source: "architect_standard",
         quantity: "",
         uom: item.unit,
         rate: undefined,
@@ -362,6 +381,7 @@ export default function BOQWorkspacePage() {
       customId: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       customName: "",
       stageName,
+      source: "architect_additional",
       quantity: "",
       uom: "Nos",
       rate: undefined,

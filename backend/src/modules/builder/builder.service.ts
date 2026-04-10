@@ -521,6 +521,7 @@ export async function getAvailableProjects(userId: string) {
        e.id as estimate_id,
        e.status as estimate_status
      FROM projects p
+     JOIN users u ON u.id = $1
      LEFT JOIN LATERAL (
        SELECT site_address, tentative_start_date, duration_months
        FROM project_revisions
@@ -530,6 +531,7 @@ export async function getAvailableProjects(userId: string) {
      ) pr ON true
      LEFT JOIN boqs b ON p.id = b.project_id
      LEFT JOIN estimates e ON p.id = e.project_id
+       AND (u.organization_id IS NOT NULL AND e.builder_org_id = u.organization_id)
      JOIN user_invites ui ON ui.project_id = p.id
      WHERE b.id IS NOT NULL
        AND ui.user_id = $1
@@ -540,6 +542,33 @@ export async function getAvailableProjects(userId: string) {
   );
 
   return result.rows;
+}
+
+export async function markEstimateInProgress(projectId: string, userId: string, builderOrgId: string) {
+  await assertBuilderProjectAccess(userId, projectId);
+
+  const existingEstimate = await pool.query(
+    `SELECT id FROM estimates WHERE project_id = $1 AND builder_org_id = $2 LIMIT 1`,
+    [projectId, builderOrgId]
+  );
+
+  if (existingEstimate.rows.length === 0) {
+    await pool.query(
+      `INSERT INTO estimates (project_id, builder_org_id, status)
+       VALUES ($1, $2, 'draft')`,
+      [projectId, builderOrgId]
+    );
+    return { status: "draft" };
+  }
+
+  await pool.query(
+    `UPDATE estimates
+     SET status = 'draft'
+     WHERE id = $1`,
+    [existingEstimate.rows[0].id]
+  );
+
+  return { status: "draft" };
 }
 
 async function assertBuilderProjectAccess(userId: string, projectId: string) {
@@ -600,6 +629,8 @@ export async function getProjectBOQItems(projectId: string, userId: string) {
     return parsed_data.map((item: any, index: number) => {
       const qtyStr = String(item.qty || "0");
       const qty = parseFloat(qtyStr.replace(/[^0-9.]/g, "")) || 0;
+      const rawSource = String(item.source || "architect_standard").trim().toLowerCase();
+      const lineItemOrigin = rawSource === "architect_additional" ? "architect_additional" : "architect_standard";
       
       return {
         id: index + 1,
@@ -608,6 +639,7 @@ export async function getProjectBOQItems(projectId: string, userId: string) {
         uom: String(item.uom || "").trim(),
         rate: 0,
         total: 0,
+        line_item_origin: lineItemOrigin,
       };
     }).filter((item: any) => item.item && item.qty > 0);
   }
@@ -662,6 +694,50 @@ export async function getProjectBOQItems(projectId: string, userId: string) {
   } catch (error: any) {
     console.error("Error parsing BOQ file:", error.message);
     throw error;
+  }
+}
+
+async function persistBuilderAddedItemsToBasePricing(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  builderOrgId: string,
+  pricedItems: any[]
+) {
+  const builderAddedRows = pricedItems
+    .filter((item) => String(item?.lineItemOrigin || "").toLowerCase() === "builder_added")
+    .map((item) => ({
+      itemName: String(item?.item || "").trim(),
+      uom: String(item?.uom || "unit").trim() || "unit",
+      category: String(item?.category || "Material").trim() || "Material",
+      rate: Number(item?.rate || 0),
+    }))
+    .filter((item) => item.itemName && Number.isFinite(item.rate) && item.rate > 0);
+
+  const dedupe = new Map<string, { itemName: string; uom: string; category: string; rate: number }>();
+  builderAddedRows.forEach((row) => {
+    const key = `${row.itemName.toLowerCase()}|${row.uom.toLowerCase()}`;
+    dedupe.set(key, row);
+  });
+
+  for (const row of dedupe.values()) {
+    const existing = await client.query(
+      `SELECT id
+       FROM base_pricing
+       WHERE builder_org_id = $1
+         AND LOWER(item_name) = LOWER($2)
+         AND LOWER(uom) = LOWER($3)
+       LIMIT 1`,
+      [builderOrgId, row.itemName, row.uom]
+    );
+
+    if (existing.rows.length > 0) {
+      continue;
+    }
+
+    await client.query(
+      `INSERT INTO base_pricing (builder_org_id, item_name, uom, category, rate)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [builderOrgId, row.itemName, row.uom, row.category, row.rate]
+    );
   }
 }
 
@@ -2008,6 +2084,8 @@ export async function createOrUpdateEstimate(
       [projectId, userId, JSON.stringify({ estimateId, revisionNumber })]
     );
 
+    await persistBuilderAddedItemsToBasePricing(client, builderOrgId, pricedItems);
+
     await client.query("COMMIT");
 
     return {
@@ -2072,6 +2150,7 @@ export async function getSubmittedEstimates(builderOrgId: string) {
        LIMIT 1
      ) review ON true
      WHERE e.builder_org_id = $1
+       AND e.status = 'submitted'
      ORDER BY er.submitted_at DESC NULLS LAST, e.created_at DESC`,
     [builderOrgId]
   );
@@ -2171,6 +2250,7 @@ export interface BuilderProfileData {
   specialties?: string | null;
   pastProjects?: string | null;
   portfolioLinks?: string | null;
+  portfolioPhotos?: string[] | null;
   teamSize?: number | null;
   minProjectBudget?: number | null;
   isVisibleToArchitects?: boolean;
@@ -2202,6 +2282,7 @@ export async function getBuilderProfile(userId: string) {
         specialties: row.specialties,
         pastProjects: row.past_projects,
         portfolioLinks: row.portfolio_links,
+        portfolioPhotos: Array.isArray(row.portfolio_photos) ? row.portfolio_photos : [],
         teamSize: row.team_size,
         minProjectBudget: row.min_project_budget,
         isVisibleToArchitects: row.is_visible_to_architects,
@@ -2224,8 +2305,8 @@ export async function upsertBuilderProfile(userId: string, data: BuilderProfileD
     const res = await pool.query(
       `INSERT INTO builder_profiles
          (user_id, company_name, contact_phone, service_locations, specialties,
-          past_projects, portfolio_links, team_size, min_project_budget, is_visible_to_architects)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          past_projects, portfolio_links, portfolio_photos, team_size, min_project_budget, is_visible_to_architects)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING *`,
       [
         userId,
@@ -2235,6 +2316,7 @@ export async function upsertBuilderProfile(userId: string, data: BuilderProfileD
         data.specialties ?? null,
         data.pastProjects ?? null,
         data.portfolioLinks ?? null,
+        data.portfolioPhotos ?? [],
         data.teamSize ?? null,
         data.minProjectBudget ?? null,
         data.isVisibleToArchitects ?? false,
@@ -2253,6 +2335,7 @@ export async function upsertBuilderProfile(userId: string, data: BuilderProfileD
       ["specialties", "specialties"],
       ["pastProjects", "past_projects"],
       ["portfolioLinks", "portfolio_links"],
+      ["portfolioPhotos", "portfolio_photos"],
       ["teamSize", "team_size"],
       ["minProjectBudget", "min_project_budget"],
       ["isVisibleToArchitects", "is_visible_to_architects"],
@@ -2291,6 +2374,7 @@ export async function upsertBuilderProfile(userId: string, data: BuilderProfileD
     specialties: row.specialties,
     pastProjects: row.past_projects,
     portfolioLinks: row.portfolio_links,
+    portfolioPhotos: Array.isArray(row.portfolio_photos) ? row.portfolio_photos : [],
     teamSize: row.team_size,
     minProjectBudget: row.min_project_budget,
     isVisibleToArchitects: row.is_visible_to_architects,
@@ -2317,6 +2401,7 @@ export async function listBuilderProfilesForOrg(architectOrgId: string) {
        bp.specialties,
        bp.past_projects,
        bp.portfolio_links,
+      bp.portfolio_photos,
        bp.team_size,
        bp.min_project_budget,
        bp.updated_at
@@ -2360,6 +2445,7 @@ export async function listBuilderProfilesForOrg(architectOrgId: string) {
     specialties: row.specialties,
     pastProjects: row.past_projects,
     portfolioLinks: row.portfolio_links,
+    portfolioPhotos: Array.isArray(row.portfolio_photos) ? row.portfolio_photos : [],
     teamSize: row.team_size,
     minProjectBudget: row.min_project_budget,
     updatedAt: row.updated_at,
