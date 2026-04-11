@@ -1,11 +1,6 @@
 import { BaseScraper, ScrapedPrice, ScrapeTarget } from "./BaseScraper";
 
-type BrandPricePair = {
-  brandName: string;
-  price: number;
-};
-
-function normalizeBrandName(value: string) {
+function normalizeBrandName(value: string): string {
   return value
     .replace(/\s+/g, " ")
     .replace(/[^a-zA-Z0-9&+./()\- ]/g, "")
@@ -13,128 +8,248 @@ function normalizeBrandName(value: string) {
     .slice(0, 80);
 }
 
-function extractBrandPricePairs(text: string): BrandPricePair[] {
-  const direct: BrandPricePair[] = [];
-
-  const brandBeforePrice = /(?:brand|make)\s*[:\-]?\s*([a-zA-Z][a-zA-Z0-9&+./()\- ]{1,80})[^\n]{0,200}?(?:₹|rs\.?\s?)([\d,]+(?:\.\d+)?)/gi;
-  const priceBeforeBrand = /(?:₹|rs\.?\s?)([\d,]+(?:\.\d+)?)[^\n]{0,200}?(?:brand|make)\s*[:\-]?\s*([a-zA-Z][a-zA-Z0-9&+./()\- ]{1,80})/gi;
-
-  for (const match of text.matchAll(brandBeforePrice)) {
-    const brand = normalizeBrandName(String(match[1] || ""));
-    const price = Number(String(match[2] || "").replace(/,/g, ""));
-    if (brand && Number.isFinite(price) && price > 0) {
-      direct.push({ brandName: brand, price });
-    }
-  }
-
-  for (const match of text.matchAll(priceBeforeBrand)) {
-    const price = Number(String(match[1] || "").replace(/,/g, ""));
-    const brand = normalizeBrandName(String(match[2] || ""));
-    if (brand && Number.isFinite(price) && price > 0) {
-      direct.push({ brandName: brand, price });
-    }
-  }
-
-  const seen = new Set<string>();
-  const unique: BrandPricePair[] = [];
-  for (const item of direct) {
-    const key = `${item.brandName.toLowerCase()}:${item.price.toFixed(2)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(item);
-    if (unique.length >= 8) break;
-  }
-
-  return unique;
-}
-
 export class IndiaMartScraper extends BaseScraper {
   constructor() {
     super({ source: "indiamart_scraper" });
   }
 
-  private buildQuery(target: ScrapeTarget) {
-    const category = String(target.categoryName || "").toLowerCase();
-    const labourIntent = category.includes("labour") || category.includes("labor");
-
-    if (labourIntent) {
-      return `${target.materialName} labour rate per day ${target.districtName} Tamil Nadu`;
+  /**
+   * Extract the __NEXT_DATA__ JSON embedded by Next.js in the page HTML.
+   * IndiaMART uses Next.js SSR, so all product data is in this JSON blob.
+   */
+  private parseNextData(html: string): Record<string, unknown> | null {
+    const match = html.match(
+      /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/
+    );
+    if (!match) return null;
+    try {
+      return JSON.parse(match[1]) as Record<string, unknown>;
+    } catch {
+      return null;
     }
+  }
 
-    return `${target.materialName} ${target.districtName} Tamil Nadu market price`;
+  /**
+   * From the IndiaMART search results page, products is an array of product
+   * category objects (mcats). Each may have an `isq` array with specification
+   * options – including a "Brand" spec for branded products like AAC blocks,
+   * cement, paints, pipes etc.
+   */
+  private extractIsqBrands(products: unknown[]): string[] {
+    const brands = new Set<string>();
+    for (const product of products) {
+      const p = product as Record<string, unknown>;
+      const isqArr = Array.isArray(p["isq"]) ? (p["isq"] as unknown[]) : [];
+      for (const spec of isqArr) {
+        const s = spec as Record<string, unknown>;
+        if (typeof s["name"] === "string" && s["name"].toLowerCase() === "brand") {
+          const opts = Array.isArray(s["options"]) ? (s["options"] as string[]) : [];
+          for (const opt of opts) {
+            if (opt && opt !== "Other" && opt.length > 1) {
+              brands.add(normalizeBrandName(opt));
+            }
+          }
+        }
+      }
+    }
+    return Array.from(brands).slice(0, 12);
+  }
+
+  /**
+   * IndiaMART exposes price range buckets (e.g. "₹7 - ₹8", "₹9 - ₹30") in
+   * the top-level `priceData.filters` of the page props. We use the midpoint
+   * of the middle bounded range as an estimated market price.
+   */
+  private extractPriceFromFilters(filters: unknown[]): number | null {
+    if (!filters?.length) return null;
+    type Filter = { minPrice?: number; maxPrice?: number };
+    const bounded = (filters as Filter[]).filter(
+      (f) => (f.minPrice ?? 0) > 0 && (f.maxPrice ?? 0) > 0
+    );
+    if (bounded.length === 0) {
+      const first = filters[0] as Filter;
+      return first?.minPrice ? first.minPrice * 1.5 : null;
+    }
+    const mid = bounded[Math.floor(bounded.length / 2)];
+    return ((mid.minPrice ?? 0) + (mid.maxPrice ?? 0)) / 2;
+  }
+
+  /**
+   * Each mcat in the search results contains `lat_long_city_data`, an array
+   * of objects keyed by city name pointing to a `city_mcat_url`. We also
+   * fall back to constructing the URL from the mcat `filename` field.
+   */
+  private findCityMcatUrl(products: unknown[], districtName: string): string | null {
+    const slug = districtName.toLowerCase().replace(/\s+/g, "-");
+    for (const product of products) {
+      const p = product as Record<string, unknown>;
+      const cityData = Array.isArray(p["lat_long_city_data"])
+        ? (p["lat_long_city_data"] as unknown[])
+        : [];
+      for (const entry of cityData) {
+        const e = entry as Record<string, unknown>;
+        for (const [city, data] of Object.entries(e)) {
+          if (city.toLowerCase().replace(/\s+/g, "-") === slug) {
+            const url = (data as Record<string, unknown>)?.["city_mcat_url"];
+            if (typeof url === "string") return url;
+          }
+        }
+      }
+      // Fall back to constructing URL from filename field
+      if (typeof p["filename"] === "string" && p["filename"]) {
+        return `https://dir.indiamart.com/${slug}/${p["filename"]}.html`;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * On a city+mcat landing page, IndiaMART renders supplier listing cards.
+   * We look for company names in known JSON paths within __NEXT_DATA__.
+   */
+  private extractCompanyNames(nextData: Record<string, unknown>): string[] {
+    const names: string[] = [];
+    const pageProps = (nextData["props"] as Record<string, unknown>)?.["pageProps"] ?? {};
+    const pp = pageProps as Record<string, unknown>;
+
+    // Try several known paths for supplier listing arrays
+    const candidates: unknown[] =
+      (pp["supplierData"] as Record<string, unknown> | undefined)?.["suppliers"] as unknown[] ??
+      (pp["productData"] as Record<string, unknown> | undefined)?.["suppliers"] as unknown[] ??
+      (pp["listings"] as unknown[]) ??
+      (pp["results"] as unknown[]) ??
+      [];
+
+    for (const item of candidates) {
+      const it = item as Record<string, unknown>;
+      const name =
+        (it["companyName"] as string) ??
+        (it["company_name"] as string) ??
+        (it["company"] as string) ??
+        (it["name"] as string);
+      if (name && typeof name === "string" && name.length > 2) {
+        names.push(normalizeBrandName(name));
+      }
+      if (names.length >= 10) break;
+    }
+    return names;
   }
 
   async scrape(targets: ScrapeTarget[]): Promise<ScrapedPrice[]> {
     const results: ScrapedPrice[] = [];
+    const now = new Date();
 
     for (const target of targets) {
       try {
-        const query = encodeURIComponent(this.buildQuery(target));
-        const url = `https://dir.indiamart.com/search.mp?ss=${query}`;
-        const html = await this.fetchWithRetry(url);
+        const query = encodeURIComponent(
+          `${target.materialName} ${target.districtName} Tamil Nadu market price`
+        );
+        const searchUrl = `https://dir.indiamart.com/search.mp?ss=${query}`;
+        const html = await this.fetchWithRetry(searchUrl);
 
         const snapshot = this.writeRawSnapshot(
           `${target.materialId}_${target.districtId}_${Date.now()}.html`,
           html
         );
 
-        const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-
-        const matches = Array.from(text.matchAll(/(?:₹|Rs\.?\s?)([\d,]+(?:\.\d+)?)/gi));
-        const numeric = matches
-          .map((match) => Number(String(match[1]).replace(/,/g, "")))
-          .filter((value) => Number.isFinite(value) && value > 0);
-
-        if (numeric.length === 0) {
+        // IndiaMART pages are Next.js SSR — all data lives in __NEXT_DATA__
+        const nextData = this.parseNextData(html);
+        if (!nextData) {
+          this.logStructured({
+            level: "warn",
+            district: target.districtName,
+            material: target.materialName,
+            message: "IndiaMART: no __NEXT_DATA__ found in response",
+          });
           continue;
         }
 
-        const now = new Date();
-        const brandPairs = extractBrandPricePairs(text);
+        const pageProps =
+          ((nextData["props"] as Record<string, unknown>)?.["pageProps"] as Record<
+            string,
+            unknown
+          >) ?? {};
+        const products: unknown[] =
+          (pageProps["productData"] as Record<string, unknown> | undefined)?.["products"] as
+            unknown[] ??
+          (pageProps["products"] as unknown[]) ??
+          [];
 
-        if (brandPairs.length > 0) {
-          for (const pair of brandPairs) {
+        // 1. Extract ISQ Brand options (curated brand lists per product category)
+        const isqBrands = this.extractIsqBrands(products);
+
+        // 2. Extract price estimate from category-level price range filters
+        const priceFilters =
+          ((pageProps["priceData"] as Record<string, unknown> | undefined)?.["filters"] as
+            unknown[]) ?? [];
+        const estimatedPrice = this.extractPriceFromFilters(priceFilters);
+
+        // 3. Optionally fetch city-specific mcat page for supplier company names
+        let companyBrands: string[] = [];
+        const cityMcatUrl = this.findCityMcatUrl(products, target.districtName);
+        if (cityMcatUrl) {
+          try {
+            const cityHtml = await this.fetchWithRetry(cityMcatUrl);
+            const cityNextData = this.parseNextData(cityHtml);
+            if (cityNextData) {
+              companyBrands = this.extractCompanyNames(cityNextData);
+            }
+          } catch {
+            // City page unavailable — proceed with ISQ brands only
+          }
+        }
+
+        const allBrands = [...new Set([...companyBrands, ...isqBrands])];
+
+        if (!estimatedPrice) {
+          this.logStructured({
+            level: "warn",
+            district: target.districtName,
+            material: target.materialName,
+            message: "IndiaMART: no price filters found",
+          });
+          continue;
+        }
+
+        if (allBrands.length > 0) {
+          for (const brand of allBrands) {
             results.push({
               districtId: target.districtId,
               materialId: target.materialId,
-              price: Number(pair.price.toFixed(2)),
-              brandName: pair.brandName,
+              price: Number(estimatedPrice.toFixed(2)),
+              brandName: brand,
               source: "indiamart_scraper",
               scrapedAt: now,
-              confidence: 0.72,
+              confidence: 0.70,
               rawSnapshotPath: snapshot,
             });
           }
-
           this.logStructured({
             district: target.districtName,
             material: target.materialName,
             source: "indiamart_scraper",
-            brandsDetected: brandPairs.length,
-            snapshot,
+            brandsDetected: allBrands.length,
+            price: estimatedPrice,
           });
-
-          continue;
+        } else {
+          // No brand info — emit a single unbranded price record
+          results.push({
+            districtId: target.districtId,
+            materialId: target.materialId,
+            price: Number(estimatedPrice.toFixed(2)),
+            source: "indiamart_scraper",
+            scrapedAt: now,
+            confidence: 0.60,
+            rawSnapshotPath: snapshot,
+          });
+          this.logStructured({
+            district: target.districtName,
+            material: target.materialName,
+            price: estimatedPrice,
+            source: "indiamart_scraper",
+            brandsDetected: 0,
+          });
         }
-
-        const price = numeric.slice(0, 8).reduce((sum, value) => sum + value, 0) / Math.min(8, numeric.length);
-        results.push({
-          districtId: target.districtId,
-          materialId: target.materialId,
-          price: Number(price.toFixed(2)),
-          source: "indiamart_scraper",
-          scrapedAt: now,
-          confidence: 0.65,
-          rawSnapshotPath: snapshot,
-        });
-
-        this.logStructured({
-          district: target.districtName,
-          material: target.materialName,
-          price: Number(price.toFixed(2)),
-          source: "indiamart_scraper",
-          snapshot,
-        });
       } catch (error) {
         this.logStructured({
           level: "error",
