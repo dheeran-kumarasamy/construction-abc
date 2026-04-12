@@ -5,9 +5,9 @@ DELETE FROM user_invites;
 DELETE FROM estimate_revisions;
 DELETE FROM estimates;
 DELETE FROM boq_revisions;
-DELETE FROM boqs;
 DELETE FROM project_revisions;
 DELETE FROM projects;
+DELETE FROM boqs;
 DELETE FROM base_pricing;
 DELETE FROM audit_logs;
 
