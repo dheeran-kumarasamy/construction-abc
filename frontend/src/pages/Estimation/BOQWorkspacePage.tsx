@@ -71,6 +71,30 @@ type BOQRow =
       amount?: number;
     };
 
+function resolveBoqApiProjectId(
+  routeProjectId: string | undefined,
+  project: BOQProject | null
+) {
+  if (!routeProjectId) return "";
+
+  const projectAny = project as BOQProject & { source_project_id?: string | null };
+  const sourceProjectId = String(projectAny?.source_project_id || "").trim();
+  if (sourceProjectId) return sourceProjectId;
+
+  const notes = String(project?.notes || "");
+  const marker = notes.match(/source_project_id:([0-9a-fA-F-]{36})/);
+  if (marker?.[1]) return marker[1];
+
+  // If route id already points to a source project (legacy path), keep using it.
+  // If route id equals the BOQ workspace id and no source mapping exists, do not
+  // call /api/boq with an unmapped ID (it will always 403).
+  if (project?.id && project.id !== routeProjectId) {
+    return routeProjectId;
+  }
+
+  return "";
+}
+
 const STAGE_SEQUENCE = [
   "Basement",
   "Ground Floor",
@@ -335,6 +359,7 @@ export default function BOQWorkspacePage() {
   const [selectedCategoryName, setSelectedCategoryName] = useState<string>("");
   const [marketRates, setMarketRates] = useState<api.MarketPriceRow[]>([]);
   const [loadingRates, setLoadingRates] = useState<boolean>(false);
+  const boqApiProjectId = resolveBoqApiProjectId(projectId, project);
   const UOM_OPTIONS = ["Cu.m", "Sq.m", "Rmt", "Nos", "Tonne", "Kg", "KL", "Bag", "Day", "LS"];
   const projectViewPath = projectId ? `/architect/project/${projectId}` : "/architect/projects";
   const showRateColumns = isEditingBoq;
@@ -417,7 +442,15 @@ export default function BOQWorkspacePage() {
         setTemplates(tmpls);
 
         if (isViewMode) {
-          const submitted = await api.fetchSubmittedBOQ(projectId);
+          const resolvedApiProjectId = resolveBoqApiProjectId(projectId, proj);
+          if (!resolvedApiProjectId) {
+            setBoqError("This estimation workspace is not linked to a source project BOQ.");
+            setHasExistingBoq(false);
+            setBoqRows([]);
+            return;
+          }
+
+          const submitted = await api.fetchSubmittedBOQ(resolvedApiProjectId);
           const submittedItems = Array.isArray(submitted.items) ? submitted.items : [];
           setHasExistingBoq(submittedItems.length > 0);
           setBoqRows(mapSubmittedItemsToRows(submittedItems, tmpls));
@@ -920,7 +953,7 @@ export default function BOQWorkspacePage() {
               try {
                 if (isViewMode && projectId) {
                   const items = boqRows.map(toSubmittedItem).filter((row): row is api.SubmittedBOQItem => Boolean(row));
-                  await api.updateSubmittedBOQ(projectId, items);
+                  await api.updateSubmittedBOQ(boqApiProjectId, items);
                   clearDraft(projectId);
                   alert("BOQ updated successfully!");
                   setHasExistingBoq(items.length > 0);
@@ -935,6 +968,11 @@ export default function BOQWorkspacePage() {
                   return;
                 }
 
+                if (!boqApiProjectId) {
+                  alert("Unable to resolve project for BOQ submission.");
+                  return;
+                }
+
                 const items = boqRows
                   .map(toSubmittedItem)
                   .filter((row): row is api.SubmittedBOQItem => Boolean(row));
@@ -944,7 +982,7 @@ export default function BOQWorkspacePage() {
                   return;
                 }
 
-                await api.submitNewBOQ(projectId, items);
+                await api.submitNewBOQ(boqApiProjectId, items);
                 clearDraft(projectId);
                 alert("BOQ saved successfully!");
                 navigate(backPath);
