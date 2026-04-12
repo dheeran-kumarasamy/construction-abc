@@ -81,6 +81,8 @@ export interface PlinthAreaRate {
 export interface BOQProject {
   id: string;
   user_id: string;
+  source_project_id?: string | null;
+  project_type?: "own" | "invited";
   name: string;
   client_name?: string;
   project_location?: string;
