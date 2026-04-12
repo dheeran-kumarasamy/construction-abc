@@ -98,7 +98,7 @@ async function checkProjectOwnership(req: Request, res: Response, next: NextFunc
        JOIN users requester ON requester.id = $2
        JOIN users project_architect ON project_architect.id = p.architect_id
        WHERE p.id = $1
-         AND requester.role = 'architect'
+         AND LOWER(requester.role) = 'architect'
          AND (
            p.architect_id = requester.id
            OR (
@@ -127,8 +127,7 @@ async function checkProjectOwnership(req: Request, res: Response, next: NextFunc
          )
          JOIN users project_architect ON project_architect.id = p.architect_id
          WHERE bp.id = $1
-           AND bp.user_id = requester.id
-           AND requester.role = 'architect'
+           AND LOWER(requester.role) = 'architect'
            AND (
              p.architect_id = requester.id
              OR (
