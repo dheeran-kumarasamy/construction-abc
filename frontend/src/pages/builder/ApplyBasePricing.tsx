@@ -2598,7 +2598,7 @@ export default function ApplyBasePricing({
 
         {!selectedProjectId && !loading && (
           <p style={{ textAlign: "center", color: "#64748b", marginTop: "2rem" }}>
-            Please select a project to start replacing BOQ rates with PWD rates.
+            Please select a project to start BOQ estimate.
           </p>
         )}
       </div>

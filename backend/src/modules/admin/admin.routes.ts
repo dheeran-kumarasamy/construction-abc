@@ -1130,12 +1130,12 @@ router.get("/boqs", async (req: Request, res: Response) => {
     const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM boqs`);
     const rows = await pool.query(
       `SELECT b.id, b.project_id, p.name AS project_name, b.uploaded_by, uploader.email AS uploaded_by_email,
-              b.file_name, b.file_type, b.file_size, b.created_at,
+              b.file_name, b.file_type, b.file_size, b.uploaded_at AS created_at,
               CASE WHEN b.parsed_data IS NOT NULL THEN 'parsed' ELSE 'pending' END AS parsed_status
        FROM boqs b
        LEFT JOIN projects p ON p.id = b.project_id
        LEFT JOIN users uploader ON uploader.id = b.uploaded_by
-       ORDER BY b.created_at DESC
+       ORDER BY b.uploaded_at DESC
        LIMIT $1 OFFSET $2`,
       [pageSize, offset]
     );
@@ -1334,8 +1334,8 @@ router.get("/template-approval-requests", async (_req: Request, res: Response) =
               tli.id AS line_item_id,
               tli.resource_id,
               tli.coefficient,
-              tli.wastage_percent,
-              tli.remarks,
+              tli.wastage_override AS wastage_percent,
+              tli.notes AS remarks,
               r.name AS resource_name,
               r.unique_code AS resource_code
        FROM rate_templates rt
@@ -1456,11 +1456,11 @@ router.patch("/template-approval-requests/:templateId", async (req: Request, res
       }
       if (wastage_percent !== undefined) {
         lineParams.push(Number(wastage_percent));
-        lineUpdates.push(`wastage_percent = $${lineParams.length}`);
+        lineUpdates.push(`wastage_override = $${lineParams.length}`);
       }
       if (remarks !== undefined) {
         lineParams.push(String(remarks).trim() || null);
-        lineUpdates.push(`remarks = $${lineParams.length}`);
+        lineUpdates.push(`notes = $${lineParams.length}`);
       }
 
       if (lineUpdates.length) {
