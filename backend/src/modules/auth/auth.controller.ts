@@ -158,7 +158,15 @@ export async function inviteUser(req: Request, res: Response) {
         return res.status(403).json({ error: "You can invite builders only for projects in your architect organization" });
       }
 
-      const result = await service.createInvite(email, "builder", orgId, projectId, null, referer);
+      const result = await service.createInvite(
+        email,
+        "builder",
+        orgId,
+        projectId,
+        null,
+        referer,
+        requester.email || null
+      );
       return res.json(result);
     }
 
@@ -183,7 +191,15 @@ export async function inviteUser(req: Request, res: Response) {
       }
     }
 
-    const result = await service.createInvite(email, "architect", orgId, projectId || null, "member", referer);
+    const result = await service.createInvite(
+      email,
+      "architect",
+      orgId,
+      projectId || null,
+      "member",
+      referer,
+      requester.email || null
+    );
 
     res.json(result);
   } catch (err: any) {

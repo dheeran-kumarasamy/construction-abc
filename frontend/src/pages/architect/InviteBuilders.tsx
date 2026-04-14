@@ -12,6 +12,7 @@ interface Invite {
   projectName?: string;
   status: "open" | "accepted" | "expired" | "pending" | "failed";
   inviteLink?: string;
+  emailSent?: boolean;
   error?: string;
   createdAt?: string;
 }
@@ -147,9 +148,14 @@ export default function InviteBuilders() {
 
       setInvites((prev) =>
         prev.map((inv, idx) =>
-          idx === prev.length - 1 ? { ...inv, status: "open", inviteLink: body.inviteLink } : inv
+          idx === prev.length - 1
+            ? { ...inv, status: "open", inviteLink: body.inviteLink, emailSent: Boolean(body.emailSent) }
+            : inv
         )
       );
+      if (!body.emailSent) {
+        alert("Invite created, but email could not be sent from server. Share the invite link manually.");
+      }
       setEmail("");
     } catch (err: any) {
       setInvites((prev) =>

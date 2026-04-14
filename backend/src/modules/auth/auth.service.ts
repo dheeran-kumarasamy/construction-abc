@@ -2,6 +2,7 @@ import { pool } from "../../config/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { sendInviteEmail } from "../../services/email";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
@@ -521,7 +522,8 @@ export async function createInvite(
   organizationId: string,
   projectId?: string | null,
   orgRole?: "head" | "member" | null,
-  referer?: string
+  referer?: string,
+  invitedByEmail?: string | null
 ) {
   const token = crypto.randomBytes(32).toString("hex");
 
@@ -536,7 +538,22 @@ export async function createInvite(
 
   const inviteLink = buildInviteLink(token, referer);
 
-  return { inviteLink };
+  let emailSent = false;
+  try {
+    if (role === "builder" || role === "architect") {
+      emailSent = await sendInviteEmail({
+        to: email,
+        inviteLink,
+        inviteeRole: role,
+        invitedByEmail: invitedByEmail || null,
+      });
+    }
+  } catch (error) {
+    // Do not fail invite creation if SMTP provider is unavailable.
+    console.error("Failed to send invite email", { email, role, error });
+  }
+
+  return { inviteLink, emailSent };
 }
 
 export async function listInvites(
