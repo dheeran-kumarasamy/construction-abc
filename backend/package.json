@@ -17,6 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@types/nodemailer": "^8.0.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
@@ -26,6 +27,7 @@
     "mongoose": "^9.2.1",
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.5",
     "openai": "^6.25.0",
     "pdf-parse": "^1.1.1",
     "pg": "^8.18.0",

@@ -118,6 +118,15 @@ export async function submitRevision(
   }
 
   const client = await pool.connect();
+  let notifyContext: {
+    projectId: string;
+    estimateId: string;
+    projectName: string;
+    builderOrgName: string;
+    headUserId: string | null;
+    headPhoneNumber: string | null;
+  } | null = null;
+
   try {
     await client.query("BEGIN");
 
@@ -192,7 +201,67 @@ export async function submitRevision(
       [projectId, userId, JSON.stringify({ revisionNumber })]
     );
 
+    const notifyRes = await client.query(
+      `SELECT
+         p.name AS project_name,
+         COALESCE(org.name, 'Builder') AS builder_org_name,
+         head.id AS head_user_id,
+         head.phone_number AS head_phone_number
+       FROM projects p
+       LEFT JOIN users project_architect ON project_architect.id = p.architect_id
+       LEFT JOIN users head
+         ON head.organization_id = project_architect.organization_id
+        AND head.role = 'architect'
+        AND head.org_role = 'head'
+       LEFT JOIN organizations org ON org.id = estimate.builder_org_id
+       JOIN estimates estimate ON estimate.id = $1
+       WHERE p.id = $2
+       LIMIT 1`,
+      [estimateId, projectId]
+    );
+
+    if (notifyRes.rows.length) {
+      const row = notifyRes.rows[0];
+      notifyContext = {
+        projectId,
+        estimateId,
+        projectName: String(row.project_name || "Project"),
+        builderOrgName: String(row.builder_org_name || "Builder"),
+        headUserId: row.head_user_id || null,
+        headPhoneNumber: row.head_phone_number || null,
+      };
+    }
+
     await client.query("COMMIT");
+
+    if (notifyContext) {
+      const smsMessage = `${notifyContext.builderOrgName} submitted an estimate for project ${notifyContext.projectName}.`;
+      const smsResult = await sendSmsNotification({
+        to: notifyContext.headPhoneNumber,
+        message: smsMessage,
+        metadata: {
+          projectId: notifyContext.projectId,
+          estimateId: notifyContext.estimateId,
+          headUserId: notifyContext.headUserId,
+        },
+      });
+
+      await pool.query(
+        `INSERT INTO audit_logs (project_id, user_id, action, metadata)
+         VALUES ($1, $2, 'ESTIMATE_SUBMISSION_HEAD_NOTIFY', $3)`,
+        [
+          notifyContext.projectId,
+          userId,
+          JSON.stringify({
+            estimateId: notifyContext.estimateId,
+            headUserId: notifyContext.headUserId,
+            smsSent: smsResult.sent,
+            smsProvider: smsResult.provider,
+            smsReason: smsResult.reason || null,
+          }),
+        ]
+      );
+    }
 
     return { revisionNumber, grandTotal };
   } catch (err) {
