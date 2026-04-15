@@ -82,3 +82,11 @@ export interface DealerPricePayload {
   unitOfSale: string;
   notes?: string;
 }
+
+export interface ProductInquiryPayload {
+  materialId: string;
+  districtId: string;
+  requestedQuantity: number;
+  specification: string;
+  requestedLocation: string;
+}

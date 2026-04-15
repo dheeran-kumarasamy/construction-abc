@@ -21,6 +21,7 @@ import {
   fetchHistory,
   removeBookmark,
   setDealerMaterialPrice,
+  submitProductInquiry,
 } from "./priceTracker.api";
 import type {
   Bookmark,
@@ -69,6 +70,9 @@ export default function PriceTrackerPage() {
   const [dealerError, setDealerError] = useState("");
   const [dealerSuccess, setDealerSuccess] = useState("");
   const [dealerOwnPrices, setDealerOwnPrices] = useState<DealerOwnPrice[]>([]);
+  const [requestingMaterialId, setRequestingMaterialId] = useState("");
+  const [inquiryError, setInquiryError] = useState("");
+  const [inquirySuccess, setInquirySuccess] = useState("");
 
   const selectedDistrict = useMemo(
     () => districts.find((district) => district.id === selectedDistrictId) || null,
@@ -275,6 +279,63 @@ export default function PriceTrackerPage() {
     setAlerts((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const requestDealerPrice = async (item: PriceRecord) => {
+    setInquiryError("");
+    setInquirySuccess("");
+
+    if (!selectedDistrict) {
+      setInquiryError("Please select a district first.");
+      return;
+    }
+
+    if (!user) {
+      setInquiryError("Please login to submit a dealer price inquiry.");
+      return;
+    }
+
+    const quantityInput = window.prompt(`Enter required quantity for ${item.materialName} (${item.unit}):`, "1");
+    if (quantityInput === null) return;
+    const requestedQuantity = Number(quantityInput);
+    if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
+      setInquiryError("Please enter a valid quantity greater than 0.");
+      return;
+    }
+
+    const specification = window.prompt(
+      `Enter specification for ${item.materialName}:`,
+      item.brandName ? `${item.brandName}` : ""
+    );
+    if (specification === null || !specification.trim()) {
+      setInquiryError("Specification is required.");
+      return;
+    }
+
+    const requestedLocation = window.prompt(
+      "Enter exact delivery/location detail:",
+      selectedDistrict.name
+    );
+    if (requestedLocation === null || !requestedLocation.trim()) {
+      setInquiryError("Location detail is required.");
+      return;
+    }
+
+    try {
+      setRequestingMaterialId(item.materialId);
+      await submitProductInquiry({
+        materialId: item.materialId,
+        districtId: selectedDistrict.id,
+        requestedQuantity,
+        specification: specification.trim(),
+        requestedLocation: requestedLocation.trim(),
+      });
+      setInquirySuccess(`Inquiry submitted for ${item.materialName}. Admin will review and resolve it.`);
+    } catch (error: any) {
+      setInquiryError(error.message || "Failed to submit inquiry");
+    } finally {
+      setRequestingMaterialId("");
+    }
+  };
+
   const saveDealerPrice = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -369,6 +430,9 @@ export default function PriceTrackerPage() {
         </button>
       ) : null}
       <h1>TN Construction Material Price Tracker</h1>
+
+      {!isDealer && inquiryError ? <div className="pt-dealer-error">{inquiryError}</div> : null}
+      {!isDealer && inquirySuccess ? <div className="pt-dealer-success">{inquirySuccess}</div> : null}
 
       {isDealer ? (
         <section className="pt-card pt-dealer-form-wrap">
@@ -586,6 +650,9 @@ export default function PriceTrackerPage() {
           historyData={historyData}
           materialsForAlerts={activeCategory?.materials || []}
           onOpenAlertDialog={() => setAlertDialogOpen(true)}
+          canRequestDealerPrice={!isDealer && !!user}
+          requestingMaterialId={requestingMaterialId}
+          onRequestDealerPrice={requestDealerPrice}
         />
       </div>
 

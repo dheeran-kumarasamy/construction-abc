@@ -14,6 +14,9 @@ interface Props {
   historyData: PriceHistoryPoint[];
   materialsForAlerts: Material[];
   onOpenAlertDialog: () => void;
+  canRequestDealerPrice: boolean;
+  requestingMaterialId: string;
+  onRequestDealerPrice: (item: PriceRecord) => void;
 }
 
 export default function DistrictPricePanel({
@@ -25,6 +28,9 @@ export default function DistrictPricePanel({
   historyMaterialId,
   historyData,
   onOpenAlertDialog,
+  canRequestDealerPrice,
+  requestingMaterialId,
+  onRequestDealerPrice,
 }: Props) {
   if (!district) {
     return (
@@ -55,6 +61,7 @@ export default function DistrictPricePanel({
               <th>Trend</th>
               <th>Last Updated</th>
               <th>History</th>
+              <th>Inquiry</th>
             </tr>
           </thead>
           <tbody>
@@ -72,6 +79,19 @@ export default function DistrictPricePanel({
                   <button type="button" onClick={() => onHistoryClick(item.materialId)}>
                     📈 History
                   </button>
+                </td>
+                <td>
+                  {canRequestDealerPrice ? (
+                    <button
+                      type="button"
+                      onClick={() => onRequestDealerPrice(item)}
+                      disabled={requestingMaterialId === item.materialId}
+                    >
+                      {requestingMaterialId === item.materialId ? "Sending..." : "Request Dealer Price"}
+                    </button>
+                  ) : (
+                    "-"
+                  )}
                 </td>
               </tr>
             ))}

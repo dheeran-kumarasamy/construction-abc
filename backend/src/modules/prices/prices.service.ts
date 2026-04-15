@@ -134,7 +134,10 @@ export async function getDistrictCategoryPrices(districtInput: string, categoryI
           JOIN dealers d ON d.id = dp.dealer_id
           WHERE d.is_approved = true
             AND dp.is_active = true
-            AND LOWER(d.city) = LOWER($3)
+            AND (
+              LOWER(TRIM(COALESCE(d.city, ''))) = LOWER(TRIM($3))
+              OR LOWER(TRIM(COALESCE(d.location, ''))) LIKE '%' || LOWER(TRIM($3)) || '%'
+            )
           GROUP BY dp.material_id
         ),
         scraped AS (
@@ -149,7 +152,7 @@ export async function getDistrictCategoryPrices(districtInput: string, categoryI
           m.id AS material_id,
           m.name AS material_name,
           m.unit,
-          COALESCE(ap.price, da.price, sc.price) AS latest_price,
+          COALESCE(ap.price, da.price, sc.price, 0) AS latest_price,
           CASE
             WHEN ap.price IS NOT NULL THEN ap.brand_name
             WHEN da.price IS NOT NULL THEN NULL
@@ -158,12 +161,14 @@ export async function getDistrictCategoryPrices(districtInput: string, categoryI
           CASE
             WHEN ap.price IS NOT NULL THEN 'admin'
             WHEN da.price IS NOT NULL THEN 'dealer_avg'
-            ELSE 'scraped'
+            WHEN sc.price IS NOT NULL THEN 'scraped'
+            ELSE 'unavailable'
           END AS source,
           CASE
             WHEN ap.price IS NOT NULL THEN ap.scraped_at
             WHEN da.price IS NOT NULL THEN NOW()
-            ELSE sc.scraped_at
+            WHEN sc.price IS NOT NULL THEN sc.scraped_at
+            ELSE NOW()
           END AS last_updated
         FROM materials m
         JOIN material_categories c ON c.id = m.category_id
@@ -171,7 +176,6 @@ export async function getDistrictCategoryPrices(districtInput: string, categoryI
         LEFT JOIN dealer_avg da ON da.material_id = m.id
         LEFT JOIN scraped sc ON sc.material_id = m.id
         WHERE c.id = $2
-          AND (ap.price IS NOT NULL OR da.price IS NOT NULL OR sc.price IS NOT NULL)
         ORDER BY m.sort_order ASC, m.name ASC
       `,
       [district.id, category.id, district.name]
@@ -515,6 +519,57 @@ export async function getNotifications(userId: string, unreadOnly: boolean) {
   );
 
   return rows;
+}
+
+export async function createProductInquiry(
+  userId: string,
+  payload: {
+    material_id: string;
+    district_id: string;
+    requested_quantity: number;
+    specification: string;
+    requested_location: string;
+  }
+) {
+  const { rows } = await pool.query(
+    `
+      INSERT INTO product_inquiries (
+        user_id,
+        material_id,
+        district_id,
+        requested_quantity,
+        specification,
+        requested_location,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, 'pending', now(), now())
+      RETURNING
+        id,
+        user_id,
+        material_id,
+        district_id,
+        requested_quantity,
+        specification,
+        requested_location,
+        status,
+        admin_notes,
+        resolved_at,
+        created_at,
+        updated_at
+    `,
+    [
+      userId,
+      payload.material_id,
+      payload.district_id,
+      payload.requested_quantity,
+      payload.specification,
+      payload.requested_location,
+    ]
+  );
+
+  return rows[0];
 }
 
 // Get combined market and dealer prices for a material

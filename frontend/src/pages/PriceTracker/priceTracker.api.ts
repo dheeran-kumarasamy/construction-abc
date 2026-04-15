@@ -9,6 +9,7 @@ import type {
   PriceAlert,
   PriceHistoryPoint,
   PriceRecord,
+  ProductInquiryPayload,
 } from "./types";
 
 function authHeaders() {
@@ -166,5 +167,24 @@ export async function setDealerMaterialPrice(payload: DealerPricePayload): Promi
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || "Failed to save dealer price");
+  }
+}
+
+export async function submitProductInquiry(payload: ProductInquiryPayload): Promise<void> {
+  const res = await fetch(apiUrl("/api/prices/inquiries"), {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      material_id: payload.materialId,
+      district_id: payload.districtId,
+      requested_quantity: payload.requestedQuantity,
+      specification: payload.specification,
+      requested_location: payload.requestedLocation,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to submit product inquiry");
   }
 }

@@ -14,6 +14,7 @@ import {
   listNotifications,
   removeBookmark,
   removePriceAlert,
+  submitProductInquiry,
   updatePriceAlert,
 } from "./prices.controller";
 import dealerRouter from "./dealer.routes";
@@ -39,6 +40,7 @@ router.put("/alerts/:id", authenticate, updatePriceAlert);
 router.delete("/alerts/:id", authenticate, removePriceAlert);
 
 router.get("/notifications", authenticate, listNotifications);
+router.post("/inquiries", authenticate, submitProductInquiry);
 
 // Dealer routes
 router.use("/dealers", dealerRouter);

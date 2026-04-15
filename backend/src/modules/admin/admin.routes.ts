@@ -91,6 +91,11 @@ function parsePagination(req: Request) {
   return { page, pageSize, offset };
 }
 
+function isMissingRelationError(error: unknown, relation: string) {
+  const err = error as { code?: string; message?: string };
+  return err?.code === "42P01" && (err?.message || "").toLowerCase().includes(relation.toLowerCase());
+}
+
 function getAdminUserId(req: Request): string {
   return String((req as any).user?.userId || "");
 }
@@ -114,11 +119,20 @@ async function logAdminAction(req: Request, action: string, metadata: Record<str
     return;
   }
 
-  await pool.query(
-    `INSERT INTO audit_logs (project_id, user_id, action, metadata)
-     VALUES (NULL, $1, $2, $3::jsonb)`,
-    [adminUserId, action, JSON.stringify(metadata)]
-  );
+  try {
+    await pool.query(
+      `INSERT INTO audit_logs (project_id, user_id, action, metadata)
+       VALUES (NULL, $1, $2, $3::jsonb)`,
+      [adminUserId, action, JSON.stringify(metadata)]
+    );
+  } catch (error) {
+    // Audit logging should not block primary admin actions.
+    console.warn("Admin audit log failed", {
+      action,
+      adminUserId,
+      error: (error as any)?.message || error,
+    });
+  }
 }
 
 router.use(authenticate, requireAdmin, moduleAccessGuard);
@@ -2049,6 +2063,104 @@ router.get("/prices/alerts", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Failed to list price alerts", error);
     return res.status(500).json({ error: "Failed to list price alerts" });
+  }
+});
+
+router.get("/prices/inquiries", async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize, offset } = parsePagination(req);
+
+    const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM product_inquiries`);
+    const rows = await pool.query(
+      `SELECT pi.id,
+              pi.user_id,
+              pi.material_id,
+              pi.district_id,
+              pi.requested_quantity,
+              pi.specification,
+              pi.requested_location,
+              pi.status,
+              pi.admin_notes,
+              pi.resolved_at,
+              pi.created_at,
+              pi.updated_at,
+        u.email AS user_email,
+        COALESCE(NULLIF(TRIM(o.name), ''), NULLIF(TRIM(dl.shop_name), ''), split_part(u.email, '@', 1)) AS requester_name,
+        COALESCE(NULLIF(TRIM(u.phone_number), ''), NULLIF(TRIM(dl.contact_number), '')) AS requester_contact_number,
+              m.name AS material_name,
+              m.unit AS material_unit,
+              d.name AS district_name
+       FROM product_inquiries pi
+       JOIN users u ON u.id = pi.user_id
+      LEFT JOIN organizations o ON o.id = u.organization_id
+      LEFT JOIN dealers dl ON dl.user_id = u.id
+       JOIN materials m ON m.id = pi.material_id
+       JOIN districts d ON d.id = pi.district_id
+       ORDER BY pi.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    return res.json({
+      items: rows.rows,
+      pagination: { page, pageSize, total: totalQuery.rows[0]?.count || 0 },
+    });
+  } catch (error) {
+    if (isMissingRelationError(error, "product_inquiries")) {
+      return res.json({
+        items: [],
+        pagination: { page: 1, pageSize: 25, total: 0 },
+      });
+    }
+
+    console.error("Failed to list product inquiries", error);
+    return res.status(500).json({ error: "Failed to list product inquiries" });
+  }
+});
+
+router.patch("/prices/inquiries/:inquiryId/status", async (req: Request, res: Response) => {
+  try {
+    const inquiryId = String(req.params.inquiryId || "").trim();
+    const status = String(req.body?.status || "").trim().toLowerCase();
+    const adminNotes = req.body?.adminNotes != null ? String(req.body.adminNotes).trim() : null;
+
+    if (!inquiryId) {
+      return res.status(400).json({ error: "inquiryId is required" });
+    }
+
+    if (status !== "pending" && status !== "resolved") {
+      return res.status(400).json({ error: "status must be pending or resolved" });
+    }
+
+    const result = await pool.query(
+      `UPDATE product_inquiries
+       SET status = $1::varchar,
+           admin_notes = COALESCE($2, admin_notes),
+           resolved_at = CASE WHEN $1::varchar = 'resolved' THEN now() ELSE NULL END,
+           updated_at = now()
+       WHERE id = $3
+       RETURNING id, status, admin_notes, resolved_at, updated_at`,
+      [status, adminNotes, inquiryId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Product inquiry not found" });
+    }
+
+    await logAdminAction(req, "admin.prices.inquiry.update", {
+      inquiryId,
+      status,
+      adminNotes: adminNotes || undefined,
+    });
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    if (isMissingRelationError(error, "product_inquiries")) {
+      return res.status(503).json({ error: "Product inquiry schema is missing. Run database migrations." });
+    }
+
+    console.error("Failed to update product inquiry status", error);
+    return res.status(500).json({ error: "Failed to update product inquiry status" });
   }
 });
 

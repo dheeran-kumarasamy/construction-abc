@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import {
   addBookmark,
   compareDistrictPrices,
+  createProductInquiry,
   createAlert,
   deleteAlert,
   deleteBookmark,
@@ -282,6 +283,43 @@ export async function listNotifications(req: Request, res: Response) {
   } catch (error) {
     console.error("List notifications error:", error);
     return res.status(500).json({ error: "Failed to fetch notifications" });
+  }
+}
+
+export async function submitProductInquiry(req: Request, res: Response) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { material_id, district_id, requested_quantity, specification, requested_location } = req.body || {};
+
+    if (!material_id || !district_id || requested_quantity == null || !specification || !requested_location) {
+      return res.status(400).json({
+        error: "material_id, district_id, requested_quantity, specification, requested_location are required",
+      });
+    }
+
+    const quantity = Number(requested_quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return res.status(400).json({ error: "requested_quantity must be a positive number" });
+    }
+
+    const data = await createProductInquiry(userId, {
+      material_id: String(material_id),
+      district_id: String(district_id),
+      requested_quantity: quantity,
+      specification: String(specification).trim(),
+      requested_location: String(requested_location).trim(),
+    });
+
+    return res.status(201).json(data);
+  } catch (error) {
+    if (isMissingRelationError(error, "product_inquiries")) {
+      return res.status(503).json({ error: "Product inquiry schema is missing. Run database migrations." });
+    }
+
+    console.error("Submit product inquiry error:", error);
+    return res.status(500).json({ error: "Failed to submit product inquiry" });
   }
 }
 
