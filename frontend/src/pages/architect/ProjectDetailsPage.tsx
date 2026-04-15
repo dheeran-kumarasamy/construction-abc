@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
+import TableWrapper from "../../components/TableWrapper";
 import { apiUrl } from "../../services/api";
 import { formatDate } from "../../services/dateTime";
 
@@ -60,7 +61,8 @@ export default function ProjectDetailsPage() {
         {loading && <div>Loading project...</div>}
         {error && <div style={{ color: "#dc2626" }}>{error}</div>}
         {project && !loading && !error && (
-          <table style={{ ...pageStyles.table, maxWidth: 600 }}>
+          <TableWrapper>
+            <table style={{ ...pageStyles.table, maxWidth: 600 }}>
             <tbody>
               <tr>
                 <th style={pageStyles.th}>Name</th>
@@ -100,6 +102,7 @@ export default function ProjectDetailsPage() {
               </tr>
             </tbody>
           </table>
+          </TableWrapper>
         )}
       </div>
     </div>

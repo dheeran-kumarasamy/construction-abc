@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
+import TableWrapper from "../../components/TableWrapper";
 import { apiUrl } from "../../services/api";
 import { formatDateTime } from "../../services/dateTime";
 import { useAuth } from "../../auth/AuthContext";
@@ -207,7 +208,8 @@ export default function AuditTrail() {
         {!loading && isArchitectHead && entries.length === 0 && <p>No team approval records found.</p>}
 
         {!loading && isArchitectHead && entries.length > 0 && (
-          <table style={pageStyles.table}>
+          <TableWrapper>
+            <table style={pageStyles.table}>
             <thead>
               <tr>
                 <th style={pageStyles.th}>Project</th>
@@ -231,6 +233,7 @@ export default function AuditTrail() {
               ))}
             </tbody>
           </table>
+          </TableWrapper>
         )}
       </div>
     </div>

@@ -60,7 +60,7 @@ button:hover {
 }
 
 .table-wrapper table {
-  min-width: 100%;
+  min-width: max(680px, 100%);
 }
 
 table {
@@ -72,6 +72,9 @@ table th,
 table td {
   border: 1px solid var(--border, #e5e7eb) !important;
   vertical-align: middle;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 table th {
@@ -115,6 +118,7 @@ table td {
 
   .page-container {
     padding: 16px;
+    overflow-x: auto;
   }
 
   .responsive-card {
@@ -153,6 +157,12 @@ table td {
   /* Make tables more readable on mobile */
   .table-wrapper {
     border-radius: 8px;
+    overflow-x: auto;
+  }
+
+  .table-wrapper table,
+  .page-container table {
+    min-width: max(680px, 100%);
   }
 
   table {
@@ -162,6 +172,7 @@ table td {
   table td,
   table th {
     padding: 10px 8px !important;
+    line-height: 1.4;
   }
 
   /* Improve form inputs */

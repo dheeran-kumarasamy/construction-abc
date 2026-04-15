@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { ChangeEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
+import TableWrapper from "../../components/TableWrapper";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import { apiUrl } from "../../services/api";
 
@@ -288,7 +289,8 @@ const BOQUploadWithParsing = () => {
             {parsedData.preview.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <h4 style={{ marginBottom: 8 }}>Preview (First 5 Rows)</h4>
-                <table style={pageStyles.table}>
+                <TableWrapper>
+                  <table style={pageStyles.table}>
                   <thead>
                     <tr>
                       <th style={pageStyles.th}>Item</th>
@@ -306,6 +308,7 @@ const BOQUploadWithParsing = () => {
                     ))}
                   </tbody>
                 </table>
+                </TableWrapper>
               </div>
             )}
 

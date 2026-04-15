@@ -161,6 +161,7 @@ export const pageStyles: Record<string, CSSProperties> = {
   },
   table: {
     width: "100%",
+    minWidth: "max(680px, 100%)",
     borderCollapse: "collapse",
     fontSize: "clamp(12px, 2vw, 15px)",
     tableLayout: "auto",
@@ -176,7 +177,9 @@ export const pageStyles: Record<string, CSSProperties> = {
     fontSize: "clamp(11px, 1.5vw, 14px)",
     textTransform: "uppercase",
     letterSpacing: "0.5px",
-    wordBreak: "break-word",
+    whiteSpace: "normal",
+    wordBreak: "normal",
+    overflowWrap: "anywhere",
     backgroundColor: "#f8fafc",
   },
   td: {
@@ -185,8 +188,9 @@ export const pageStyles: Record<string, CSSProperties> = {
     borderRight: "1px solid var(--border)",
     textAlign: "left",
     verticalAlign: "middle",
-    wordBreak: "break-word",
-    overflowWrap: "break-word",
+    whiteSpace: "normal",
+    wordBreak: "normal",
+    overflowWrap: "anywhere",
   },
   tdCenter: {
     textAlign: "center",

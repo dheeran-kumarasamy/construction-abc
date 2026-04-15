@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import ExportButtons from "../../components/ExportButtons";
 import { pageStyles } from "../../layouts/pageStyles";
+import TableWrapper from "../../components/TableWrapper";
 
 interface BOQRow {
   [key: string]: any;
@@ -82,7 +83,8 @@ export default function PricingEngine() {
           />
         </div>
 
-        <table style={pageStyles.table}>
+        <TableWrapper>
+          <table style={pageStyles.table}>
           <tbody>
             <tr>
               <td>Material</td>
@@ -106,6 +108,7 @@ export default function PricingEngine() {
             </tr>
           </tbody>
         </table>
+        </TableWrapper>
 
         <ExportButtons totals={totals} />
       </div>

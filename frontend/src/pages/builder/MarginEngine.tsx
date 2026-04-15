@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
+import TableWrapper from "../../components/TableWrapper";
 
 interface PricedRow {
   item?: string;
@@ -155,30 +156,32 @@ export default function MarginEngine() {
           </label>
         </div>
 
-        <table style={pageStyles.table}>
-          <tbody>
-            <tr>
-              <td>Material</td>
-              <td>{totals.material.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Labor (with uplift)</td>
-              <td>{totals.labor.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Machinery (with uplift)</td>
-              <td>{totals.machinery.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Other</td>
-              <td>{totals.other.toFixed(2)}</td>
-            </tr>
-            <tr style={pageStyles.grandRow}>
-              <td>Grand Total (with margin)</td>
-              <td>{totals.grandTotal.toFixed(2)}</td>
-            </tr>
-          </tbody>
-        </table>
+        <TableWrapper>
+          <table style={pageStyles.table}>
+            <tbody>
+              <tr>
+                <td>Material</td>
+                <td>{totals.material.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Labor (with uplift)</td>
+                <td>{totals.labor.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Machinery (with uplift)</td>
+                <td>{totals.machinery.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Other</td>
+                <td>{totals.other.toFixed(2)}</td>
+              </tr>
+              <tr style={pageStyles.grandRow}>
+                <td>Grand Total (with margin)</td>
+                <td>{totals.grandTotal.toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </TableWrapper>
       </div>
     </div>
   );

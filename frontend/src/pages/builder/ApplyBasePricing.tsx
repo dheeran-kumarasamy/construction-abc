@@ -2375,7 +2375,7 @@ export default function ApplyBasePricing({
                     </span>
                   </div>
 
-                  <div style={{ maxHeight: "300px", overflow: "auto" }}>
+                  <TableWrapper>
                     <table style={{ ...pageStyles.table, margin: 0, border: "none" }}>
                       <thead>
                         <tr>
@@ -2422,7 +2422,7 @@ export default function ApplyBasePricing({
                         )}
                       </tbody>
                     </table>
-                  </div>
+                  </TableWrapper>
                 </div>
 
                 <div style={{ marginTop: "1.5rem" }}>

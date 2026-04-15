@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
+import TableWrapper from "../../components/TableWrapper";
 import { apiUrl } from "../../services/api";
 import { useAuth } from "../../auth/AuthContext";
 
@@ -270,7 +271,8 @@ export default function InviteBuilders() {
           />
         </div>
 
-        <table style={pageStyles.table}>
+        <TableWrapper>
+          <table style={pageStyles.table}>
           <thead>
             <tr>
               <th style={pageStyles.th}>Email</th>
@@ -330,6 +332,7 @@ export default function InviteBuilders() {
             )}
           </tbody>
         </table>
+        </TableWrapper>
       </div>
     </div>
   );

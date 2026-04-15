@@ -7,6 +7,7 @@ import CompareTable from "./CompareTable";
 import DistrictPricePanel from "./DistrictPricePanel";
 import PriceAlertsList from "./PriceAlertsList";
 import TamilNaduMap from "./TamilNaduMap";
+import TableWrapper from "../../components/TableWrapper";
 import {
   addBookmark,
   createAlert,
@@ -546,7 +547,7 @@ export default function PriceTrackerPage() {
             {dealerOwnPrices.length === 0 ? (
               <p className="pt-map-hint">No product prices saved yet.</p>
             ) : (
-              <div className="pt-dealer-table-wrap">
+              <TableWrapper>
                 <table>
                   <thead>
                     <tr>
@@ -567,7 +568,7 @@ export default function PriceTrackerPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </TableWrapper>
             )}
           </div>
         </section>

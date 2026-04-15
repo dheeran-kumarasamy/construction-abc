@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { pageStyles } from "../../layouts/pageStyles";
+import TableWrapper from "../../components/TableWrapper";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import { apiUrl } from "../../services/api";
 import { formatINR } from "../../services/currency";
@@ -142,7 +143,8 @@ export default function ComparisonDashboard() {
         ) : estimates.length === 0 ? (
           <p>No submitted estimates for this project yet.</p>
         ) : (
-          <table style={pageStyles.table}>
+          <TableWrapper>
+            <table style={pageStyles.table}>
             <thead>
               <tr>
                 <th className="num-header" style={pageStyles.th}>Rank</th>
@@ -188,6 +190,7 @@ export default function ComparisonDashboard() {
               ))}
             </tbody>
           </table>
+          </TableWrapper>
         )}
       </div>
     </div>

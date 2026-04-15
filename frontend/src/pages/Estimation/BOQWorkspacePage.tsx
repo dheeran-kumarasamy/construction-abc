@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
+import TableWrapper from "../../components/TableWrapper";
 import * as api from "./estimation.api";
 import type { BOQProject, RateTemplate } from "./types";
 import { useAuth } from "../../auth/AuthContext";
@@ -666,7 +667,8 @@ export default function BOQWorkspacePage() {
           </div>
         ) : null}
         <div style={{ margin: "24px 0" }}>
-          <table style={{ ...pageStyles.table, fontSize: 13 }}>
+          <TableWrapper>
+            <table style={{ ...pageStyles.table, fontSize: 13 }}>
             <thead>
               <tr>
                 <th style={{ ...pageStyles.th, width: 50 }}>#</th>
@@ -1055,7 +1057,7 @@ export default function BOQWorkspacePage() {
               </select>
             </div>
 
-            <div style={{ maxHeight: 280, overflow: "auto" }}>
+            <TableWrapper>
               <table style={{ ...pageStyles.table, margin: 0, border: "none" }}>
                 <thead>
                   <tr>
@@ -1094,7 +1096,7 @@ export default function BOQWorkspacePage() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableWrapper>
           </div>
         )}
       </div>

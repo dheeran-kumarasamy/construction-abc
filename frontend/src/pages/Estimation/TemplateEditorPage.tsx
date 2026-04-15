@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
+import TableWrapper from "../../components/TableWrapper";
 import * as api from "./estimation.api";
 import type { RateTemplate, Resource } from "./types";
 import { useAuth } from "../../auth/AuthContext";
@@ -509,7 +510,8 @@ export default function TemplateEditorPage() {
                 </button>
               </div>
 
-              <table style={{ ...pageStyles.table, fontSize: 13 }}>
+              <TableWrapper>
+                <table style={{ ...pageStyles.table, fontSize: 13 }}>
                 <thead>
                   <tr>
                     <th style={pageStyles.th}>#</th>
@@ -584,6 +586,7 @@ export default function TemplateEditorPage() {
                   ))}
                 </tbody>
               </table>
+              </TableWrapper>
 
               {(selected.line_items || []).length > 0 && (
                 <div style={{ marginTop: 12, textAlign: "right", fontSize: 14, fontWeight: 600 }}>
