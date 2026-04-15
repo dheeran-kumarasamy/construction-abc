@@ -1,0 +1,596 @@
+{
+  "header": {
+    "projectTitle": "Industrial BOQ Template",
+    "source": "Seed template"
+  },
+  "rows": [
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Excavation for column pits - I. Upto 5'-0\"",
+      "quantity": 16340.84,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Excavation for column pits - II. Above 5'-0\"",
+      "quantity": 6276.9,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Excavation for column pits - I. Above 5'-0\"",
+      "quantity": 4116,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Earthwork filling with available & approved excavated earth, inside plinth or any other locations etc., with all lead & lift, laid in layers of 150mm thick, consolidation of each deposited layer by ramming, watering, leveling of soil top layer, etc., complete.",
+      "quantity": 19284.19,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Earthwork filling with approved earth brought from outside, inside plinth or any other locations etc., with all lead & lift, laid in layers of 150mm thick, consolidation of each deposited layer by ramming, watering etc., complete.",
+      "quantity": 165157.03,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "M Sand Cushion For Footing Including cost of laying, compacting, centering, cost and conveyance of all materials. etc., complete",
+      "quantity": 1183.35,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Earthwork filling with approved red soil from outside, inside planter box, landscape are or any other locations etc., with all lead & lift, laid in layers including vermicompost, manure, gardern soil mix, watering etc., complete.",
+      "quantity": 1,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "9\" thk PCC for Foundation",
+      "quantity": 1775.03,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "6\" thk PCC for Flooring",
+      "quantity": 1,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing and laying of Wet mix macadam (WMM) using 40 to 20mm down size crusher metal to a filling thickness of 150mm (6\") cost and conveyance of all materials and consolidation by vibrating roller of 20 tons watering and keeping the surface moist. etc., For Pavers",
+      "quantity": 5142.25,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "C.C M20 for concrete works using 20mm hard blue metal, Including cost of laying, compacting, curing, centering, side shuttering and scaffolding, cost and conveyance of all materials. etc., complete - I. Footing",
+      "quantity": 2608.2,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "C.C M20 for concrete works using 20mm hard blue metal, Including cost of laying, compacting, curing, centering, side shuttering and scaffolding, cost and conveyance of all materials. etc., complete - II. Column upto basement",
+      "quantity": 721.86,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "C.C M20 for concrete works using 20mm hard blue metal, Including cost of laying, compacting, curing, centering, side shuttering and scaffolding, cost and conveyance of all materials. etc., complete - III. Column above basement",
+      "quantity": 687.49,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "C.C M20 for concrete works using 20mm hard blue metal, Including cost of laying, compacting, curing, centering, side shuttering and scaffolding, cost and conveyance of all materials. etc., complete - IV. Plinth beam",
+      "quantity": 1161.11,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "C.C M20 for concrete works using 20mm hard blue metal, Including cost of laying, compacting, curing, centering, side shuttering and scaffolding, cost and conveyance of all materials. etc., complete - V. RC wall",
+      "quantity": 1,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "C.C M20 for concrete works using 20mm hard blue metal, Including cost of laying, compacting, curing, centering, side shuttering and scaffolding, cost and conveyance of all materials. etc., complete - VI. RC floor",
+      "quantity": 16092.75,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "C.C M20 for concrete works using 20mm hard blue metal, Including cost of laying, compacting, curing, centering, side shuttering and scaffolding, cost and conveyance of all materials. etc., complete - VII. Tie Beam - 6\" thk",
+      "quantity": 310.24,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supplying, fabricating and fixing in position of Mild steel/ High yield strength cold deformed steel bars of various dia. as per detailed drawings for reinforcement to RCC works including straightening, cutting, bending, hooking, lapping and welding wherever required, placing in position, tieing with 18 gauge soft drawn galvanised annealed binding wire of double stranded including the cost of binding wire and anchoring to the adjoining members wherever necessary including all laps and wastages, providing & placing CM/ PVC cover blocks of suitable size to ensure specified cover to main reinforcement etc. complete all as per design, specifications with all lead & lift for all materials & labour and as directed, at all levels & locations. (Nominal lap length included)",
+      "quantity": 64.75,
+      "unit": "mt"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Flyash work 9\" thk wall in c.m 1:6 mix using Flyash of good quality, including cost of cement, sand, labour, curing, bonding of flyash bricks with interconecting perpendicular walls, etc., complete, cost and conveyance of all materials.",
+      "quantity": 3597.75,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Flyash work 4.5\" thk wall in c.m 1:4 mix using Flyash of good quality, including cost of cement, sand, labour, curing, Hoop iron plate once in every four layer, bonding of flyash bricks with interconecting perpendicular walls, etc., complete, cost and conveyance of all materials.",
+      "quantity": 1,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Building RR Masonry retaining wall using RR stones in 1:7 mix (1part of cement: 7 parts of Msand) with the cost of supply and conveyence of all materials including labour and cost of pointing etc.,",
+      "quantity": 1,
+      "unit": "cft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Flyash Brick on edges for plinth beam in c.m 1:6 mix using Flyash of good quality, including cost of cement, sand, labour, curing etc., complete, cost and conveyance of all materials.",
+      "quantity": 1032.1,
+      "unit": "rft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing wall plastering in C.M 1:5 mix to 12mm thk average, including scaffolding, leveling, curing, mesh packing at structural joints, hacking of rc surface, etc., cost and conveyance of all materials.etc.complete - I. Outer surface wall plastering - Upto Basement",
+      "quantity": 1308.27,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing wall plastering in C.M 1:5 mix to 12mm thk average, including scaffolding, leveling, curing, mesh packing at structural joints, hacking of rc surface, etc., cost and conveyance of all materials.etc.complete - II. Outer surface wall plastering - Above Basement",
+      "quantity": 3488.73,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing wall plastering in C.M 1:5 mix to 12mm thk average, including scaffolding, leveling, curing, mesh packing at structural joints, hacking of rc surface, etc., cost and conveyance of all materials.etc.complete - III. Inner surface wall plastering - Upto Basement",
+      "quantity": 1308.27,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing wall plastering in C.M 1:5 mix to 12mm thk average, including scaffolding, leveling, curing, mesh packing at structural joints, hacking of rc surface, etc., cost and conveyance of all materials.etc.complete - IV. Inner surface wall plastering - Above Basement",
+      "quantity": 3488.73,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing floor plastering in C.M 1:5 mix to 12mm thk average, including scaffolding, leveling, curing, mesh packing at structural joints, chipping of existing plastering to match new plaster, etc., cost and conveyance of all materials, etc, complete",
+      "quantity": 1,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing & injecting chemical emulsion for Pre-constructional anti-termite treatment by supplying & spraying chemicals as per IS 6313-1981 and in accordance with manufacturer's specifications with all lead & lift for all materials, creating a chemical barrier under and alround the column pits, wall trenches, basement excavations, top surface of plinth filling, junction of wall & floor, along the external perimeter of the building, expansion joints, surroundings of pipes & conduits etc. complete and as directed.",
+      "quantity": 34780.39,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing putty two coats of the walls, including applying, srubbing, curing, cost and conveyance of all materials. (Exterior)",
+      "quantity": 3974.43,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing white washing one coat for wall with cement including scrubbing, labour, cost and conveyance of all materials.",
+      "quantity": 3974.43,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Applying one coat of primer and two coats of premium emulsion exterior grade paint for wall with specified colour and quality over the putty surface, including applying, srubbing, cost and conveyance of all materials.",
+      "quantity": 3974.43,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Power trowel finish using Quartz base harder 5kg/Squre Meter 0.12mm pads placed at columns and alls to provide for expansion to avoid cracks, levelling using setting channels using spreading and levelling laser optical machine, vibrating and screeding to required thickness, bull floating to remove excess bleed water, power floating and power trowelling the concrete surface to provide a smooth finish, including cost of labour, curing, machinary, etc., cost and conveyance of all materials.",
+      "quantity": 32185.51,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and Fixing of 80mm thick square paver (8\" X 8\" sandblast paver)flooring of best quality of paver including levelling, laying, cutting, curing, sand bed, etc., complete, cost and conveyance of all materials.",
+      "quantity": 10284.5,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and Fixing of kerb stone 450mm x 300mm x 100mm for pavers including levelling, laying, cutting, curing, sand bed, etc., complete, cost and conveyance of all materials.",
+      "quantity": 275.32,
+      "unit": "rft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supplying and fixing of M.S. Rolling Shutter of approved color & design with necessary accessories including labour, heavy duty locks, lever, roller drum, rollers, outer frame, 1 coat of primer at factory, 2 coats of anti rust paint at site, cost and conveyance of materials, etc., complete",
+      "quantity": 2058,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing two coats of matt enamel painting with architect approved colour for rolling shutter, cost and conveyance of all materials.",
+      "quantity": 6174,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply, Fabricating and Fixing of structural steel members as per drawing, including cost of steel members, loading, transporting, unloading, 1 coat of primer applied at factory, etc., complete, cost and conveyance of all material. (Fabrication at factory) - I. Columns, rafters, base plates, brackets and cleats",
+      "quantity": 112396.57,
+      "unit": "kgs"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Applying two coats of matt enamel paint with specified colour and quality with two coats of anti corrosion paint for the structural members as above, including applying, srubbing, curing, cost and conveyance of all materials. (Steel Paint)",
+      "quantity": 84297.43,
+      "unit": "kgs"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Applying two coats of PU paint using spray gun with specified colour and quality with two coats of anti corrosion paint for the structural members as above, including applying, srubbing, curing, cost and conveyance of all materials. (Steel Paint)",
+      "quantity": 28099.14,
+      "unit": "kgs"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and fixing of precoated galvanised iron profile sheets (size, shape and pitch of corrugation as approved by Architect) 0.47 mm (+ 0.05 %) total coated thickness with zinc coating 120 grams per sqm asper IS: 277, in 240 mpa steel grade, 5-7 microns epoxy primer on both side of the sheet and polyester top coat 15-18 microns. Sheet should have protective guard film of 25 microns minimum to avoid scratches during transportation and should be supplied in single length upto 12 metre or as desired by Architect. The sheet shall be fixed using self drilling / self tapping screws of size (5.5x 55 mm) with EPDM seal, complete upto any pitch in horizontal/ vertical or curved surfaces, and including cutting to size and shape wherever required and cost shall include GI powder coated ridge, side/end flashing, soffit junctions, drip flashing & C/L flashings as specified in drawings and manufacturer specifications, complete cost & conveyance of all materials. - I. Roof",
+      "quantity": 34894.2,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and fixing of precoated galvanised iron profile sheets (size, shape and pitch of corrugation as approved by Architect) 0.47 mm (+ 0.05 %) total coated thickness with zinc coating 120 grams per sqm asper IS: 277, in 240 mpa steel grade, 5-7 microns epoxy primer on both side of the sheet and polyester top coat 15-18 microns. Sheet should have protective guard film of 25 microns minimum to avoid scratches during transportation and should be supplied in single length upto 12 metre or as desired by Architect. The sheet shall be fixed using self drilling / self tapping screws of size (5.5x 55 mm) with EPDM seal, complete upto any pitch in horizontal/ vertical or curved surfaces, and including cutting to size and shape wherever required and cost shall include GI powder coated ridge, side/end flashing, soffit junctions, drip flashing & C/L flashings as specified in drawings and manufacturer specifications, complete cost & conveyance of all materials. - II. Walls",
+      "quantity": 36835.72,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and fixing of Polycarbonate Sheet (colour as approved by Architect) including fitting with required accessories and fixed with necessary scaffolding as per architectural drawings including necessary wastages, installation, transportation, scaffolding, cost of labour, etc., complete cost & conveyance of all materials.",
+      "quantity": 2196,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and erection of Galvalume sheeting in all types of flashing (cutting, bending & shaping), including fitting with required accessories, nuts, bolts, screws and fixed with necessary scaffolding as per architectural drawings. including necessary wastages, installation, transportation, scaffolding, cost of labour, Matt black powder coated finish with two coats of anti corrosion paint (Steel Paint), etc., complete cost and conveyance of all materials. - I. Gutter",
+      "quantity": 318.41,
+      "unit": "rft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and erection of Galvalume sheeting in all types of flashing (cutting, bending & shaping), including fitting with required accessories, nuts, bolts, screws and fixed with necessary scaffolding as per architectural drawings. including wastages, installation, transportation, scaffolding, cost of labour, GI powder coated for ridge, side/end flashing, soffit junctions, drip flashing & C/L flashings as specified in drawings and manufacturer specifications, complete cost & conveyance of all materials. - I. Edge flashing",
+      "quantity": 430.24,
+      "unit": "rft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and erection of Galvalume sheeting in all types of flashing (cutting, bending & shaping), including fitting with required accessories, nuts, bolts, screws and fixed with necessary scaffolding as per architectural drawings. including wastages, installation, transportation, scaffolding, cost of labour, GI powder coated for ridge, side/end flashing, soffit junctions, drip flashing & C/L flashings as specified in drawings and manufacturer specifications, complete cost & conveyance of all materials. - II. L/C flashing & other flashing",
+      "quantity": 1123.5,
+      "unit": "rft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and fixing of down spout pipe (6\" square UPVC Pipe) for gutters, including fitting with required accessories, cost of pipe, labour, transport, etc., complete cost and conveyance of all materials.",
+      "quantity": 198.58,
+      "unit": "rft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and installation of Aluminium bubble foil of 8mm thick below proposed roofing including necessary accessories, supports, lifting, coat of labour, transport, etc., complete cost and conveyance of all materials.",
+      "quantity": 30520.73,
+      "unit": "sft"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and providing of chamber for electrical & plumbing with required depth and chamber made of 9\" brick wall allround inclusice of bricks, cement, plaster, floating coat, base PCC, FRP cover slab with metal frame for fixing, excavation, refiling, etc, complete cost and conveyance of all materials. - I. 2'-0\" X 2'-0\" (Upto 1'-6\" depth)",
+      "quantity": 1,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and providing of chamber for electrical & plumbing with required depth and chamber made of 9\" brick wall allround inclusice of bricks, cement, plaster, floating coat, base PCC, FRP cover slab with metal frame for fixing, excavation, refiling, etc, complete cost and conveyance of all materials. - II. 2'-0\" X 2'-0\" (Upto 3'-0\" depth)",
+      "quantity": 1,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and providing of chamber for electrical & plumbing with required depth and chamber made of 9\" brick wall allround inclusice of bricks, cement, plaster, floating coat, base PCC, FRP cover slab with metal frame for fixing, excavation, refiling, etc, complete cost and conveyance of all materials. - III. 3'-0\" X 3'-0\" (Upto 1'-6\" depth)",
+      "quantity": 1,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and providing of chamber for electrical & plumbing with required depth and chamber made of 9\" brick wall allround inclusice of bricks, cement, plaster, floating coat, base PCC, FRP cover slab with metal frame for fixing, excavation, refiling, etc, complete cost and conveyance of all materials. - IV. 3'-0\" X 3'-0\" (Upto 3'-0\" depth)",
+      "quantity": 1,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in RC wall / beam / ceiling using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - I. Less than 2\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in RC wall / beam / ceiling using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - II. 3\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in RC wall / beam / ceiling using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - III. 4\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in RC wall / beam / ceiling using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - IV. 6\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in RC wall / beam / ceiling using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - V. 9\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in RC wall / beam / ceiling using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - VI. 12\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in brick / flyash wall using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - I. Less than 2\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in brick / flyash wall using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - II. 3\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in brick / flyash wall using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - III. 4\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in brick / flyash wall using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - IV. 6\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in brick / flyash wall using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - V. 9\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing Core cutting in brick / flyash wall using suitable diamond core drilling machine / core cutting machine to a wide of 6\" to 12\" wide, etc. complete, cost and conveyance of all materials. - VI. 12\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing core cut packing in C.M 1:5 mix, including scaffolding, leveling, curing, mesh packing at structural joints, etc., cost and conveyance of all materials, etc, complete - I. Less than 2\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing core cut packing in C.M 1:5 mix, including scaffolding, leveling, curing, mesh packing at structural joints, etc., cost and conveyance of all materials, etc, complete - II. 3\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing core cut packing in C.M 1:5 mix, including scaffolding, leveling, curing, mesh packing at structural joints, etc., cost and conveyance of all materials, etc, complete - III. 4\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing core cut packing in C.M 1:5 mix, including scaffolding, leveling, curing, mesh packing at structural joints, etc., cost and conveyance of all materials, etc, complete - IV. 6\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing core cut packing in C.M 1:5 mix, including scaffolding, leveling, curing, mesh packing at structural joints, etc., cost and conveyance of all materials, etc, complete - V. 9\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing core cut packing in C.M 1:5 mix, including scaffolding, leveling, curing, mesh packing at structural joints, etc., cost and conveyance of all materials, etc, complete - VI. 12\" dia",
+      "quantity": 5,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing rebar / lockset into RC / masonry block using chemical anchoring inclusive of drilling to required length, filling resin, cost of steel, etc., cost and conveyance of all materials, etc, complete",
+      "quantity": 100,
+      "unit": "nos"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - I. Mason",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - II. MM",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - III. WM",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - IV. Carpenter",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - V. Carpenter Helper",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - VI. Barbender",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - VII. Barbender Helper",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - VIII. Painter",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - IX. Falsce Ceiling Labour",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - X. Electrician",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - XI. Plumber",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - XII. Earthwork MM",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Providing NMR labours for lifting, loading, shifting, unloading, cleaning, etc., complete Per day = 1 shift of 8 hrs - XIII. Earthwork WM",
+      "quantity": 1,
+      "unit": "per day"
+    },
+    {
+      "type": "line_item",
+      "stage": "Ground Floor Civil Works - Note: Rates are without GST",
+      "description": "Supply and fixing of Exhaust fan (Wind powered exhaust fan turbo ventilator) with a 2000 CFM capacity on roof top using proper MS supports inclusive of lifting, transport, commissioning, labour, cost of MS support, etc., complete cost and conveyance of all materials.",
+      "quantity": 1,
+      "unit": "nos"
+    }
+  ]
+}
