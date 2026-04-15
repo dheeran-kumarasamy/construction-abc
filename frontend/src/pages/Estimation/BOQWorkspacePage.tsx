@@ -860,6 +860,7 @@ export default function BOQWorkspacePage() {
               })}
             </tbody>
           </table>
+          </TableWrapper>
           {isEditingBoq && (
           <div style={{ marginTop: 12 }}>
             <button

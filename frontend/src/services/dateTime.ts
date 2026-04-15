@@ -2,11 +2,23 @@ export function formatDate(value: string | Date | null | undefined) {
   if (!value) return "-";
   const dt = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(dt.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(dt);
+  const day = String(dt.getDate()).padStart(2, "0");
+  const month = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ][dt.getMonth()];
+  const year = String(dt.getFullYear());
+  return `${day}-${month}-${year}`;
 }
 
 export function formatTime(value: string | Date | null | undefined) {
