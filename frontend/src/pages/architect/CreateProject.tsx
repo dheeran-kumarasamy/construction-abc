@@ -5,7 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { pageStyles } from "../../layouts/pageStyles";
 import { apiUrl } from "../../services/api";
 
-const BUILDING_TYPES = ["Residential", "Commercial", "Industrial", "Multistory"] as const;
+const BUILDING_TYPES = ["Residential", "Commercial", "Industrial"] as const;
 const INDIA_CENTER: [number, number] = [22.9734, 78.6569];
 const DEFAULT_MAP_ZOOM = 5;
 const INDIA_BOUNDS: [[number, number], [number, number]] = [

@@ -43,13 +43,17 @@ export default function BuilderDashboard() {
     setSubmitted(Array.isArray(submittedData) ? submittedData : []);
   }
 
+  function normalizeEstimateStatus(value: string | null | undefined) {
+    return String(value || "").trim().toLowerCase();
+  }
+
   const submittedProjectIds = useMemo(
     () =>
       new Set([
         ...submitted.map((item) => item.project_id),
         ...projects
           .filter((project) => {
-            const status = String(project.estimate_status || "").toLowerCase();
+            const status = normalizeEstimateStatus(project.estimate_status);
             return status === "submitted" || status === "approved" || status === "awarded";
           })
           .map((project) => project.id),
@@ -60,7 +64,7 @@ export default function BuilderDashboard() {
   const invitedProjects = useMemo(
     () =>
       projects.filter((project) => {
-        const status = String(project.estimate_status || "").toLowerCase();
+        const status = normalizeEstimateStatus(project.estimate_status);
         return !submittedProjectIds.has(project.id) && (!status || status === "invited");
       }),
     [projects, submittedProjectIds]
@@ -69,16 +73,12 @@ export default function BuilderDashboard() {
   const inProgressProjects = useMemo(
     () =>
       projects.filter((project) => {
-        const status = String(project.estimate_status || "").toLowerCase();
+        const status = normalizeEstimateStatus(project.estimate_status);
         if (submittedProjectIds.has(project.id)) {
           return false;
         }
 
-        if (!status || status === "invited") {
-          return false;
-        }
-
-        return true;
+        return status === "draft" || status === "in_progress";
       }),
     [projects, submittedProjectIds]
   );

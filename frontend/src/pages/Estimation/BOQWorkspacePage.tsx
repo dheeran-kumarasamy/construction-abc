@@ -11,7 +11,11 @@ import { formatINR } from "../../services/currency";
 import { formatDate } from "../../services/dateTime";
 
 const RESIDENTIAL_TEMPLATE_URL = new URL("../../data/boq-residential.json", import.meta.url).href;
+const COMMERCIAL_TEMPLATE_URL = new URL("../../data/boq-commercial.json", import.meta.url).href;
+const INDUSTRIAL_TEMPLATE_URL = new URL("../../data/boq-Industrial.json", import.meta.url).href;
 const BOQ_DRAFT_STORAGE_PREFIX = "boq_workspace_draft:";
+
+type BoqTemplateKind = "residential" | "commercial" | "industrial";
 
 type BOQDraft = {
   rows: BOQRow[];
@@ -267,22 +271,67 @@ function isAuthMissingError(err: unknown) {
   return /missing or invalid authorization header|unauthorized|invalid token/i.test(message);
 }
 
-async function loadResidentialBoqRows(): Promise<BOQRow[]> {
-  const response = await fetch(RESIDENTIAL_TEMPLATE_URL);
+function resolveTemplateKind(
+  searchTemplate: string | null,
+  project: BOQProject | null
+): BoqTemplateKind | null {
+  const normalizedTemplate = String(searchTemplate || "").trim().toLowerCase();
+  if (
+    normalizedTemplate === "residential" ||
+    normalizedTemplate === "commercial" ||
+    normalizedTemplate === "industrial"
+  ) {
+    return normalizedTemplate as BoqTemplateKind;
+  }
+
+  const buildingType = String(project?.building_type || "")
+    .trim()
+    .toLowerCase();
+
+  if (buildingType === "commercial") return "commercial";
+  if (buildingType === "industrial") return "industrial";
+  if (buildingType === "residential") return "residential";
+  return null;
+}
+
+function formatProjectType(value: string | null | undefined) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "-";
+  return normalized
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getTemplateUrl(kind: BoqTemplateKind) {
+  if (kind === "commercial") return COMMERCIAL_TEMPLATE_URL;
+  if (kind === "industrial") return INDUSTRIAL_TEMPLATE_URL;
+  return RESIDENTIAL_TEMPLATE_URL;
+}
+
+function getTemplateLabel(kind: BoqTemplateKind) {
+  if (kind === "commercial") return "commercial";
+  if (kind === "industrial") return "industrial";
+  return "residential";
+}
+
+async function loadBoqRowsFromTemplate(kind: BoqTemplateKind): Promise<BOQRow[]> {
+  const response = await fetch(getTemplateUrl(kind));
   if (!response.ok) {
-    throw new Error("Failed to load residential BOQ template");
+    throw new Error(`Failed to load ${getTemplateLabel(kind)} BOQ template`);
   }
 
   const raw = await response.text();
   if (!raw.trim()) {
-    throw new Error("Residential BOQ template file is empty");
+    throw new Error(`${getTemplateLabel(kind)} BOQ template file is empty`);
   }
 
   let payload: any;
   try {
     payload = JSON.parse(raw);
   } catch {
-    throw new Error("Residential BOQ template JSON is invalid");
+    throw new Error(`${getTemplateLabel(kind)} BOQ template JSON is invalid`);
   }
   const rows = Array.isArray(payload?.rows) ? payload.rows : [];
 
@@ -296,34 +345,51 @@ async function loadResidentialBoqRows(): Promise<BOQRow[]> {
     }))
     .filter((row: { description: string }) => row.description.length > 0);
 
-  const grouped = new Map<string, Array<{ id: number; description: string; unit: string }>>();
-  for (const stageName of STAGE_SEQUENCE) {
-    grouped.set(stageName, []);
+  const output: BOQRow[] = [];
+  if (kind === "residential") {
+    const grouped = new Map<string, Array<{ id: number; description: string; unit: string }>>();
+    for (const stageName of STAGE_SEQUENCE) {
+      grouped.set(stageName, []);
+    }
+
+    for (const item of lineItems) {
+      const stage = item.stage || classifyResidentialStage(item.description);
+      if (!grouped.has(stage)) grouped.set(stage, []);
+      grouped.get(stage)!.push(item);
+    }
+
+    for (const stageName of STAGE_SEQUENCE) {
+      const stageItems = grouped.get(stageName) || [];
+      if (!stageItems.length) continue;
+
+      for (const item of stageItems) {
+        output.push({
+          customId: `${kind}-${item.id}`,
+          customName: item.description,
+          stageName,
+          source: "architect_standard",
+          quantity: "",
+          uom: item.unit,
+          rate: undefined,
+          amount: undefined,
+        });
+      }
+    }
+
+    return output;
   }
 
   for (const item of lineItems) {
-    const stage = item.stage || classifyResidentialStage(item.description);
-    if (!grouped.has(stage)) grouped.set(stage, []);
-    grouped.get(stage)!.push(item);
-  }
-
-  const output: BOQRow[] = [];
-  for (const stageName of STAGE_SEQUENCE) {
-    const stageItems = grouped.get(stageName) || [];
-    if (!stageItems.length) continue;
-
-    for (const item of stageItems) {
-      output.push({
-        customId: `residential-${item.id}`,
-        customName: item.description,
-        stageName,
-        source: "architect_standard",
-        quantity: "",
-        uom: item.unit,
-        rate: undefined,
-        amount: undefined,
-      });
-    }
+    output.push({
+      customId: `${kind}-${item.id}`,
+      customName: item.description,
+      stageName: item.stage || "General",
+      source: "architect_standard",
+      quantity: "",
+      uom: item.unit,
+      rate: undefined,
+      amount: undefined,
+    });
   }
 
   return output;
@@ -338,7 +404,7 @@ export default function BOQWorkspacePage() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const isViewMode = searchParams.get("mode") === "view";
-  const isResidentialTemplatePreset = searchParams.get("template") === "residential";
+  const searchTemplate = searchParams.get("template");
   const { user } = useAuth();
   const isArchitectFlow = user?.role === "architect";
   const isGenericEstimationRoute = location.pathname.startsWith("/estimation/");
@@ -373,7 +439,7 @@ export default function BOQWorkspacePage() {
     const currentItemCount = acc.filter((entry) => entry.type === "item").length;
     const nextSerial = currentItemCount + 1;
 
-    if (isResidentialTemplatePreset && "customId" in row) {
+    if ("customId" in row) {
       const stageName = String(row.stageName || "General").trim() || "General";
       if (lastInsertedStageName !== stageName) {
         acc.push({ type: "stage", stageName });
@@ -392,9 +458,14 @@ export default function BOQWorkspacePage() {
     : user?.role === "builder"
     ? "/builder"
     : "/estimation";
+  const projectTypeValue =
+    project?.building_type ||
+    String((project as BOQProject & { buildingType?: string | null })?.buildingType || "");
+
   const projectDetails = [
     { label: "Project", value: project?.name || "-" },
     { label: "Client", value: project?.client_name || "-" },
+    { label: "Project Type", value: formatProjectType(projectTypeValue) },
     { label: "Location", value: project?.project_location || "-" },
     { label: "Terrain", value: project?.terrain ? project.terrain.charAt(0).toUpperCase() + project.terrain.slice(1) : "-" },
     { label: "Status", value: project?.status ? project.status.replace(/_/g, " ") : "-" },
@@ -473,20 +544,23 @@ export default function BOQWorkspacePage() {
             setBoqRows(draft.rows);
             setRestoredFromAutoSave(true);
             setLastAutoSavedAt(draft.savedAt);
-          } else if (isResidentialTemplatePreset) {
-            try {
-              const residentialRows = await loadResidentialBoqRows();
-              if (residentialRows.length > 0) {
-                setBoqRows(residentialRows);
-              } else {
+          } else {
+            const templateKind = resolveTemplateKind(searchTemplate, proj);
+            if (templateKind) {
+              try {
+                const templateRows = await loadBoqRowsFromTemplate(templateKind);
+                if (templateRows.length > 0) {
+                  setBoqRows(templateRows);
+                } else {
+                  setBoqRows(defaultRows);
+                }
+              } catch (templateErr) {
+                console.error(`Failed to load ${templateKind} template rows:`, templateErr);
                 setBoqRows(defaultRows);
               }
-            } catch (templateErr) {
-              console.error("Failed to load residential template rows:", templateErr);
+            } else {
               setBoqRows(defaultRows);
             }
-          } else {
-            setBoqRows(defaultRows);
           }
         }
       } catch (err) {
@@ -503,7 +577,7 @@ export default function BOQWorkspacePage() {
       }
     }
     load();
-  }, [projectId, isViewMode, isResidentialTemplatePreset]);
+  }, [projectId, isViewMode, searchTemplate]);
 
   useEffect(() => {
     if (!isArchitectFlow) {

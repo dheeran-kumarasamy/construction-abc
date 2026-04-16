@@ -164,6 +164,23 @@
   margin: 0 0 8px;
 }
 
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.table-wrapper table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table-wrapper th,
+.table-wrapper td {
+  border: 1px solid #e2e8f0;
+  padding: 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+
 .pt-dealer-table-wrap {
   overflow-x: auto;
 }

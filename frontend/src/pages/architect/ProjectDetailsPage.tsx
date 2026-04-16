@@ -8,6 +8,8 @@ import { formatDate } from "../../services/dateTime";
 interface ProjectDetails {
   id: string;
   name: string;
+  building_type?: string | null;
+  buildingType?: string | null;
   description?: string | null;
   site_address?: string | null;
   tentative_start_date?: string | null;
@@ -16,6 +18,16 @@ interface ProjectDetails {
   client_name?: string | null;
   project_location?: string | null;
   status?: string | null;
+}
+
+function formatProjectType(value: string | null | undefined) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "-";
+  return normalized
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+    .join(" ");
 }
 
 export default function ProjectDetailsPage() {
@@ -61,6 +73,9 @@ export default function ProjectDetailsPage() {
         {loading && <div>Loading project...</div>}
         {error && <div style={{ color: "#dc2626" }}>{error}</div>}
         {project && !loading && !error && (
+          (() => {
+            const projectTypeValue = project.building_type || project.buildingType;
+            return (
           <TableWrapper>
             <table style={{ ...pageStyles.table, maxWidth: 600 }}>
             <tbody>
@@ -75,6 +90,10 @@ export default function ProjectDetailsPage() {
               <tr>
                 <th style={pageStyles.th}>Client</th>
                 <td style={pageStyles.td}>{project.client_name || "-"}</td>
+              </tr>
+              <tr>
+                <th style={pageStyles.th}>Project Type</th>
+                <td style={pageStyles.td}>{formatProjectType(projectTypeValue)}</td>
               </tr>
               <tr>
                 <th style={pageStyles.th}>Location</th>
@@ -103,6 +122,8 @@ export default function ProjectDetailsPage() {
             </tbody>
           </table>
           </TableWrapper>
+            );
+          })()
         )}
       </div>
     </div>

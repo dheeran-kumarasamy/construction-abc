@@ -567,6 +567,87 @@ async function hasProjectRevisionBuildingTypeColumn() {
   return hasProjectRevisionBuildingTypeColumnCache;
 }
 
+async function attachProjectSourceMetadata(projectRow: any, userId: string) {
+  if (!projectRow) return projectRow;
+  if (
+    Object.prototype.hasOwnProperty.call(projectRow, "building_type") &&
+    Object.prototype.hasOwnProperty.call(projectRow, "site_address") &&
+    Object.prototype.hasOwnProperty.call(projectRow, "tentative_start_date") &&
+    Object.prototype.hasOwnProperty.call(projectRow, "duration_months")
+  ) {
+    return projectRow;
+  }
+
+  const hasSourceProjectIdColumn = await hasBoqSourceProjectIdColumn();
+  const hasBuildingTypeColumn = await hasProjectRevisionBuildingTypeColumn();
+
+  if (!hasBuildingTypeColumn) {
+    return {
+      ...projectRow,
+      building_type: null,
+      site_address: null,
+      tentative_start_date: null,
+      duration_months: null,
+    };
+  }
+
+  const sourceProjectExpression = hasSourceProjectIdColumn
+    ? `COALESCE(
+         bp.source_project_id,
+         CASE
+           WHEN bp.notes ~ 'source_project_id:[0-9a-fA-F-]{36}'
+           THEN substring(bp.notes from 'source_project_id:([0-9a-fA-F-]{36})')::uuid
+           ELSE NULL
+         END
+       )`
+    : `CASE
+         WHEN bp.notes ~ 'source_project_id:[0-9a-fA-F-]{36}'
+         THEN substring(bp.notes from 'source_project_id:([0-9a-fA-F-]{36})')::uuid
+         ELSE NULL
+       END`;
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT source_pr.building_type,
+              source_pr.site_address,
+              source_pr.tentative_start_date,
+              source_pr.duration_months
+       FROM boq_projects bp
+       LEFT JOIN projects pr ON pr.id = ${sourceProjectExpression}
+       LEFT JOIN LATERAL (
+         SELECT building_type, site_address, tentative_start_date, duration_months
+         FROM project_revisions
+         WHERE project_id = pr.id
+         ORDER BY revision_number DESC
+         LIMIT 1
+       ) source_pr ON true
+       WHERE bp.id = $1 AND bp.user_id = $2
+       LIMIT 1`,
+      [projectRow.id, userId]
+    );
+
+    return {
+      ...projectRow,
+      building_type: rows[0]?.building_type ?? null,
+      site_address: rows[0]?.site_address ?? null,
+      tentative_start_date: rows[0]?.tentative_start_date ?? null,
+      duration_months: rows[0]?.duration_months ?? null,
+    };
+  } catch (error: any) {
+    if (String(error?.code || "") !== "42703") {
+      throw error;
+    }
+
+    return {
+      ...projectRow,
+      building_type: null,
+      site_address: null,
+      tentative_start_date: null,
+      duration_months: null,
+    };
+  }
+}
+
 export async function listProjects(userId: string) {
   const userRes = await pool.query(`SELECT role FROM users WHERE id = $1`, [userId]);
   const role = String(userRes.rows[0]?.role || "");
@@ -848,7 +929,7 @@ export async function getProject(projectId: string, userId: string) {
 
   if (directRes.rows[0]) {
     await ensureInvitedProjectSeeded(directRes.rows[0].id, userId);
-    return directRes.rows[0];
+    return attachProjectSourceMetadata(directRes.rows[0], userId);
   }
 
   // 2) Resolve source project ID -> boq_projects row
@@ -875,7 +956,7 @@ export async function getProject(projectId: string, userId: string) {
 
   if (sourceRes.rows[0]) {
     await ensureInvitedProjectSeeded(sourceRes.rows[0].id, userId);
-    return sourceRes.rows[0];
+    return attachProjectSourceMetadata(sourceRes.rows[0], userId);
   }
 
   // 3) Source project fallback: if caller passed projects.id, seed boq_projects row on demand.
@@ -986,7 +1067,8 @@ export async function getProject(projectId: string, userId: string) {
     await ensureInvitedProjectSeeded(insertedRow.id, userId);
   }
 
-  return insertedRow || null;
+  if (!insertedRow) return null;
+  return attachProjectSourceMetadata(insertedRow, userId);
 }
 
 function parseNumeric(value: unknown, fallback = 1): number {

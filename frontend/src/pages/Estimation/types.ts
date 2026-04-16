@@ -83,6 +83,7 @@ export interface BOQProject {
   user_id: string;
   source_project_id?: string | null;
   project_type?: "own" | "invited";
+  building_type?: string | null;
   name: string;
   client_name?: string;
   project_location?: string;

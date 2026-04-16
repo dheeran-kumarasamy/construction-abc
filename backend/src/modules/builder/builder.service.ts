@@ -548,7 +548,11 @@ export async function markEstimateInProgress(projectId: string, userId: string, 
   await assertBuilderProjectAccess(userId, projectId);
 
   const existingEstimate = await pool.query(
-    `SELECT id FROM estimates WHERE project_id = $1 AND builder_org_id = $2 LIMIT 1`,
+    `SELECT id, status
+     FROM estimates
+     WHERE project_id = $1 AND builder_org_id = $2
+     ORDER BY created_at DESC
+     LIMIT 1`,
     [projectId, builderOrgId]
   );
 
@@ -561,11 +565,18 @@ export async function markEstimateInProgress(projectId: string, userId: string, 
     return { status: "draft" };
   }
 
+  const currentEstimate = existingEstimate.rows[0];
+  const currentStatus = String(currentEstimate.status || "").toLowerCase();
+
+  if (currentStatus === "submitted" || currentStatus === "approved" || currentStatus === "awarded") {
+    return { status: currentStatus };
+  }
+
   await pool.query(
     `UPDATE estimates
      SET status = 'draft'
      WHERE id = $1`,
-    [existingEstimate.rows[0].id]
+    [currentEstimate.id]
   );
 
   return { status: "draft" };
