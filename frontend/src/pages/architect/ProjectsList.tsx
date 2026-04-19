@@ -41,6 +41,15 @@ function getBoqEntryPath(project: ProjectRow) {
   return isResidential ? `/estimation/${projectRef}?template=residential` : `/estimation/${projectRef}`;
 }
 
+function formatProjectType(value?: string | null): string {
+  if (!value) return "-";
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export default function ProjectsList() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -127,6 +136,7 @@ export default function ProjectsList() {
               <thead>
                 <tr>
                   <th style={pageStyles.th}>Project Name</th>
+                  <th style={pageStyles.th}>Project Type</th>
                   <th style={pageStyles.th}>Actions</th>
                 </tr>
               </thead>
@@ -148,6 +158,7 @@ export default function ProjectsList() {
                         {p.name}
                       </a>
                     </td>
+                    <td style={pageStyles.td}>{formatProjectType(p.building_type)}</td>
                     <td style={pageStyles.td}>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <button
