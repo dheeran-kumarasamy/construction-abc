@@ -4,14 +4,14 @@
   "description": "Construction Tender SaaS Backend",
   "main": "dist/src/server.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "env -u NODE_OPTIONS ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/src/server.js",
     "migrate": "node migrate.js",
-    "seed:admin": "ts-node-dev --transpile-only src/scripts/seedAdmin.ts",
-    "seed:client": "ts-node-dev --transpile-only src/scripts/seedClient.ts",
-    "seed:prices": "ts-node-dev --transpile-only src/scripts/seed.ts",
-    "seed:sor": "ts-node-dev --transpile-only src/scripts/seedSOR.ts"
+    "seed:admin": "env -u NODE_OPTIONS ts-node-dev --transpile-only src/scripts/seedAdmin.ts",
+    "seed:client": "env -u NODE_OPTIONS ts-node-dev --transpile-only src/scripts/seedClient.ts",
+    "seed:prices": "env -u NODE_OPTIONS ts-node-dev --transpile-only src/scripts/seed.ts",
+    "seed:sor": "env -u NODE_OPTIONS ts-node-dev --transpile-only src/scripts/seedSOR.ts"
   },
   "keywords": [],
   "author": "",
