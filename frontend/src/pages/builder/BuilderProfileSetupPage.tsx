@@ -25,7 +25,7 @@ const EMPTY: ProfileForm = {
   portfolioLinks: "",
   teamSize: "",
   minProjectBudget: "",
-  isVisibleToArchitects: false,
+  isVisibleToArchitects: true,
   portfolioPhotos: [],
 };
 

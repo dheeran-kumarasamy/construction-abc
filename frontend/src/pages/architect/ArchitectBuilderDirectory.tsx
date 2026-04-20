@@ -112,6 +112,7 @@ export default function ArchitectBuilderDirectory() {
 
 function BuilderCard({ builder: b }: { builder: BuilderProfile }) {
   const [expanded, setExpanded] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   return (
     <div
@@ -193,35 +194,163 @@ function BuilderCard({ builder: b }: { builder: BuilderProfile }) {
             <div>
               <span style={detailLabel}>Portfolio Photos</span>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10 }}>
-                {b.portfolioPhotos.map((photoPath) => (
-                  <a
+                {b.portfolioPhotos.map((photoPath, idx) => (
+                  <img
                     key={photoPath}
-                    href={apiUrl(`/uploads/${photoPath}`)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ display: "block" }}
-                  >
-                    <img
-                      src={apiUrl(`/uploads/${photoPath}`)}
-                      alt={`${b.companyName || "Builder"} portfolio`}
-                      style={{
-                        width: "100%",
-                        height: 96,
-                        objectFit: "cover",
-                        borderRadius: 8,
-                        border: "1px solid #d1d5db",
-                        background: "#f8fafc",
-                      }}
-                    />
-                  </a>
+                    src={apiUrl(`/uploads/${photoPath}`)}
+                    alt={`${b.companyName || "Builder"} portfolio ${idx + 1}`}
+                    onClick={() => setLightboxIndex(idx)}
+                    style={{
+                      width: "100%",
+                      height: 96,
+                      objectFit: "cover",
+                      borderRadius: 8,
+                      border: "1px solid #d1d5db",
+                      background: "#f8fafc",
+                      cursor: "pointer",
+                    }}
+                  />
                 ))}
               </div>
+              {lightboxIndex !== null && (
+                <Lightbox
+                  photos={b.portfolioPhotos.map((p) => apiUrl(`/uploads/${p}`))}
+                  index={lightboxIndex}
+                  onClose={() => setLightboxIndex(null)}
+                  onNavigate={setLightboxIndex}
+                  companyName={b.companyName || "Builder"}
+                />
+              )}
             </div>
           )}
         </div>
       )}
     </div>
   );
+}
+
+interface LightboxProps {
+  photos: string[];
+  index: number;
+  onClose: () => void;
+  onNavigate: (index: number) => void;
+  companyName: string;
+}
+
+function Lightbox({ photos, index, onClose, onNavigate, companyName }: LightboxProps) {
+  const hasPrev = index > 0;
+  const hasNext = index < photos.length - 1;
+
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft" && hasPrev) onNavigate(index - 1);
+      if (e.key === "ArrowRight" && hasNext) onNavigate(index + 1);
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [index, hasPrev, hasNext, onClose, onNavigate]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.82)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {/* Prev button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onNavigate(index - 1); }}
+        disabled={!hasPrev}
+        style={lightboxNavBtn("left")}
+        aria-label="Previous photo"
+      >
+        &#8249;
+      </button>
+
+      {/* Image container */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: "relative",
+          maxWidth: "90vw",
+          maxHeight: "85vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <img
+          src={photos[index]}
+          alt={`${companyName} portfolio ${index + 1}`}
+          style={{
+            maxWidth: "80vw",
+            maxHeight: "75vh",
+            objectFit: "contain",
+            borderRadius: 10,
+            boxShadow: "0 4px 32px rgba(0,0,0,0.5)",
+          }}
+        />
+        <span style={{ color: "#e5e7eb", fontSize: 13 }}>
+          {index + 1} / {photos.length}
+        </span>
+        <button
+          onClick={onClose}
+          style={{
+            position: "absolute",
+            top: -36,
+            right: 0,
+            background: "none",
+            border: "none",
+            color: "#fff",
+            fontSize: 26,
+            cursor: "pointer",
+            lineHeight: 1,
+          }}
+          aria-label="Close"
+        >
+          &times;
+        </button>
+      </div>
+
+      {/* Next button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onNavigate(index + 1); }}
+        disabled={!hasNext}
+        style={lightboxNavBtn("right")}
+        aria-label="Next photo"
+      >
+        &#8250;
+      </button>
+    </div>
+  );
+}
+
+function lightboxNavBtn(side: "left" | "right"): React.CSSProperties {
+  return {
+    position: "fixed",
+    top: "50%",
+    [side]: 20,
+    transform: "translateY(-50%)",
+    background: "rgba(255,255,255,0.15)",
+    border: "none",
+    color: "#fff",
+    fontSize: 48,
+    lineHeight: 1,
+    cursor: "pointer",
+    borderRadius: 8,
+    padding: "4px 14px",
+    userSelect: "none",
+    transition: "background 0.15s",
+    opacity: 0.85,
+  };
 }
 
 function Tag({ label, color }: { label: string; color: string }) {
