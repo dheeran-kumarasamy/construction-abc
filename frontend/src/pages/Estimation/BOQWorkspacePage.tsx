@@ -100,7 +100,8 @@ function resolveBoqApiProjectId(
   return "";
 }
 
-const STAGE_SEQUENCE = [
+// Residential project stage sequence
+const RESIDENTIAL_STAGE_SEQUENCE = [
   "Basement",
   "Ground Floor",
   "First Floor",
@@ -111,6 +112,186 @@ const STAGE_SEQUENCE = [
   "Compound",
   "Finishing & Misc",
 ] as const;
+
+// Commercial project stage sequence
+const COMMERCIAL_STAGE_SEQUENCE = [
+  "Basement",
+  "Ground Floor",
+  "First Floor",
+  "Second Floor",
+  "Third Floor",
+  "UG Sump",
+  "Septic Tank",
+  "Overhead Tank",
+  "Elevator",
+] as const;
+
+// Define floor stage info per project type
+interface FloorStageConfig {
+  named: readonly string[]; // Named floor stages in order (e.g., ["Ground Floor", "First Floor", ...])
+  basement?: string; // Optional basement stage
+  templateStage: string; // Stage to clone for floors > length(named)
+  nonFloorStages: readonly string[]; // Stages that come after all floors
+}
+
+const FLOOR_STAGE_CONFIG: Record<BoqTemplateKind, FloorStageConfig> = {
+  residential: {
+    named: ["Ground Floor", "First Floor", "Second Floor", "Third Floor"],
+    basement: "Basement",
+    templateStage: "Third Floor",
+    nonFloorStages: ["Terrace", "OHT", "Compound", "Finishing & Misc"],
+  },
+  commercial: {
+    named: ["Ground Floor", "First Floor", "Second Floor", "Third Floor"],
+    basement: "Basement",
+    templateStage: "Third Floor",
+    nonFloorStages: ["UG Sump", "Septic Tank", "Overhead Tank", "Elevator"],
+  },
+  industrial: {
+    named: ["Ground Floor Civil Works - Note: Rates are without GST"],
+    templateStage: "", // No cloning for industrial (single floor)
+    nonFloorStages: [],
+  },
+};
+
+function toPositiveInteger(value: unknown): number | null {
+  const parsed = Number(String(value ?? "").trim());
+  if (!Number.isFinite(parsed)) return null;
+  const rounded = Math.round(parsed);
+  return rounded >= 0 ? rounded : null;
+}
+
+/**
+ * Generate ordinal suffix for floor numbers >= 5
+ * e.g., 5 → "4th", 6 → "5th", 21 → "21st", 22 → "22nd", 23 → "23rd", 24 → "24th"
+ */
+function getOrdinalSuffix(n: number): string {
+  if (n % 100 >= 11 && n % 100 <= 13) return "th";
+  if (n % 10 === 1) return "st";
+  if (n % 10 === 2) return "nd";
+  if (n % 10 === 3) return "rd";
+  return "th";
+}
+
+/**
+ * Substitute the template floor name in a description string with the new floor name.
+ * For floors > 4, replaces "Third floor" prefix with e.g., "4th Floor"
+ */
+function substituteFloorName(description: string, templateStageName: string, newFloorName: string): string {
+  // Replace known floor prefixes: "Third floor", "Third Floor", "3rd floor", etc.
+  const pattern = new RegExp(`^${templateStageName.replace(/\s+/g, "\\s+")}\\s+`, "i");
+  if (pattern.test(description)) {
+    return description.replace(pattern, `${newFloorName} `);
+  }
+  return description;
+}
+
+function filterTemplateRowsByProjectFloors(
+  rows: BOQRow[],
+  project: BOQProject | null,
+  templateKind: BoqTemplateKind
+): BOQRow[] {
+  const aboveGround = toPositiveInteger(project?.floors_above_ground);
+  const belowGround = toPositiveInteger(project?.floors_below_ground);
+
+  // No floor metadata - return rows untouched
+  if (aboveGround == null && belowGround == null) return rows;
+
+  const config = FLOOR_STAGE_CONFIG[templateKind];
+  const allFloorStages = new Set<string>();
+  
+  if (config.basement && (belowGround ?? 0) > 0) {
+    allFloorStages.add(config.basement);
+  }
+
+  config.named.forEach((stage) => allFloorStages.add(stage));
+
+  // 1. Filter rows to keep only the allowed floor stages (gate based on project floor count)
+  const base = rows.filter((row) => {
+    if (!("customId" in row)) return true;
+    const stageName = String(row.stageName || "").trim();
+    if (!allFloorStages.has(stageName)) return true;
+
+    // For above-ground floors, only include up to the project's floor count
+    if (config.basement && stageName === config.basement) {
+      return (belowGround ?? 0) > 0;
+    }
+
+    // Check which named-floor index this is (0-based)
+    const floorIdx = config.named.indexOf(stageName);
+    if (floorIdx === -1) return true;
+    // Keep this floor stage if floor number (floorIdx + 1) <= total above-ground floors
+    return (floorIdx + 1) <= Math.max(1, aboveGround ?? 1);
+  });
+
+  // 2. Generate extra floors (> length of named floors above ground)
+  const namedFloorCount = config.named.length;
+  const totalAboveGround = Math.max(1, aboveGround ?? 1);
+
+  if (totalAboveGround <= namedFloorCount || !config.templateStage) {
+    // No extra floors needed, or can't clone for this project type
+    return base;
+  }
+
+  // Find rows for the template stage to use for cloning
+  const templateRows = base.filter(
+    (row) =>
+      "customId" in row &&
+      String((row as any).stageName || "").trim() === config.templateStage
+  );
+
+  if (templateRows.length === 0) return base;
+
+  const extra: BOQRow[] = [];
+
+  // For floors beyond the named set: floors (namedFloorCount+1) through totalAboveGround
+  for (let floorNum = namedFloorCount + 1; floorNum <= totalAboveGround; floorNum += 1) {
+    // Generate stage name like "4th Floor", "5th Floor", etc.
+    const ordinalNum = floorNum - 1; // e.g., floor 5 above ground = "4th Floor"
+    const suffix = getOrdinalSuffix(ordinalNum);
+    const stageName = `${ordinalNum}${suffix} Floor`;
+
+    templateRows.forEach((sourceRow, idx) => {
+      const src = sourceRow as {
+        customId: string;
+        customName: string;
+        stageName?: string;
+        source?: string;
+        quantity: string;
+        uom: string;
+      };
+      extra.push({
+        customId: `extra-floor-${floorNum}-${idx}`,
+        customName: substituteFloorName(src.customName, config.templateStage, stageName),
+        stageName,
+        source: "architect_standard",
+        quantity: "",
+        uom: src.uom,
+        rate: undefined,
+        amount: undefined,
+      });
+    });
+  }
+
+  // 3. Insert extra floors after the last named floor, before non-floor stages
+  const nonFloorPivot = base.findIndex(
+    (row) =>
+      "customId" in row &&
+      config.nonFloorStages.includes(String((row as any).stageName || ""))
+  );
+
+  if (nonFloorPivot === -1) {
+    // No non-floor stages found, append extra floors at end
+    return [...base, ...extra];
+  }
+
+  // Insert extra floors before the first non-floor stage
+  return [
+    ...base.slice(0, nonFloorPivot),
+    ...extra,
+    ...base.slice(nonFloorPivot),
+  ];
+}
 
 function classifyResidentialStage(description: string) {
   const text = String(description || "").toLowerCase();
@@ -316,7 +497,7 @@ function getTemplateLabel(kind: BoqTemplateKind) {
   return "residential";
 }
 
-async function loadBoqRowsFromTemplate(kind: BoqTemplateKind): Promise<BOQRow[]> {
+async function loadBoqRowsFromTemplate(kind: BoqTemplateKind, project: BOQProject | null): Promise<BOQRow[]> {
   const response = await fetch(getTemplateUrl(kind));
   if (!response.ok) {
     throw new Error(`Failed to load ${getTemplateLabel(kind)} BOQ template`);
@@ -346,9 +527,11 @@ async function loadBoqRowsFromTemplate(kind: BoqTemplateKind): Promise<BOQRow[]>
     .filter((row: { description: string }) => row.description.length > 0);
 
   const output: BOQRow[] = [];
+  
   if (kind === "residential") {
+    // For residential, group by stage and order using RESIDENTIAL_STAGE_SEQUENCE
     const grouped = new Map<string, Array<{ id: number; description: string; unit: string }>>();
-    for (const stageName of STAGE_SEQUENCE) {
+    for (const stageName of RESIDENTIAL_STAGE_SEQUENCE) {
       grouped.set(stageName, []);
     }
 
@@ -358,7 +541,38 @@ async function loadBoqRowsFromTemplate(kind: BoqTemplateKind): Promise<BOQRow[]>
       grouped.get(stage)!.push(item);
     }
 
-    for (const stageName of STAGE_SEQUENCE) {
+    for (const stageName of RESIDENTIAL_STAGE_SEQUENCE) {
+      const stageItems = grouped.get(stageName) || [];
+      if (!stageItems.length) continue;
+
+      for (const item of stageItems) {
+        output.push({
+          customId: `${kind}-${item.id}`,
+          customName: item.description,
+          stageName,
+          source: "architect_standard",
+          quantity: "",
+          uom: item.unit,
+          rate: undefined,
+          amount: undefined,
+        });
+      }
+    }
+  } else if (kind === "commercial") {
+    // For commercial, group by stage and order using COMMERCIAL_STAGE_SEQUENCE
+    const grouped = new Map<string, Array<{ id: number; description: string; unit: string }>>();
+    for (const stageName of COMMERCIAL_STAGE_SEQUENCE) {
+      grouped.set(stageName, []);
+    }
+
+    for (const item of lineItems) {
+      const stage = item.stage || "General";
+      if (!grouped.has(stage)) grouped.set(stage, []);
+      grouped.get(stage)!.push(item);
+    }
+
+    // Order: first use COMMERCIAL_STAGE_SEQUENCE, then any remaining stages
+    for (const stageName of COMMERCIAL_STAGE_SEQUENCE) {
       const stageItems = grouped.get(stageName) || [];
       if (!stageItems.length) continue;
 
@@ -376,23 +590,40 @@ async function loadBoqRowsFromTemplate(kind: BoqTemplateKind): Promise<BOQRow[]>
       }
     }
 
-    return output;
+    // Add any other stages not in COMMERCIAL_STAGE_SEQUENCE
+    for (const [stageName, items] of grouped) {
+      if (!COMMERCIAL_STAGE_SEQUENCE.includes(stageName as any)) {
+        for (const item of items) {
+          output.push({
+            customId: `${kind}-${item.id}`,
+            customName: item.description,
+            stageName,
+            source: "architect_standard",
+            quantity: "",
+            uom: item.unit,
+            rate: undefined,
+            amount: undefined,
+          });
+        }
+      }
+    }
+  } else {
+    // For industrial and any others, preserve stages as-is
+    for (const item of lineItems) {
+      output.push({
+        customId: `${kind}-${item.id}`,
+        customName: item.description,
+        stageName: item.stage || "General",
+        source: "architect_standard",
+        quantity: "",
+        uom: item.unit,
+        rate: undefined,
+        amount: undefined,
+      });
+    }
   }
 
-  for (const item of lineItems) {
-    output.push({
-      customId: `${kind}-${item.id}`,
-      customName: item.description,
-      stageName: item.stage || "General",
-      source: "architect_standard",
-      quantity: "",
-      uom: item.unit,
-      rate: undefined,
-      amount: undefined,
-    });
-  }
-
-  return output;
+  return filterTemplateRowsByProjectFloors(output, project, kind);
 }
 
 
@@ -548,7 +779,7 @@ export default function BOQWorkspacePage() {
             const templateKind = resolveTemplateKind(searchTemplate, proj);
             if (templateKind) {
               try {
-                const templateRows = await loadBoqRowsFromTemplate(templateKind);
+                const templateRows = await loadBoqRowsFromTemplate(templateKind, proj);
                 if (templateRows.length > 0) {
                   setBoqRows(templateRows);
                 } else {
