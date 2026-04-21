@@ -530,6 +530,8 @@ export async function createProject(userId: string, data: {
 
 let hasBoqSourceProjectIdColumnCache: boolean | null = null;
 let hasProjectRevisionBuildingTypeColumnCache: boolean | null = null;
+let hasProjectRevisionFloorColumnsCache: boolean | null = null;
+let hasProjectRevisionCurrencyColumnCache: boolean | null = null;
 
 async function hasBoqSourceProjectIdColumn() {
   if (hasBoqSourceProjectIdColumnCache !== null) {
@@ -567,29 +569,80 @@ async function hasProjectRevisionBuildingTypeColumn() {
   return hasProjectRevisionBuildingTypeColumnCache;
 }
 
+async function hasProjectRevisionFloorColumns() {
+  if (hasProjectRevisionFloorColumnsCache != null) {
+    return hasProjectRevisionFloorColumnsCache;
+  }
+
+  const { rowCount } = await pool.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = 'project_revisions'
+       AND column_name IN ('floors_above_ground', 'floors_below_ground')`
+  );
+
+  hasProjectRevisionFloorColumnsCache = (rowCount ?? 0) >= 2;
+  return hasProjectRevisionFloorColumnsCache;
+}
+
+async function hasProjectRevisionCurrencyColumn() {
+  if (hasProjectRevisionCurrencyColumnCache != null) {
+    return hasProjectRevisionCurrencyColumnCache;
+  }
+
+  const { rowCount } = await pool.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = 'project_revisions'
+       AND column_name = 'currency_code'
+     LIMIT 1`
+  );
+
+  hasProjectRevisionCurrencyColumnCache = (rowCount ?? 0) > 0;
+  return hasProjectRevisionCurrencyColumnCache;
+}
+
 async function attachProjectSourceMetadata(projectRow: any, userId: string) {
   if (!projectRow) return projectRow;
   if (
     Object.prototype.hasOwnProperty.call(projectRow, "building_type") &&
     Object.prototype.hasOwnProperty.call(projectRow, "site_address") &&
+    Object.prototype.hasOwnProperty.call(projectRow, "latitude") &&
+    Object.prototype.hasOwnProperty.call(projectRow, "longitude") &&
     Object.prototype.hasOwnProperty.call(projectRow, "tentative_start_date") &&
-    Object.prototype.hasOwnProperty.call(projectRow, "duration_months")
+    Object.prototype.hasOwnProperty.call(projectRow, "duration_months") &&
+    Object.prototype.hasOwnProperty.call(projectRow, "floors_above_ground") &&
+    Object.prototype.hasOwnProperty.call(projectRow, "floors_below_ground") &&
+    Object.prototype.hasOwnProperty.call(projectRow, "currency_code")
   ) {
     return projectRow;
   }
 
   const hasSourceProjectIdColumn = await hasBoqSourceProjectIdColumn();
   const hasBuildingTypeColumn = await hasProjectRevisionBuildingTypeColumn();
+  const hasFloorColumns = await hasProjectRevisionFloorColumns();
+  const hasCurrencyColumn = await hasProjectRevisionCurrencyColumn();
 
-  if (!hasBuildingTypeColumn) {
-    return {
-      ...projectRow,
-      building_type: null,
-      site_address: null,
-      tentative_start_date: null,
-      duration_months: null,
-    };
-  }
+  const sourceSelectFields = hasBuildingTypeColumn
+    ? `building_type, site_address, latitude, longitude, tentative_start_date, duration_months`
+    : `NULL::text AS building_type,
+       site_address,
+       latitude,
+       longitude,
+       tentative_start_date,
+       duration_months`;
+
+  const floorSelectFields = hasFloorColumns
+    ? `source_pr.floors_above_ground,
+       source_pr.floors_below_ground`
+    : `NULL::int AS floors_above_ground,
+       NULL::int AS floors_below_ground`;
+
+  const currencySelectField = hasCurrencyColumn
+    ? `source_pr.currency_code`
+    : `NULL::text AS currency_code`;
 
   const sourceProjectExpression = hasSourceProjectIdColumn
     ? `COALESCE(
@@ -610,12 +663,18 @@ async function attachProjectSourceMetadata(projectRow: any, userId: string) {
     const { rows } = await pool.query(
       `SELECT source_pr.building_type,
               source_pr.site_address,
+              source_pr.latitude,
+              source_pr.longitude,
               source_pr.tentative_start_date,
-              source_pr.duration_months
+              source_pr.duration_months,
+              ${floorSelectFields},
+              ${currencySelectField}
        FROM boq_projects bp
        LEFT JOIN projects pr ON pr.id = ${sourceProjectExpression}
        LEFT JOIN LATERAL (
-         SELECT building_type, site_address, tentative_start_date, duration_months
+         SELECT ${sourceSelectFields},
+                ${hasFloorColumns ? "floors_above_ground, floors_below_ground" : "NULL::int AS floors_above_ground, NULL::int AS floors_below_ground"},
+                ${hasCurrencyColumn ? "currency_code" : "NULL::text AS currency_code"}
          FROM project_revisions
          WHERE project_id = pr.id
          ORDER BY revision_number DESC
@@ -630,8 +689,13 @@ async function attachProjectSourceMetadata(projectRow: any, userId: string) {
       ...projectRow,
       building_type: rows[0]?.building_type ?? null,
       site_address: rows[0]?.site_address ?? null,
+      latitude: rows[0]?.latitude ?? null,
+      longitude: rows[0]?.longitude ?? null,
       tentative_start_date: rows[0]?.tentative_start_date ?? null,
       duration_months: rows[0]?.duration_months ?? null,
+      floors_above_ground: rows[0]?.floors_above_ground ?? null,
+      floors_below_ground: rows[0]?.floors_below_ground ?? null,
+      currency_code: rows[0]?.currency_code ?? null,
     };
   } catch (error: any) {
     if (String(error?.code || "") !== "42703") {
@@ -642,8 +706,13 @@ async function attachProjectSourceMetadata(projectRow: any, userId: string) {
       ...projectRow,
       building_type: null,
       site_address: null,
+      latitude: null,
+      longitude: null,
       tentative_start_date: null,
       duration_months: null,
+      floors_above_ground: null,
+      floors_below_ground: null,
+      currency_code: null,
     };
   }
 }

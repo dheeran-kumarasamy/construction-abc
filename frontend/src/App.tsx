@@ -20,6 +20,7 @@ import ComparisonScreen from "./pages/architect/ComparisonScreen";
 import PlanRequirementsModule from "./pages/architect/PlanRequirementsModule";
 import AcceptInvite from "./pages/auth/AcceptInvite";
 import PriceTrackerPage from "./pages/PriceTracker/PriceTrackerPage";
+import DealerProfilePage from "./pages/dealer/DealerProfilePage";
 import EstimationProjectsPage from "./pages/Estimation/EstimationProjectsPage";
 import BOQWorkspacePage from "./pages/Estimation/BOQWorkspacePage";
 import TemplateEditorPage from "./pages/Estimation/TemplateEditorPage";
@@ -80,6 +81,7 @@ function DashboardButton() {
   const showBackToDashboard = !!dashboardPath && location.pathname !== dashboardPath;
   const canOpenQuickEstimate = user?.role === "architect" || user?.role === "builder" || user?.role === "client";
   const showMaterialPrices = location.pathname !== "/prices";
+  const canEditDealerProfile = user?.role === "dealer" && location.pathname !== "/dealer/profile";
 
   React.useEffect(() => {
     if (!quickEstimateOpen) return;
@@ -223,6 +225,26 @@ function DashboardButton() {
                 onClick={() => navigate("/prices")}
               >
                 Material Prices
+              </button>
+            ) : null}
+
+            {canEditDealerProfile ? (
+              <button
+                type="button"
+                style={{
+                  ...pageStyles.primaryBtn,
+                  height: "36px",
+                  padding: "0 14px",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  letterSpacing: "0.2px",
+                  background: "#0f766e",
+                  border: "1px solid rgba(255, 255, 255, 0.22)",
+                  width: "100%",
+                }}
+                onClick={() => navigate("/dealer/profile")}
+              >
+                Edit Profile
               </button>
             ) : null}
           </div>
@@ -647,6 +669,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <PriceTrackerPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/dealer/profile"
+            element={
+              <RequireAuth role="dealer">
+                <DealerProfilePage />
               </RequireAuth>
             }
           />

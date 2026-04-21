@@ -6,6 +6,7 @@ export interface DealerProfile {
   userId: string;
   organizationId: string | null;
   productCategoryId: string | null;
+  productCategoryIds: string[];
   shopName: string;
   location: string | null;
   contactNumber: string | null;
@@ -13,6 +14,7 @@ export interface DealerProfile {
   city: string | null;
   state: string | null;
   productCategoryName?: string | null;
+  productCategoryNames: string[];
   isApproved: boolean;
   approvalDate: string | null;
   approvedBy: string | null;
@@ -83,33 +85,93 @@ export async function createDealerProfile(
 }
 
 export async function getDealerById(dealerId: string): Promise<DealerProfile | null> {
-  const { rows } = await pool.query(
-    `
-      SELECT 
-        id, user_id, organization_id, product_category_id, shop_name, location, contact_number, email,
-        city, state, is_approved, approval_date, approved_by, created_at, updated_at
-      FROM dealers
-      WHERE id = $1
-    `,
-    [dealerId]
-  );
+  try {
+    const { rows } = await pool.query(
+      `
+        SELECT 
+          d.id, d.user_id, d.organization_id, d.product_category_id, d.shop_name, d.location, d.contact_number, d.email,
+          d.city, d.state, d.is_approved, d.approval_date, d.approved_by, d.created_at, d.updated_at,
+          COALESCE(
+            ARRAY_AGG(DISTINCT dpc.category_id) FILTER (WHERE dpc.category_id IS NOT NULL),
+            ARRAY[]::uuid[]
+          ) AS product_category_ids,
+          COALESCE(
+            ARRAY_AGG(DISTINCT mcs.name) FILTER (WHERE mcs.name IS NOT NULL),
+            ARRAY[]::text[]
+          ) AS product_category_names
+        FROM dealers d
+        LEFT JOIN dealer_product_categories dpc ON dpc.dealer_id = d.id
+        LEFT JOIN material_categories mcs ON mcs.id = dpc.category_id
+        WHERE d.id = $1
+        GROUP BY d.id, d.user_id, d.organization_id, d.product_category_id, d.shop_name, d.location, d.contact_number, d.email,
+          d.city, d.state, d.is_approved, d.approval_date, d.approved_by, d.created_at, d.updated_at
+      `,
+      [dealerId]
+    );
 
-  return rows.length > 0 ? formatDealerProfile(rows[0]) : null;
+    return rows.length > 0 ? formatDealerProfile(rows[0]) : null;
+  } catch (error: any) {
+    if (error?.code !== "42P01") {
+      throw error;
+    }
+
+    const { rows } = await pool.query(
+      `
+        SELECT 
+          d.id, d.user_id, d.organization_id, d.product_category_id, d.shop_name, d.location, d.contact_number, d.email,
+          d.city, d.state, d.is_approved, d.approval_date, d.approved_by, d.created_at, d.updated_at
+        FROM dealers d
+        WHERE d.id = $1
+      `,
+      [dealerId]
+    );
+    return rows.length > 0 ? formatDealerProfile(rows[0]) : null;
+  }
 }
 
 export async function getDealerByUserId(userId: string): Promise<DealerProfile | null> {
-  const { rows } = await pool.query(
-    `
-      SELECT 
-        id, user_id, organization_id, product_category_id, shop_name, location, contact_number, email,
-        city, state, is_approved, approval_date, approved_by, created_at, updated_at
-      FROM dealers
-      WHERE user_id = $1
-    `,
-    [userId]
-  );
+  try {
+    const { rows } = await pool.query(
+      `
+        SELECT 
+          d.id, d.user_id, d.organization_id, d.product_category_id, d.shop_name, d.location, d.contact_number, d.email,
+          d.city, d.state, d.is_approved, d.approval_date, d.approved_by, d.created_at, d.updated_at,
+          COALESCE(
+            ARRAY_AGG(DISTINCT dpc.category_id) FILTER (WHERE dpc.category_id IS NOT NULL),
+            ARRAY[]::uuid[]
+          ) AS product_category_ids,
+          COALESCE(
+            ARRAY_AGG(DISTINCT mcs.name) FILTER (WHERE mcs.name IS NOT NULL),
+            ARRAY[]::text[]
+          ) AS product_category_names
+        FROM dealers d
+        LEFT JOIN dealer_product_categories dpc ON dpc.dealer_id = d.id
+        LEFT JOIN material_categories mcs ON mcs.id = dpc.category_id
+        WHERE d.user_id = $1
+        GROUP BY d.id, d.user_id, d.organization_id, d.product_category_id, d.shop_name, d.location, d.contact_number, d.email,
+          d.city, d.state, d.is_approved, d.approval_date, d.approved_by, d.created_at, d.updated_at
+      `,
+      [userId]
+    );
 
-  return rows.length > 0 ? formatDealerProfile(rows[0]) : null;
+    return rows.length > 0 ? formatDealerProfile(rows[0]) : null;
+  } catch (error: any) {
+    if (error?.code !== "42P01") {
+      throw error;
+    }
+
+    const { rows } = await pool.query(
+      `
+        SELECT 
+          d.id, d.user_id, d.organization_id, d.product_category_id, d.shop_name, d.location, d.contact_number, d.email,
+          d.city, d.state, d.is_approved, d.approval_date, d.approved_by, d.created_at, d.updated_at
+        FROM dealers d
+        WHERE d.user_id = $1
+      `,
+      [userId]
+    );
+    return rows.length > 0 ? formatDealerProfile(rows[0]) : null;
+  }
 }
 
 export async function getAllApprovedDealers(): Promise<DealerProfile[]> {
@@ -157,11 +219,36 @@ export async function updateDealerProfile(
     city: string;
     state: string;
     productCategoryId: string;
+    productCategoryIds: string[];
   }>
 ): Promise<DealerProfile> {
   const fields: string[] = [];
   const values: any[] = [];
   let paramIndex = 1;
+
+  const normalizedCategoryIds = updates.productCategoryIds
+    ? Array.from(
+        new Set(
+          updates.productCategoryIds
+            .map((id) => String(id || "").trim())
+            .filter(Boolean)
+        )
+      )
+    : undefined;
+
+  if (normalizedCategoryIds !== undefined) {
+    if (normalizedCategoryIds.length > 0) {
+      const categoryCheck = await pool.query(
+        `SELECT id FROM material_categories WHERE id = ANY($1::uuid[])`,
+        [normalizedCategoryIds]
+      );
+      if (categoryCheck.rows.length !== normalizedCategoryIds.length) {
+        throw new Error("One or more productCategoryIds are invalid");
+      }
+    }
+    fields.push(`product_category_id = $${paramIndex++}`);
+    values.push(normalizedCategoryIds[0] || null);
+  }
 
   if (updates.shopName !== undefined) {
     fields.push(`shop_name = $${paramIndex++}`);
@@ -187,7 +274,7 @@ export async function updateDealerProfile(
     fields.push(`state = $${paramIndex++}`);
     values.push(updates.state);
   }
-  if (updates.productCategoryId !== undefined) {
+  if (updates.productCategoryIds === undefined && updates.productCategoryId !== undefined) {
     fields.push(`product_category_id = $${paramIndex++}`);
     values.push(updates.productCategoryId || null);
   }
@@ -211,7 +298,29 @@ export async function updateDealerProfile(
     throw new Error("Dealer not found");
   }
 
-  return formatDealerProfile(rows[0]);
+  if (normalizedCategoryIds !== undefined) {
+    await pool.query(
+      `DELETE FROM dealer_product_categories WHERE dealer_id = $1`,
+      [dealerId]
+    );
+
+    if (normalizedCategoryIds.length > 0) {
+      await pool.query(
+        `INSERT INTO dealer_product_categories (dealer_id, category_id)
+         SELECT $1, category_id
+         FROM UNNEST($2::uuid[]) AS category_id
+         ON CONFLICT (dealer_id, category_id) DO NOTHING`,
+        [dealerId, normalizedCategoryIds]
+      );
+    }
+  }
+
+  const refreshed = await getDealerById(dealerId);
+  if (!refreshed) {
+    throw new Error("Dealer not found");
+  }
+
+  return refreshed;
 }
 
 export async function approveDealerProfile(dealerId: string, approvedByUserId: string): Promise<DealerProfile> {
@@ -446,11 +555,15 @@ export async function getDealerPriceHistory(dealerPriceId: string): Promise<any[
 
 // Helper functions
 function formatDealerProfile(row: any): DealerProfile {
+  const productCategoryIdsRaw = Array.isArray(row.product_category_ids) ? row.product_category_ids : [];
+  const productCategoryNamesRaw = Array.isArray(row.product_category_names) ? row.product_category_names : [];
+
   return {
     id: row.id,
     userId: row.user_id,
     organizationId: row.organization_id,
     productCategoryId: row.product_category_id || null,
+    productCategoryIds: productCategoryIdsRaw.map((id: any) => String(id)).filter(Boolean),
     shopName: row.shop_name,
     location: row.location,
     contactNumber: row.contact_number,
@@ -458,6 +571,7 @@ function formatDealerProfile(row: any): DealerProfile {
     city: row.city,
     state: row.state,
     productCategoryName: row.product_category_name || null,
+    productCategoryNames: productCategoryNamesRaw.map((name: any) => String(name)).filter(Boolean),
     isApproved: row.is_approved,
     approvalDate: row.approval_date ? new Date(row.approval_date).toISOString() : null,
     approvedBy: row.approved_by,

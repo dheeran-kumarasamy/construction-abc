@@ -14,6 +14,7 @@ export async function createProject(req: Request, res: Response) {
       buildingType,
       floorsAboveGround,
       floorsBelowGround,
+      currencyCode,
       clientOrgId,
     } = req.body || {};
     const authUser = (req as any).user || {};
@@ -24,9 +25,14 @@ export async function createProject(req: Request, res: Response) {
     const normalizedFloorsBelowGround = Number(floorsBelowGround);
     const normalizedLatitude = Number(latitude);
     const normalizedLongitude = Number(longitude);
+    const normalizedCurrencyCode = String(currencyCode || "INR").trim().toUpperCase();
 
     if (!name || !siteAddress || !startDate || !durationMonths || !buildingType || latitude == null || longitude == null) {
       return res.status(400).json({ error: "Missing required project fields" });
+    }
+
+    if (!["INR", "USD"].includes(normalizedCurrencyCode)) {
+      return res.status(400).json({ error: "Invalid currency code" });
     }
 
     if (!allowedBuildingTypes.includes(String(buildingType))) {
@@ -60,6 +66,7 @@ export async function createProject(req: Request, res: Response) {
       buildingType,
       floorsAboveGround: normalizedFloorsAboveGround,
       floorsBelowGround: normalizedFloorsBelowGround,
+      currencyCode: normalizedCurrencyCode,
       userId,
     });
 

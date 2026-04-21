@@ -1,6 +1,7 @@
 import { pool } from "../../config/db";
 
 let hasBuildingMetadataColumnsCache: boolean | null = null;
+let hasCurrencyCodeColumnCache: boolean | null = null;
 
 async function hasBuildingMetadataColumns() {
   if (hasBuildingMetadataColumnsCache !== null) {
@@ -19,6 +20,23 @@ async function hasBuildingMetadataColumns() {
   return hasBuildingMetadataColumnsCache;
 }
 
+async function hasCurrencyCodeColumn() {
+  if (hasCurrencyCodeColumnCache !== null) {
+    return hasCurrencyCodeColumnCache;
+  }
+
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS count
+     FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = 'project_revisions'
+       AND column_name = 'currency_code'`
+  );
+
+  hasCurrencyCodeColumnCache = Number(rows[0]?.count || 0) >= 1;
+  return hasCurrencyCodeColumnCache;
+}
+
 interface CreateProjectInput {
   name: string;
   description?: string;
@@ -30,12 +48,14 @@ interface CreateProjectInput {
   buildingType: string;
   floorsAboveGround: number;
   floorsBelowGround: number;
+  currencyCode: string;
   userId: string | null;
 }
 
 export async function createProjectWithRevision(input: CreateProjectInput) {
   const client = await pool.connect();
   const hasBuildingMetadata = await hasBuildingMetadataColumns();
+  const hasCurrencyCode = await hasCurrencyCodeColumn();
 
   try {
     await client.query("BEGIN");
@@ -49,7 +69,37 @@ export async function createProjectWithRevision(input: CreateProjectInput) {
 
     const projectId = projectRes.rows[0].id;
 
-    if (hasBuildingMetadata) {
+    if (hasBuildingMetadata && hasCurrencyCode) {
+      await client.query(
+        `INSERT INTO project_revisions (
+          project_id,
+          revision_number,
+          site_address,
+          latitude,
+          longitude,
+          tentative_start_date,
+          duration_months,
+          building_type,
+          floors_above_ground,
+          floors_below_ground,
+          currency_code,
+          issued_by
+        ) VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          projectId,
+          input.siteAddress,
+          input.latitude || null,
+          input.longitude || null,
+          input.startDate,
+          input.durationMonths,
+          input.buildingType,
+          input.floorsAboveGround,
+          input.floorsBelowGround,
+          input.currencyCode,
+          input.userId,
+        ]
+      );
+    } else if (hasBuildingMetadata) {
       await client.query(
         `INSERT INTO project_revisions (
           project_id,

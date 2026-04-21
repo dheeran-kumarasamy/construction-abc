@@ -69,7 +69,11 @@ export async function updateDealerProfile(req: Request, res: Response) {
       return res.status(404).json({ error: "Dealer profile not found" });
     }
 
-    const { shopName, location, contactNumber, email, city, state, productCategoryId } = req.body;
+    const { shopName, location, contactNumber, email, city, state, productCategoryId, productCategoryIds } = req.body;
+
+    if (Array.isArray(productCategoryIds) && productCategoryIds.length === 0) {
+      return res.status(400).json({ error: "At least one product category is required" });
+    }
 
     const updated = await dealerService.updateDealerProfile(dealer.id, {
       shopName,
@@ -79,6 +83,7 @@ export async function updateDealerProfile(req: Request, res: Response) {
       city,
       state,
       productCategoryId,
+      productCategoryIds,
     });
 
     return res.json(updated);
