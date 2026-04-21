@@ -507,8 +507,9 @@ function inferCity(siteAddress?: string) {
 
 export async function getAvailableProjects(userId: string) {
   // Get projects where this specific builder has accepted an invite
+  // DISTINCT ON (p.id) ensures each project is only returned once, even if multiple invites exist
   const result = await pool.query(
-    `SELECT 
+    `SELECT DISTINCT ON (p.id)
        p.id,
        p.name,
        p.description,
@@ -537,7 +538,7 @@ export async function getAvailableProjects(userId: string) {
        AND ui.user_id = $1
        AND ui.role = 'builder'
        AND ui.accepted_at IS NOT NULL
-     ORDER BY p.created_at DESC`,
+     ORDER BY p.id, p.created_at DESC`,
     [userId]
   );
 
