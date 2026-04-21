@@ -211,14 +211,17 @@ export default function CreateProject() {
       return;
     }
 
-    if (!Number.isInteger(floorsAboveGround) || floorsAboveGround < 1) {
-      setError("Floors above natural ground level must be at least 1");
-      return;
-    }
+    // Only validate floor inputs for non-industrial projects
+    if (buildingType !== "Industrial") {
+      if (!Number.isInteger(floorsAboveGround) || floorsAboveGround < 1) {
+        setError("Floors above natural ground level must be at least 1");
+        return;
+      }
 
-    if (!Number.isInteger(floorsBelowGround) || floorsBelowGround < 0) {
-      setError("Floors below natural ground level must be 0 or more");
-      return;
+      if (!Number.isInteger(floorsBelowGround) || floorsBelowGround < 0) {
+        setError("Floors below natural ground level must be 0 or more");
+        return;
+      }
     }
 
     if (currency === "USD" && !confirmDollar) {
@@ -239,6 +242,10 @@ export default function CreateProject() {
         return;
       }
 
+      // For industrial projects, always use 1 floor above and 0 below
+      const finalFloorsAbove = buildingType === "Industrial" ? 1 : floorsAboveGround;
+      const finalFloorsBelow = buildingType === "Industrial" ? 0 : floorsBelowGround;
+
       const res = await fetch(apiUrl("/projects"), {
         method: "POST",
         headers: {
@@ -254,8 +261,8 @@ export default function CreateProject() {
           startDate,
           durationMonths,
           buildingType,
-          floorsAboveGround,
-          floorsBelowGround,
+          floorsAboveGround: finalFloorsAbove,
+          floorsBelowGround: finalFloorsBelow,
         }),
       });
 
@@ -510,34 +517,38 @@ export default function CreateProject() {
               />
             </div>
 
-            <div style={pageStyles.field}>
-              <label style={pageStyles.label}>Floors Above Natural Ground Level</label>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                value={floorsAboveGround}
-                onChange={(e) => setFloorsAboveGround(Number(e.target.value))}
-                style={pageStyles.input}
-                required
-              />
-              <span style={{ color: "var(--muted)", fontSize: 12 }}>
-                Excluding stilt and underground floors.
-              </span>
-            </div>
+{buildingType !== "Industrial" && (
+              <>
+                <div style={pageStyles.field}>
+                  <label style={pageStyles.label}>Floors Above Natural Ground Level</label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={floorsAboveGround}
+                    onChange={(e) => setFloorsAboveGround(Number(e.target.value))}
+                    style={pageStyles.input}
+                    required
+                  />
+                  <span style={{ color: "var(--muted)", fontSize: 12 }}>
+                    Excluding stilt and underground floors.
+                  </span>
+                </div>
 
-            <div style={pageStyles.field}>
-              <label style={pageStyles.label}>Floors Below Natural Ground Level</label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={floorsBelowGround}
-                onChange={(e) => setFloorsBelowGround(Number(e.target.value))}
-                style={pageStyles.input}
-                required
-              />
-            </div>
+                <div style={pageStyles.field}>
+                  <label style={pageStyles.label}>Floors Below Natural Ground Level</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={floorsBelowGround}
+                    onChange={(e) => setFloorsBelowGround(Number(e.target.value))}
+                    style={pageStyles.input}
+                    required
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <div style={pageStyles.field}>
