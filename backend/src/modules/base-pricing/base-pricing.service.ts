@@ -585,3 +585,29 @@ export async function uploadBasePricing(
     diagnostics,
   };
 }
+
+export async function bulkLookupPricesService(items: Array<{ item: string; uom: string; rate?: number; category?: string }>) {
+  const template = getBasePricingStarterTemplate();
+  const templateMap = new Map<string, { rate: number; category: string }>();
+
+  // Build lookup map from template
+  template.rows.forEach((row: any) => {
+    const key = `${normalizeText(row.item)}|${normalizeText(row.uom)}`;
+    templateMap.set(key, { rate: row.rate, category: row.category });
+  });
+
+  // Look up prices for each item
+  const result = items.map((item) => {
+    const key = `${normalizeText(item.item)}|${normalizeText(item.uom)}`;
+    const templateMatch = templateMap.get(key);
+
+    return {
+      item: item.item,
+      uom: item.uom,
+      rate: templateMatch ? templateMatch.rate : (item.rate ?? 0),
+      category: item.category ?? templateMatch?.category ?? "Material",
+    };
+  });
+
+  return result;
+}

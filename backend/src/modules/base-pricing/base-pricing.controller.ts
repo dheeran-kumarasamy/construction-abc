@@ -4,6 +4,7 @@ import {
   getPwdStageFactorTemplate,
   parseBasePricingFile,
   uploadBasePricing,
+  bulkLookupPricesService,
 } from "./base-pricing.service";
 
 export async function getBasePricingTemplate(req: Request, res: Response) {
@@ -80,6 +81,23 @@ export async function uploadBasePricingFile(req: Request, res: Response) {
     console.error("Upload base pricing error:", error);
     return res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to upload file",
+    });
+  }
+}
+
+export async function bulkLookupPrices(req: Request, res: Response) {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: "Items must be an array" });
+    }
+
+    const result = await bulkLookupPricesService(items);
+    return res.json(result);
+  } catch (error) {
+    console.error("Bulk lookup prices error:", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to lookup prices",
     });
   }
 }

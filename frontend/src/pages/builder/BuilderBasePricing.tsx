@@ -11,6 +11,10 @@ import { ConstructionIllustration } from "../../components/ConstructionIllustrat
 import TableWrapper from "../../components/TableWrapper";
 import { apiUrl } from "../../services/api";
 
+const RESIDENTIAL_BOQ_URL = new URL("../../data/boq-residential.json", import.meta.url).href;
+const COMMERCIAL_BOQ_URL = new URL("../../data/boq-commercial.json", import.meta.url).href;
+const INDUSTRIAL_BOQ_URL = new URL("../../data/boq-Industrial.json", import.meta.url).href;
+
 interface ColumnMapping {
   item: string;
   rate: string;
@@ -69,10 +73,13 @@ export default function BuilderBasePricing() {
   const [templateLoading, setTemplateLoading] = useState(false);
   const [editingKey, setEditingKey] = useState<{ item: string; uom: string } | null>(null);
   const [editRate, setEditRate] = useState<number>(0);
+  const [boqItems, setBoqItems] = useState<BasePriceItem[]>([]);
+  const [boqLoading, setBoqLoading] = useState(false);
 
   useEffect(() => {
     setItems(getBasePricing());
     loadStarterTemplate();
+    loadBoqItems();
   }, []);
 
   async function loadStarterTemplate() {
@@ -92,6 +99,61 @@ export default function BuilderBasePricing() {
       console.error("Load starter template error:", err);
     } finally {
       setTemplateLoading(false);
+    }
+  }
+
+  async function loadBoqItems() {
+    setBoqLoading(true);
+    try {
+      const boqData = await Promise.all([
+        fetch(RESIDENTIAL_BOQ_URL).then((r) => r.json()),
+        fetch(COMMERCIAL_BOQ_URL).then((r) => r.json()),
+        fetch(INDUSTRIAL_BOQ_URL).then((r) => r.json()),
+      ]);
+
+      const extractedItems: BasePriceItem[] = [];
+
+      for (const boq of boqData) {
+        if (Array.isArray(boq.rows)) {
+          for (const row of boq.rows) {
+            if (row.type === "line_item" && row.description && row.unit) {
+              extractedItems.push({
+                item: String(row.description).trim(),
+                rate: 0,
+                uom: String(row.unit).trim(),
+                category: "Material" as const,
+              });
+            }
+          }
+        }
+      }
+
+      if (extractedItems.length > 0) {
+        const token = localStorage.getItem("token");
+        try {
+          const response = await fetch(apiUrl("/api/base-pricing/bulk-lookup"), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ items: extractedItems }),
+          });
+
+          if (response.ok) {
+            const pricedItems = await response.json();
+            setBoqItems(pricedItems);
+          } else {
+            setBoqItems(extractedItems);
+          }
+        } catch {
+          setBoqItems(extractedItems);
+        }
+      }
+    } catch (err) {
+      console.error("Load BOQ items error:", err);
+    } finally {
+      setBoqLoading(false);
     }
   }
 
@@ -115,10 +177,16 @@ export default function BuilderBasePricing() {
       return;
     }
 
-    const merged = mergeUniqueItems(getBasePricing(), templateRows);
+    const allItemsToMerge = [...templateRows];
+    if (boqItems.length > 0) {
+      allItemsToMerge.push(...boqItems);
+    }
+
+    const merged = mergeUniqueItems(getBasePricing(), allItemsToMerge);
     saveBasePricing(merged);
     setItems(merged);
-    alert(`Starter template loaded with ${templateRows.length} rows. You can now edit and upload.`);
+    const boqCount = boqItems.filter((item) => allItemsToMerge.includes(item)).length;
+    alert(`Starter template loaded with ${templateRows.length} rows${boqCount > 0 ? ` + ${boqCount} BOQ items` : ""}. You can now edit or upload.`);
   }
 
   function handleDownloadTemplateCsv() {
@@ -365,7 +433,7 @@ export default function BuilderBasePricing() {
             </p>
           </div>
           <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-            <button onClick={handleLoadStarterTemplate} disabled={templateLoading || templateRows.length === 0} style={pageStyles.primaryBtn}>
+            <button onClick={handleLoadStarterTemplate} disabled={templateLoading || boqLoading || templateRows.length === 0} style={pageStyles.primaryBtn}>
               Expert Pricing
             </button>
             <button onClick={handleDownloadTemplateCsv} disabled={templateLoading || !templateCsv} style={pageStyles.secondaryBtn}>

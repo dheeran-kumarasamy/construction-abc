@@ -7,6 +7,7 @@ import {
   getPwdStageFactors,
   parseBasePricing,
   uploadBasePricingFile,
+  bulkLookupPrices,
 } from "./base-pricing.controller";
 
 const router = Router();
@@ -40,5 +41,8 @@ router.post("/parse", upload.single("file"), parseBasePricing);
 
 // Upload and save base pricing to database
 router.post("/upload", upload.single("file"), uploadBasePricingFile);
+
+// Bulk lookup prices for items (e.g., BOQ items)
+router.post("/bulk-lookup", bulkLookupPrices);
 
 export default router;
