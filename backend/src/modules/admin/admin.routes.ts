@@ -2072,11 +2072,20 @@ router.get("/prices/inquiries", async (req: Request, res: Response) => {
 
     const totalQuery = await pool.query(`SELECT COUNT(*)::int AS count FROM product_inquiries`);
     const rows = await pool.query(
-      `SELECT pi.id,
+      `WITH latest_inquiry_prices AS (
+          SELECT DISTINCT ON (pr.material_id, pr.district_id)
+            pr.material_id,
+            pr.district_id,
+            pr.price
+          FROM price_records pr
+          ORDER BY pr.material_id, pr.district_id, pr.scraped_at DESC, pr.created_at DESC
+        )
+        SELECT pi.id,
               pi.user_id,
               pi.material_id,
               pi.district_id,
               pi.requested_quantity,
+              COALESCE(pi.quoted_price, lip.price) AS quoted_price,
               pi.specification,
               pi.requested_location,
               pi.status,
@@ -2086,7 +2095,11 @@ router.get("/prices/inquiries", async (req: Request, res: Response) => {
               pi.updated_at,
         u.email AS user_email,
         COALESCE(NULLIF(TRIM(o.name), ''), NULLIF(TRIM(dl.shop_name), ''), split_part(u.email, '@', 1)) AS requester_name,
-        COALESCE(NULLIF(TRIM(u.phone_number), ''), NULLIF(TRIM(dl.contact_number), '')) AS requester_contact_number,
+        COALESCE(
+          NULLIF(TRIM(pi.requested_phone_number), ''),
+          NULLIF(TRIM(u.phone_number), ''),
+          NULLIF(TRIM(dl.contact_number), '')
+        ) AS requester_contact_number,
               m.name AS material_name,
               m.unit AS material_unit,
               d.name AS district_name
@@ -2094,6 +2107,8 @@ router.get("/prices/inquiries", async (req: Request, res: Response) => {
        JOIN users u ON u.id = pi.user_id
       LEFT JOIN organizations o ON o.id = u.organization_id
       LEFT JOIN dealers dl ON dl.user_id = u.id
+      LEFT JOIN latest_inquiry_prices lip ON lip.material_id = pi.material_id
+        AND lip.district_id = pi.district_id
        JOIN materials m ON m.id = pi.material_id
        JOIN districts d ON d.id = pi.district_id
        ORDER BY pi.created_at DESC

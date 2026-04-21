@@ -180,6 +180,8 @@ export async function submitProductInquiry(payload: ProductInquiryPayload): Prom
       requested_quantity: payload.requestedQuantity,
       specification: payload.specification,
       requested_location: payload.requestedLocation,
+      requested_phone_number: payload.requestedPhoneNumber,
+      quoted_price: payload.quotedPrice ?? null,
     }),
   });
 

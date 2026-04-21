@@ -47,6 +47,7 @@ type ProductInquiry = {
   material_unit: string;
   district_name: string;
   requested_quantity: number;
+  quoted_price: number | null;
   specification: string;
   requested_location: string;
   status: "pending" | "resolved";
@@ -346,6 +347,7 @@ export default function AdminPricesPage() {
                     <th style={pageStyles.th}>Product</th>
                     <th style={pageStyles.th}>District</th>
                     <th style={pageStyles.th}>Quantity</th>
+                    <th style={pageStyles.th}>Market Price</th>
                     <th style={pageStyles.th}>Specification</th>
                     <th style={pageStyles.th}>Location</th>
                     <th style={pageStyles.th}>Status</th>
@@ -368,6 +370,7 @@ export default function AdminPricesPage() {
                       <td style={pageStyles.td}>{inquiry.material_name} <span style={pageStyles.subtext}>/{inquiry.material_unit}</span></td>
                       <td style={pageStyles.td}>{inquiry.district_name}</td>
                       <td style={pageStyles.td}>{inquiry.requested_quantity}</td>
+                      <td style={pageStyles.td}>{inquiry.quoted_price != null ? formatINR(inquiry.quoted_price, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>
                       <td style={pageStyles.td}>{inquiry.specification}</td>
                       <td style={pageStyles.td}>{inquiry.requested_location}</td>
                       <td style={pageStyles.td}>
@@ -436,6 +439,7 @@ export default function AdminPricesPage() {
               border: "1px solid #e2e8f0",
               boxShadow: "0 24px 60px rgba(15, 23, 42, 0.2)",
               padding: 18,
+              color: "#0f172a",
             }}
             onClick={(event) => event.stopPropagation()}
           >
@@ -445,16 +449,11 @@ export default function AdminPricesPage() {
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12 }}>
-              <div style={{ gridColumn: "1 / -1", padding: "10px", borderRadius: 10, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: 12, color: "#475569", marginBottom: 6 }}>Inquiry ID</div>
-                <div style={{ fontFamily: "monospace", fontSize: 13 }}>{selectedInquiry.id}</div>
-              </div>
-
               <div>
                 <strong>Requester</strong>
                 <div style={{ marginTop: 4 }}>{selectedInquiry.requester_name}</div>
-                <div style={pageStyles.subtext}>{selectedInquiry.requester_contact_number || "No contact number"}</div>
-                <div style={pageStyles.subtext}>{selectedInquiry.user_email}</div>
+                <div style={{ ...pageStyles.subtext, color: "#334155" }}>{selectedInquiry.requester_contact_number || "No contact number"}</div>
+                <div style={{ ...pageStyles.subtext, color: "#334155" }}>{selectedInquiry.user_email}</div>
               </div>
               <div>
                 <strong>Status</strong>
@@ -467,23 +466,20 @@ export default function AdminPricesPage() {
               </div>
 
               <div>
-                <strong>User ID</strong>
-                <div style={{ marginTop: 4, fontFamily: "monospace", fontSize: 12 }}>{selectedInquiry.user_id}</div>
-              </div>
-
-              <div>
                 <strong>Product</strong>
                 <div style={{ marginTop: 4 }}>{selectedInquiry.material_name} / {selectedInquiry.material_unit}</div>
-                <div style={pageStyles.subtext}>Material ID: {selectedInquiry.material_id}</div>
               </div>
               <div>
                 <strong>District</strong>
                 <div style={{ marginTop: 4 }}>{selectedInquiry.district_name}</div>
-                <div style={pageStyles.subtext}>District ID: {selectedInquiry.district_id}</div>
               </div>
               <div>
                 <strong>Requested Quantity</strong>
                 <div style={{ marginTop: 4 }}>{selectedInquiry.requested_quantity}</div>
+              </div>
+              <div>
+                <strong>Market Price at Inquiry</strong>
+                <div style={{ marginTop: 4 }}>{selectedInquiry.quoted_price != null ? formatINR(selectedInquiry.quoted_price, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</div>
               </div>
               <div>
                 <strong>Requested Location</strong>
@@ -493,7 +489,7 @@ export default function AdminPricesPage() {
 
             <div style={{ marginTop: 14 }}>
               <strong>Specification</strong>
-              <div style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
+              <div style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 10, color: "#0f172a" }}>
                 {selectedInquiry.specification}
               </div>
             </div>
@@ -513,7 +509,7 @@ export default function AdminPricesPage() {
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
                 <strong>Admin Notes</strong>
-                <div style={{ marginTop: 4 }}>{selectedInquiry.admin_notes || "—"}</div>
+                <div style={{ marginTop: 4, color: "#0f172a" }}>{selectedInquiry.admin_notes || "—"}</div>
               </div>
             </div>
 

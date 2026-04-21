@@ -89,4 +89,6 @@ export interface ProductInquiryPayload {
   requestedQuantity: number;
   specification: string;
   requestedLocation: string;
+  requestedPhoneNumber: string;
+  quotedPrice?: number | null;
 }

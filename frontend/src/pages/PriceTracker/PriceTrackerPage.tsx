@@ -294,21 +294,44 @@ export default function PriceTrackerPage() {
       return;
     }
 
-    const quantityInput = window.prompt(`Enter required quantity for ${item.materialName} (${item.unit}):`, "1");
-    if (quantityInput === null) return;
-    const requestedQuantity = Number(quantityInput);
-    if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
-      setInquiryError("Please enter a valid quantity greater than 0.");
-      return;
+    let requestedQuantity: number | null = null;
+    while (requestedQuantity === null) {
+      const quantityInput = window.prompt(`Enter required quantity for ${item.materialName} (${item.unit}):`, "1");
+      if (quantityInput === null) return;
+
+      const parsedQuantity = Number(quantityInput);
+      if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
+        const message = "0 should not be given in quantity or specification. Quantity must be greater than 0.";
+        setInquiryError(message);
+        window.alert(message);
+        continue;
+      }
+
+      requestedQuantity = parsedQuantity;
     }
 
-    const specification = window.prompt(
-      `Enter specification for ${item.materialName}:`,
-      item.brandName ? `${item.brandName}` : ""
-    );
-    if (specification === null || !specification.trim()) {
-      setInquiryError("Specification is required.");
-      return;
+    let trimmedSpecification = "";
+    while (!trimmedSpecification) {
+      const specification = window.prompt(
+        `Enter specification for ${item.materialName}:`,
+        item.brandName ? `${item.brandName}` : ""
+      );
+      if (specification === null) return;
+
+      trimmedSpecification = specification.trim();
+      if (!trimmedSpecification) {
+        const message = "Specification is required.";
+        setInquiryError(message);
+        window.alert(message);
+        continue;
+      }
+
+      if (/^0+(\.0+)?$/.test(trimmedSpecification)) {
+        const message = "0 should not be given in quantity or specification.";
+        setInquiryError(message);
+        window.alert(message);
+        trimmedSpecification = "";
+      }
     }
 
     const requestedLocation = window.prompt(
@@ -320,14 +343,22 @@ export default function PriceTrackerPage() {
       return;
     }
 
+    const requestedPhoneNumber = window.prompt("Enter your phone number:", "");
+    if (requestedPhoneNumber === null || !requestedPhoneNumber.trim()) {
+      setInquiryError("Phone number is required.");
+      return;
+    }
+
     try {
       setRequestingMaterialId(item.materialId);
       await submitProductInquiry({
         materialId: item.materialId,
         districtId: selectedDistrict.id,
         requestedQuantity,
-        specification: specification.trim(),
+        specification: trimmedSpecification,
         requestedLocation: requestedLocation.trim(),
+        requestedPhoneNumber: requestedPhoneNumber.trim(),
+        quotedPrice: item.price ?? null,
       });
       setInquirySuccess(`Inquiry submitted for ${item.materialName}. Admin will review and resolve it.`);
     } catch (error: any) {

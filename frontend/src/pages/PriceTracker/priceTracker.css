@@ -331,12 +331,22 @@
   padding: 16px;
   display: grid;
   gap: 8px;
+  color: #0f172a;
+}
+
+.pt-modal h3,
+.pt-modal p,
+.pt-modal label {
+  color: #0f172a;
 }
 
 .pt-modal select,
 .pt-modal input {
   min-height: 44px;
   padding: 8px;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
 }
 
 .pt-modal-actions {

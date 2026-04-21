@@ -529,6 +529,8 @@ export async function createProductInquiry(
     requested_quantity: number;
     specification: string;
     requested_location: string;
+    requested_phone_number: string;
+    quoted_price?: number | null;
   }
 ) {
   const { rows } = await pool.query(
@@ -540,11 +542,13 @@ export async function createProductInquiry(
         requested_quantity,
         specification,
         requested_location,
+        requested_phone_number,
+        quoted_price,
         status,
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, 'pending', now(), now())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', now(), now())
       RETURNING
         id,
         user_id,
@@ -553,6 +557,8 @@ export async function createProductInquiry(
         requested_quantity,
         specification,
         requested_location,
+        requested_phone_number,
+        quoted_price,
         status,
         admin_notes,
         resolved_at,
@@ -566,6 +572,8 @@ export async function createProductInquiry(
       payload.requested_quantity,
       payload.specification,
       payload.requested_location,
+      payload.requested_phone_number,
+      payload.quoted_price ?? null,
     ]
   );
 
