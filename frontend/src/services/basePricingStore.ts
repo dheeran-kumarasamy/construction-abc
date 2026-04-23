@@ -6,6 +6,7 @@ export interface BasePriceItem {
     rate: number;
     uom: string;
     category: "Material" | "Labor" | "Machinery" | "Other";
+  boqType?: string;
   }
   
   const STORAGE_KEY = "builder_base_pricing";

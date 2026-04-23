@@ -586,7 +586,9 @@ export async function uploadBasePricing(
   };
 }
 
-export async function bulkLookupPricesService(items: Array<{ item: string; uom: string; rate?: number; category?: string }>) {
+export async function bulkLookupPricesService(
+  items: Array<{ item: string; uom: string; rate?: number; category?: string; boqType?: string }>
+) {
   const template = getBasePricingStarterTemplate();
   const templateMap = new Map<string, { rate: number; category: string }>();
 
@@ -606,6 +608,7 @@ export async function bulkLookupPricesService(items: Array<{ item: string; uom: 
       uom: item.uom,
       rate: templateMatch ? templateMatch.rate : (item.rate ?? 0),
       category: item.category ?? templateMatch?.category ?? "Material",
+      boqType: item.boqType,
     };
   });
 

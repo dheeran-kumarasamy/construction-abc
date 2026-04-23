@@ -15,6 +15,12 @@ const RESIDENTIAL_BOQ_URL = new URL("../../data/boq-residential.json", import.me
 const COMMERCIAL_BOQ_URL = new URL("../../data/boq-commercial.json", import.meta.url).href;
 const INDUSTRIAL_BOQ_URL = new URL("../../data/boq-Industrial.json", import.meta.url).href;
 
+const BOQ_SOURCES: Array<{ url: string; boqType: string }> = [
+  { url: RESIDENTIAL_BOQ_URL, boqType: "Residential" },
+  { url: COMMERCIAL_BOQ_URL, boqType: "Commercial" },
+  { url: INDUSTRIAL_BOQ_URL, boqType: "Industrial" },
+];
+
 interface ColumnMapping {
   item: string;
   rate: string;
@@ -45,6 +51,28 @@ interface StarterTemplateRow extends BasePriceItem {
   sourceKey?: string;
 }
 
+function inferBoqCategory(description: string): BasePriceItem["category"] {
+  const text = description.toLowerCase();
+
+  if (
+    /(nmr|labou?r|mason|carpenter|helper|bar ?bender|painter|plumber|electrician|manpower|per day|shift of 8 hrs|lifting|loading|shifting|unloading|cleaning|\bwm\b|\bmm\b)/.test(
+      text
+    )
+  ) {
+    return "Labor";
+  }
+
+  if (/(machine|machinery|equipment|excavator|crane|roller|drilling|vibrator|compressor|batching)/.test(text)) {
+    return "Machinery";
+  }
+
+  if (/(tax|gst|transport|freight|overhead|misc)/.test(text)) {
+    return "Other";
+  }
+
+  return "Material";
+}
+
 export default function BuilderBasePricing() {
   const [items, setItems] = useState<BasePriceItem[]>([]);
 
@@ -53,6 +81,7 @@ export default function BuilderBasePricing() {
     rate: 0,
     uom: "",
     category: "Material",
+    boqType: "Manual",
   });
 
   // File upload states
@@ -105,23 +134,25 @@ export default function BuilderBasePricing() {
   async function loadBoqItems() {
     setBoqLoading(true);
     try {
-      const boqData = await Promise.all([
-        fetch(RESIDENTIAL_BOQ_URL).then((r) => r.json()),
-        fetch(COMMERCIAL_BOQ_URL).then((r) => r.json()),
-        fetch(INDUSTRIAL_BOQ_URL).then((r) => r.json()),
-      ]);
+      const boqData = await Promise.all(
+        BOQ_SOURCES.map(async (source) => ({
+          ...source,
+          data: await fetch(source.url).then((r) => r.json()),
+        }))
+      );
 
       const extractedItems: BasePriceItem[] = [];
 
-      for (const boq of boqData) {
-        if (Array.isArray(boq.rows)) {
-          for (const row of boq.rows) {
+      for (const source of boqData) {
+        if (Array.isArray(source.data.rows)) {
+          for (const row of source.data.rows) {
             if (row.type === "line_item" && row.description && row.unit) {
               extractedItems.push({
                 item: String(row.description).trim(),
                 rate: 0,
                 uom: String(row.unit).trim(),
-                category: "Material" as const,
+                category: inferBoqCategory(String(row.description)),
+                boqType: source.boqType,
               });
             }
           }
@@ -142,7 +173,30 @@ export default function BuilderBasePricing() {
 
           if (response.ok) {
             const pricedItems = await response.json();
-            setBoqItems(pricedItems);
+
+            // Preserve BOQ type from source file even if backend lookup response omits it.
+            const sourceTypeByKey = new Map<string, string>();
+            extractedItems.forEach((item) => {
+              const key = `${String(item.item || "").trim().toLowerCase()}|${String(item.uom || "").trim().toLowerCase()}`;
+              if (item.boqType) {
+                sourceTypeByKey.set(key, item.boqType);
+              }
+            });
+
+            const normalizedPricedItems: BasePriceItem[] = Array.isArray(pricedItems)
+              ? pricedItems.map((item: any) => {
+                  const key = `${String(item?.item || "").trim().toLowerCase()}|${String(item?.uom || "").trim().toLowerCase()}`;
+                  return {
+                    item: String(item?.item || "").trim(),
+                    rate: Number(item?.rate || 0),
+                    uom: String(item?.uom || "").trim(),
+                    category: (item?.category || "Material") as BasePriceItem["category"],
+                    boqType: String(item?.boqType || sourceTypeByKey.get(key) || "").trim() || undefined,
+                  };
+                })
+              : extractedItems;
+
+            setBoqItems(normalizedPricedItems);
           } else {
             setBoqItems(extractedItems);
           }
@@ -166,6 +220,7 @@ export default function BuilderBasePricing() {
         rate: Number(item.rate || 0),
         uom: String(item.uom || "").trim(),
         category: (item.category || "Material") as BasePriceItem["category"],
+        boqType: String(item.boqType || "").trim() || undefined,
       });
     });
     return Array.from(merged.values());
@@ -229,7 +284,7 @@ export default function BuilderBasePricing() {
     }
 
     setItems(getBasePricing());
-    setForm({ item: "", rate: 0, uom: "", category: "Material" });
+    setForm({ item: "", rate: 0, uom: "", category: "Material", boqType: "Manual" });
   }
 
   function handleClear() {
@@ -713,18 +768,19 @@ export default function BuilderBasePricing() {
               <table style={compactTableStyle}>
                 <thead>
                   <tr>
-                    <th style={{ ...compactHeaderStyle, width: "34%" }}>Item</th>
-                    <th className="amount-header" style={{ ...compactHeaderStyle, width: "16%" }}>Rate</th>
-                    <th style={{ ...compactHeaderStyle, width: "14%" }}>UOM</th>
-                    <th style={{ ...compactHeaderStyle, width: "18%" }}>Category</th>
-                    <th style={{ ...compactHeaderStyle, width: "18%" }}>Actions</th>
+                    <th style={{ ...compactHeaderStyle, width: "30%" }}>Item</th>
+                    <th className="amount-header" style={{ ...compactHeaderStyle, width: "14%" }}>Rate</th>
+                    <th style={{ ...compactHeaderStyle, width: "12%" }}>UOM</th>
+                    <th style={{ ...compactHeaderStyle, width: "14%" }}>Category</th>
+                    <th style={{ ...compactHeaderStyle, width: "14%" }}>Type</th>
+                    <th style={{ ...compactHeaderStyle, width: "16%" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {groupedItems.map((group) => (
                     <Fragment key={`${group.category}-group`}>
                       <tr style={pageStyles.rowEven}>
-                        <td style={groupHeaderCellStyle} colSpan={5}>
+                        <td style={groupHeaderCellStyle} colSpan={6}>
                           {group.category}
                         </td>
                       </tr>
@@ -749,6 +805,7 @@ export default function BuilderBasePricing() {
                           </td>
                           <td style={compactCellStyle}>{it.uom}</td>
                           <td style={compactCellStyle}>{it.category}</td>
+                          <td style={compactCellStyle}>{it.boqType || "-"}</td>
                           <td style={{ ...compactCellStyle, whiteSpace: "nowrap" }}>
                             {editingKey?.item === it.item && editingKey?.uom === it.uom ? (
                               <div style={{ display: "flex", justifyContent: "center", gap: 6, flexWrap: "wrap" }}>
