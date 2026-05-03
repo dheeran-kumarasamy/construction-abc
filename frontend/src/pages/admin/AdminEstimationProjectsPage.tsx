@@ -374,12 +374,9 @@ export default function AdminEstimationProjectsPage() {
                         Edit
                       </button>
                       <button
+                        className="admin-btn-danger"
                         type="button"
-                        style={{
-                          ...pageStyles.secondaryBtn,
-                          color: "#b91c1c",
-                          borderColor: "#fecaca",
-                        }}
+                        style={pageStyles.secondaryBtn}
                         onClick={() => deleteEstimationProject(project)}
                         disabled={savingId === project.id}
                       >

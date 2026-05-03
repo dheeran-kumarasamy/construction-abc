@@ -133,12 +133,9 @@ export default function AdminBOQsPage() {
                   <td style={pageStyles.td}>{formatDate(boq.created_at)}</td>
                   <td style={pageStyles.td}>
                     <button
+                      className="admin-btn-danger"
                       type="button"
-                      style={{
-                        ...pageStyles.secondaryBtn,
-                        color: "#b91c1c",
-                        borderColor: "#fecaca",
-                      }}
+                      style={pageStyles.secondaryBtn}
                       onClick={() => deleteBOQ(boq)}
                       disabled={savingId === boq.id}
                     >

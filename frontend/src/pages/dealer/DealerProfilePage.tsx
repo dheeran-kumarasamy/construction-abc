@@ -174,8 +174,8 @@ export default function DealerProfilePage() {
   }
 
   return (
-    <div style={pageStyles.page}>
-      <div style={{ ...pageStyles.card, maxWidth: 760 }}>
+    <div className="dealer-theme dealer-page" style={pageStyles.page}>
+      <div className="dealer-surface" style={{ ...pageStyles.card, maxWidth: 760 }}>
         <h1 style={pageStyles.title}>Edit Supplier Profile</h1>
         <p style={pageStyles.subtitle}>Update your business details shown to architects and buyers.</p>
 

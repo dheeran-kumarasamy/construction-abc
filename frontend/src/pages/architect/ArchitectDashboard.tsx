@@ -42,8 +42,8 @@ export default function ArchitectDashboard() {
   }, []);
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="architect-theme architect-page" style={pageStyles.page}>
+      <div className="architect-surface" style={pageStyles.card}>
         <div style={pageStyles.header}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, width: "100%", flexWrap: "wrap" }}>
             <h2 style={pageStyles.title}>Architect Dashboard</h2>
@@ -68,6 +68,7 @@ export default function ArchitectDashboard() {
                 <tr>
                   <th style={pageStyles.th}>Project Name</th>
                   <th style={pageStyles.th}>View BOQ</th>
+                  <th style={pageStyles.th}>Builder Submissions</th>
                 </tr>
               </thead>
               <tbody>
@@ -94,6 +95,24 @@ export default function ArchitectDashboard() {
                       >
                         View BOQ
                       </button>
+                    </td>
+                    <td style={pageStyles.td}>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          style={pageStyles.primaryBtn}
+                          onClick={() => navigate(`/architect/received?projectId=${encodeURIComponent(p.id)}`)}
+                        >
+                          View Submissions
+                        </button>
+                        <button
+                          type="button"
+                          style={pageStyles.secondaryBtn}
+                          onClick={() => navigate(`/architect/comparison?projectId=${encodeURIComponent(p.id)}`)}
+                        >
+                          Compare & Award
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

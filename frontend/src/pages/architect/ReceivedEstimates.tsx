@@ -36,6 +36,7 @@ export default function ReceivedEstimates() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [awardLoading, setAwardLoading] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const token = localStorage.getItem("token") || "";
@@ -170,6 +171,43 @@ export default function ReceivedEstimates() {
     }
   }
 
+  async function awardProjectToEstimate() {
+    if (!selectedEstimate || !selectedProjectId || !selectedEstimate.revision_id) {
+      alert("This estimate does not have a valid submitted revision to award");
+      return;
+    }
+
+    const confirmed = window.confirm("Award this project to the selected builder submission?");
+    if (!confirmed) {
+      return;
+    }
+
+    setAwardLoading(true);
+    try {
+      const res = await fetch(apiUrl(`/projects/${selectedProjectId}/award`), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ estimateRevisionId: selectedEstimate.revision_id }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to award project");
+      }
+
+      await fetchEstimates();
+      await fetchEstimateHistory(selectedEstimate.estimate_id);
+      alert("Project awarded successfully");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to award project");
+    } finally {
+      setAwardLoading(false);
+    }
+  }
+
   function formatReviewStatus(status?: string | null) {
     if (!status) return "Awaiting review";
     if (status === "changes_requested") return "Changes requested";
@@ -250,8 +288,8 @@ export default function ReceivedEstimates() {
   );
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="architect-theme architect-page" style={pageStyles.page}>
+      <div className="architect-surface" style={pageStyles.card}>
         <div
           style={{
             display: "flex",
@@ -503,6 +541,13 @@ export default function ReceivedEstimates() {
                   onClick={() => submitReview("approved")}
                 >
                   {reviewLoading ? "Saving..." : "Approve"}
+                </button>
+                <button
+                  style={pageStyles.primaryBtn}
+                  disabled={awardLoading || !selectedEstimate.revision_id}
+                  onClick={awardProjectToEstimate}
+                >
+                  {awardLoading ? "Awarding..." : "Award Project"}
                 </button>
               </div>
             </div>

@@ -133,7 +133,7 @@ export default function AdminProjectsPage() {
                   <td style={pageStyles.td}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button type="button" style={pageStyles.secondaryBtn} onClick={() => editProject(project)} disabled={savingId === project.id}>Edit</button>
-                      <button type="button" style={{ ...pageStyles.secondaryBtn, color: "#b91c1c", borderColor: "#fecaca" }} onClick={() => deleteProject(project)} disabled={savingId === project.id}>Delete</button>
+                      <button className="admin-btn-danger" type="button" style={pageStyles.secondaryBtn} onClick={() => deleteProject(project)} disabled={savingId === project.id}>Delete</button>
                     </div>
                   </td>
                 </tr>

@@ -222,8 +222,8 @@ const BOQUploadWithParsing = () => {
   };
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="architect-theme architect-page" style={pageStyles.page}>
+      <div className="architect-surface" style={pageStyles.card}>
         <h2 style={pageStyles.title}>Upload BOQ</h2>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
           <ConstructionIllustration type="crane" size={100} />

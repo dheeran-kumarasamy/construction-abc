@@ -69,8 +69,8 @@ export default function PricingEngine() {
   }
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="architect-theme architect-page" style={pageStyles.page}>
+      <div className="architect-surface" style={pageStyles.card}>
         <h2 style={pageStyles.title}>Pricing Summary</h2>
 
         <div style={pageStyles.marginRow}>

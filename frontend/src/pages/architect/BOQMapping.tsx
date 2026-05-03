@@ -47,8 +47,8 @@ export default function BOQMapping() {
 }
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="architect-theme architect-page" style={pageStyles.page}>
+      <div className="architect-surface" style={pageStyles.card}>
         <h2 style={pageStyles.title}>BOQ Column Mapping</h2>
         <p style={pageStyles.subtext}>Match your spreadsheet columns to the required BOQ fields.</p>
 

@@ -18,7 +18,7 @@ interface ProfileForm {
 
 const EMPTY: ProfileForm = {
   companyName: "",
-  contactPhone: "",
+  contactPhone: "+91 ",
   serviceLocations: "",
   specialties: "",
   pastProjects: "",
@@ -28,6 +28,34 @@ const EMPTY: ProfileForm = {
   isVisibleToArchitects: true,
   portfolioPhotos: [],
 };
+
+function sanitizePhoneInput(value: string): string {
+  return String(value || "").replace(/[^0-9+\-\s]/g, "");
+}
+
+function extractIndianLocalDigits(value: string): string {
+  const digits = sanitizePhoneInput(value).replace(/\D/g, "");
+  if (!digits) return "";
+
+  if (digits === "91") {
+    return "";
+  }
+
+  if (digits.startsWith("91") && digits.length <= 12) {
+    return digits.slice(2, 12);
+  }
+
+  if (digits.length > 10) {
+    return digits.slice(-10);
+  }
+
+  return digits;
+}
+
+function formatIndianPhone(value: string): string {
+  const localNumber = extractIndianLocalDigits(value);
+  return `+91 ${localNumber}`;
+}
 
 export default function BuilderProfileSetupPage() {
   const navigate = useNavigate();
@@ -76,7 +104,7 @@ export default function BuilderProfileSetupPage() {
         if (data) {
           setForm({
             companyName: data.companyName || "",
-            contactPhone: data.contactPhone || "",
+            contactPhone: formatIndianPhone(data.contactPhone || ""),
             serviceLocations: data.serviceLocations || "",
             specialties: data.specialties || "",
             pastProjects: data.pastProjects || "",
@@ -139,9 +167,15 @@ export default function BuilderProfileSetupPage() {
     setSuccess("");
 
     if (!form.companyName.trim()) { setError("Company / Firm Name is required"); return; }
-    if (!form.contactPhone.trim()) { setError("Contact Phone is required"); return; }
+    if (!extractIndianLocalDigits(form.contactPhone)) { setError("Contact Phone is required"); return; }
     if (!form.serviceLocations.trim()) { setError("Service Locations is required"); return; }
     if (!form.specialties.trim()) { setError("Specialties is required"); return; }
+
+    const normalizedPhone = formatIndianPhone(form.contactPhone);
+    if (extractIndianLocalDigits(form.contactPhone).length !== 10 || !/^\+91\s\d{10}$/.test(normalizedPhone)) {
+      setError("Contact Phone must be a valid Indian number in format +91 8765434556");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -159,7 +193,7 @@ export default function BuilderProfileSetupPage() {
         },
         body: JSON.stringify({
           companyName: form.companyName.trim(),
-          contactPhone: form.contactPhone.trim(),
+          contactPhone: normalizedPhone,
           serviceLocations: form.serviceLocations.trim(),
           specialties: form.specialties.trim(),
           pastProjects: form.pastProjects.trim() || null,
@@ -220,8 +254,8 @@ export default function BuilderProfileSetupPage() {
 
   if (initialLoading) {
     return (
-      <div style={pageStyles.page}>
-        <div style={pageStyles.card}>
+      <div className="builder-theme builder-page" style={pageStyles.page}>
+        <div className="builder-surface" style={pageStyles.card}>
           <p style={pageStyles.subtitle}>Loading profile…</p>
         </div>
       </div>
@@ -229,8 +263,9 @@ export default function BuilderProfileSetupPage() {
   }
 
   return (
-    <div style={pageStyles.page}>
+    <div className="builder-theme builder-page" style={pageStyles.page}>
       <form
+        className="builder-surface"
         style={{ ...pageStyles.card, maxWidth: 560, margin: "0 auto" }}
         onSubmit={handleSave}
       >
@@ -261,9 +296,18 @@ export default function BuilderProfileSetupPage() {
           <input
             style={pageStyles.input}
             type="tel"
-            placeholder="e.g. +91 98765 43210"
+            placeholder="e.g. +91 8765434556"
             value={form.contactPhone}
-            onChange={(e) => set("contactPhone", e.target.value)}
+            onChange={(e) => set("contactPhone", formatIndianPhone(e.target.value))}
+            onBlur={(e) => set("contactPhone", formatIndianPhone(e.target.value))}
+            onKeyDown={(e) => {
+              if (e.ctrlKey || e.metaKey || e.altKey) return;
+              if (e.key.length !== 1) return;
+              if (!/[0-9+\-\s]/.test(e.key)) {
+                e.preventDefault();
+              }
+            }}
+            inputMode="numeric"
             required
           />
 

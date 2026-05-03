@@ -419,16 +419,14 @@ export default function AdminTeamPage() {
                           Edit access
                         </button>
                         <button
+                          className="admin-btn-danger"
                           type="button"
                           style={{
-                            background: "#fee2e2",
-                            color: "#991b1b",
-                            border: "1px solid #fca5a5",
-                            borderRadius: 8,
+                            ...pageStyles.secondaryBtn,
                             padding: "6px 12px",
                             fontSize: 12,
+                            height: "auto",
                             fontWeight: 700,
-                            cursor: "pointer",
                           }}
                           onClick={() => handleDelete(u)}
                           disabled={deletingId === u.id}

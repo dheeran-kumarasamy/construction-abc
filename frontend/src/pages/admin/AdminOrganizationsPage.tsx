@@ -124,7 +124,7 @@ export default function AdminOrganizationsPage() {
                   <td style={pageStyles.td}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button type="button" style={pageStyles.secondaryBtn} onClick={() => editOrganization(org)} disabled={savingId === org.id}>Edit</button>
-                      <button type="button" style={{ ...pageStyles.secondaryBtn, color: "#b91c1c", borderColor: "#fecaca" }} onClick={() => deleteOrganization(org)} disabled={savingId === org.id}>Delete</button>
+                      <button className="admin-btn-danger" type="button" style={pageStyles.secondaryBtn} onClick={() => deleteOrganization(org)} disabled={savingId === org.id}>Delete</button>
                     </div>
                   </td>
                 </tr>

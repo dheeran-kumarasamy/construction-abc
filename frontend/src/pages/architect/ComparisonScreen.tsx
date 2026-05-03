@@ -10,6 +10,7 @@ interface ComparisonRow {
   margin_percent: number;
   grand_total: number;
   rank: number;
+  awarded_revision_id?: string | null;
 }
 
 export default function ComparisonScreen({ projectId }: { projectId: string }) {
@@ -40,7 +41,13 @@ export default function ComparisonScreen({ projectId }: { projectId: string }) {
   }, [projectId, token]);
 
   async function handleAward(revisionId: string) {
-    if (!confirm("Are you sure you want to award this builder?")) return;
+    const awardedRevisionId = data.find((row) => row.awarded_revision_id)?.awarded_revision_id || null;
+    const isChangingAward = Boolean(awardedRevisionId && awardedRevisionId !== revisionId);
+    const confirmationMessage = isChangingAward
+      ? "This project is already awarded to another builder. Are you sure you want to change the award to this builder?"
+      : "Are you sure you want to award this builder?";
+
+    if (!confirm(confirmationMessage)) return;
 
     try {
       setAwarding(revisionId);
@@ -61,7 +68,7 @@ export default function ComparisonScreen({ projectId }: { projectId: string }) {
 
       if (!res.ok) throw new Error(json.error || "Award failed");
 
-      alert("Project awarded successfully");
+      alert(json.replaced ? "Award updated successfully" : "Project awarded successfully");
       window.location.reload();
     } catch (err: any) {
       alert(err.message);
@@ -70,18 +77,39 @@ export default function ComparisonScreen({ projectId }: { projectId: string }) {
     }
   }
 
+  const awardedRevisionId = data.find((row) => row.awarded_revision_id)?.awarded_revision_id || null;
+  const awardedRow = awardedRevisionId
+    ? data.find((row) => row.revision_id === awardedRevisionId) || null
+    : null;
+
   if (loading) {
     return (
-      <div style={pageStyles.page}>
+      <div className="architect-theme architect-page" style={pageStyles.page}>
         <p style={{ color: "var(--muted)", fontSize: "18px" }}>Loading comparison…</p>
       </div>
     );
   }
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="architect-theme architect-page" style={pageStyles.page}>
+      <div className="architect-surface" style={pageStyles.card}>
         <h2 style={pageStyles.title}>Builder Comparison</h2>
+
+        {awardedRow ? (
+          <div
+            style={{
+              marginBottom: "0.9rem",
+              padding: "0.85rem 1rem",
+              borderRadius: "10px",
+              border: "1px solid #99f6e4",
+              background: "#f0fdfa",
+              color: "#115e59",
+              fontWeight: 600,
+            }}
+          >
+            Currently awarded builder: {awardedRow.builder_org_id}
+          </div>
+        ) : null}
 
         <div style={{ overflowX: "auto" }}>
           <table style={pageStyles.table}>
@@ -117,15 +145,18 @@ export default function ComparisonScreen({ projectId }: { projectId: string }) {
                     </td>
                     <td style={pageStyles.td}>
                       <button
-                        disabled={awarding !== null}
+                        disabled={awarding !== null || row.revision_id === awardedRevisionId}
                         onClick={() => handleAward(row.revision_id)}
                         style={{
                           ...(isLowest ? pageStyles.primaryBtn : pageStyles.secondaryBtn),
                           height: "36px",
                           fontSize: "13px",
+                          ...(row.revision_id === awardedRevisionId ? { opacity: 0.55, cursor: "not-allowed" } : {}),
                         }}
                       >
-                        {awarding === row.revision_id
+                        {row.revision_id === awardedRevisionId
+                          ? "Awarded"
+                          : awarding === row.revision_id
                           ? "Awarding…"
                           : "Award"}
                       </button>

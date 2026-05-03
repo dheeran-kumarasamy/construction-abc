@@ -149,8 +149,8 @@ export default function BuilderDashboard() {
   }
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="builder-theme builder-page" style={pageStyles.page}>
+      <div className="builder-surface" style={pageStyles.card}>
         <div style={pageStyles.header}>
           <div>
             <h2 style={pageStyles.title}>Builder Dashboard</h2>

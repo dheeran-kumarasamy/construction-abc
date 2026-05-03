@@ -1166,22 +1166,6 @@ export default function BOQWorkspacePage() {
             </tbody>
           </table>
           </TableWrapper>
-          {isEditingBoq && (
-          <div style={{ marginTop: 12 }}>
-            <button
-              style={{ ...pageStyles.secondaryBtn, fontSize: 14 }}
-              onClick={() =>
-                navigate(
-                  `/architect/estimation/templates?mode=custom-line-item&projectId=${encodeURIComponent(
-                    projectId || ""
-                  )}`
-                )
-              }
-            >
-              + Add Custom Line Item
-            </button>
-          </div>
-          )}
         </div>
         {isEditingBoq && (
         <div style={{ display: "flex", gap: 16, marginTop: 24 }}>

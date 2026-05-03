@@ -285,7 +285,7 @@ export default function AdminPricesPage() {
                       <td style={pageStyles.td}>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <button type="button" style={pageStyles.secondaryBtn} onClick={() => editRecord(record)} disabled={savingId === record.id}>Edit</button>
-                          <button type="button" style={{ ...pageStyles.secondaryBtn, color: "#b91c1c", borderColor: "#fecaca" }} onClick={() => deleteRecord(record)} disabled={savingId === record.id}>Delete</button>
+                          <button className="admin-btn-danger" type="button" style={pageStyles.secondaryBtn} onClick={() => deleteRecord(record)} disabled={savingId === record.id}>Delete</button>
                         </div>
                       </td>
                     </tr>

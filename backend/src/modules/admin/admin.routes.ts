@@ -100,6 +100,9 @@ function getAdminUserId(req: Request): string {
   return String((req as any).user?.userId || "");
 }
 
+const UUID_V4_OR_V5_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function getFrontendBaseUrl(): string {
   const envUrl = process.env.FRONTEND_URL || process.env.VITE_FRONTEND_URL;
   if (envUrl) {
@@ -1847,16 +1850,25 @@ router.patch("/dealers/:dealerId/approval", async (req: Request, res: Response) 
   try {
     const { dealerId } = req.params;
     const isApproved = Boolean(req.body?.isApproved);
-    const adminUserId = getAdminUserId(req);
+    const adminUserId = getAdminUserId(req).trim();
+
+    let approverUserId: string | null = null;
+    if (isApproved && UUID_V4_OR_V5_REGEX.test(adminUserId)) {
+      const approverLookup = await pool.query(`SELECT 1 FROM users WHERE id = $1 LIMIT 1`, [adminUserId]);
+      if (approverLookup.rows.length > 0) {
+        approverUserId = adminUserId;
+      }
+    }
 
     const result = await pool.query(
       `UPDATE dealers
        SET is_approved = $1,
            approval_date = CASE WHEN $1 THEN now() ELSE NULL END,
-           approved_by = CASE WHEN $1 THEN $2 ELSE NULL END
+           approved_by = CASE WHEN $1 THEN $2::uuid ELSE NULL END,
+           updated_at = now()
        WHERE id = $3
        RETURNING id, shop_name, is_approved, approval_date, approved_by`,
-      [isApproved, adminUserId, dealerId]
+      [isApproved, approverUserId, dealerId]
     );
 
     if (!result.rows.length) {

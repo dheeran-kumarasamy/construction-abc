@@ -33,7 +33,7 @@ function StatCard({ label, value }: { label: string; value: number }) {
   return (
     <AdminCard>
       <div style={{ color: "#64748b", fontSize: 12, fontWeight: 600 }}>{label}</div>
-      <div style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>{value.toLocaleString()}</div>
+      <div className="admin-kpi-value" style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>{value.toLocaleString()}</div>
     </AdminCard>
   );
 }
@@ -74,7 +74,7 @@ export default function AdminDashboard() {
 
       {error && <div style={{ ...pageStyles.error, marginBottom: 12 }}>{error}</div>}
 
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", marginBottom: 18 }}>
+      <div className="admin-kpi-grid" style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", marginBottom: 18 }}>
         <StatCard label="Users" value={data?.summary.users || 0} />
         <StatCard label="Organizations" value={data?.summary.organizations || 0} />
         <StatCard label="Projects" value={data?.summary.projects || 0} />
@@ -85,12 +85,12 @@ export default function AdminDashboard() {
         <StatCard label="Market Deviation Alerts" value={data?.summary.marketDeviationAlerts || 0} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 14 }}>
+      <div className="admin-split-grid" style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 14 }}>
         <AdminCard>
           <h3 style={{ marginTop: 0, marginBottom: 10 }}>Recent Activity</h3>
-          <div style={{ display: "grid", gap: 8 }}>
+          <div className="admin-activity-list" style={{ display: "grid", gap: 8 }}>
             {(data?.recentActivity || []).map((item) => (
-              <div key={item.id} style={{ border: "1px solid #f1f5f9", borderRadius: 10, padding: "10px 12px", background: "#f8fafc" }}>
+              <div className="admin-activity-item" key={item.id} style={{ border: "1px solid #f1f5f9", borderRadius: 10, padding: "10px 12px", background: "#f8fafc" }}>
                 <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 13 }}>{item.action}</div>
                 <div style={{ color: "#334155", fontSize: 12, marginTop: 4 }}>
                   by {item.user_email || "system"} · {formatDateTime(item.created_at)}

@@ -292,7 +292,7 @@ export default function AdminUsersPage() {
                 <button type="button" style={pageStyles.primaryBtn} onClick={saveUser} disabled={saving}>Save</button>
                 <button type="button" style={pageStyles.secondaryBtn} onClick={resetPassword} disabled={saving}>Reset Password</button>
                 <button type="button" style={pageStyles.secondaryBtn} onClick={() => deleteUser("soft")} disabled={saving}>Disable</button>
-                <button type="button" style={{ ...pageStyles.secondaryBtn, borderColor: "#fecaca", color: "#b91c1c" }} onClick={() => deleteUser("hard")} disabled={saving}>Hard Delete</button>
+                <button className="admin-btn-danger" type="button" style={pageStyles.secondaryBtn} onClick={() => deleteUser("hard")} disabled={saving}>Hard Delete</button>
               </div>
 
               <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 12 }}>

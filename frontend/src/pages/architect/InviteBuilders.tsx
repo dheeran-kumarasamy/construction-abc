@@ -23,6 +23,64 @@ interface Project {
   name: string;
 }
 
+function statusRank(status: Invite["status"]): number {
+  if (status === "accepted") return 5;
+  if (status === "open") return 4;
+  if (status === "pending") return 3;
+  if (status === "expired") return 2;
+  return 1;
+}
+
+function normalizeInviteStatus(invite: Invite): Invite["status"] {
+  const raw = String(invite.status || "").toLowerCase();
+  if (raw === "accepted" || raw === "open" || raw === "expired" || raw === "pending" || raw === "failed") {
+    return raw;
+  }
+  return "open";
+}
+
+function mergeInvitesForDisplay(items: Invite[]): Invite[] {
+  const grouped = new Map<string, Invite>();
+
+  items.forEach((item) => {
+    const normalizedStatus = normalizeInviteStatus(item);
+    const normalizedInvite: Invite = {
+      ...item,
+      status: normalizedStatus,
+      inviteLink: normalizedStatus === "open" ? item.inviteLink : undefined,
+    };
+
+    const key = `${String(normalizedInvite.email || "").toLowerCase()}|${String(normalizedInvite.role || "builder").toLowerCase()}|${normalizedInvite.projectId || "all"}`;
+    const existing = grouped.get(key);
+
+    if (!existing) {
+      grouped.set(key, normalizedInvite);
+      return;
+    }
+
+    const existingRank = statusRank(existing.status);
+    const nextRank = statusRank(normalizedInvite.status);
+    if (nextRank > existingRank) {
+      grouped.set(key, normalizedInvite);
+      return;
+    }
+
+    if (nextRank === existingRank) {
+      const existingTime = existing.createdAt ? Date.parse(existing.createdAt) : 0;
+      const nextTime = normalizedInvite.createdAt ? Date.parse(normalizedInvite.createdAt) : 0;
+      if (nextTime > existingTime) {
+        grouped.set(key, normalizedInvite);
+      }
+    }
+  });
+
+  return Array.from(grouped.values()).sort((a, b) => {
+    const aTime = a.createdAt ? Date.parse(a.createdAt) : 0;
+    const bTime = b.createdAt ? Date.parse(b.createdAt) : 0;
+    return bTime - aTime;
+  });
+}
+
 export default function InviteBuilders() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -86,6 +144,14 @@ export default function InviteBuilders() {
     void loadInvites();
   }, [token]);
 
+  useEffect(() => {
+    if (!token) return;
+    const intervalId = window.setInterval(() => {
+      void loadInvites();
+    }, 15000);
+    return () => window.clearInterval(intervalId);
+  }, [token]);
+
   async function loadInvites() {
     if (!token) return;
 
@@ -97,7 +163,7 @@ export default function InviteBuilders() {
       if (!res.ok) throw new Error("Failed to load invites");
 
       const data = (await res.json()) as Invite[];
-      setInvites(data);
+      setInvites(mergeInvitesForDisplay(data));
     } catch (err) {
       console.error("Load invites error:", err);
     } finally {
@@ -177,8 +243,8 @@ export default function InviteBuilders() {
   });
 
   return (
-    <div style={{ ...pageStyles.page, alignItems: "flex-start", paddingTop: 24 }}>
-      <div style={{ ...pageStyles.card, width: "min(1200px, 100%)" }}>
+    <div className="architect-theme architect-page" style={{ ...pageStyles.page, alignItems: "flex-start", paddingTop: 24 }}>
+      <div className="architect-surface" style={{ ...pageStyles.card, width: "min(1200px, 100%)" }}>
         <div style={pageStyles.header}>
           <div>
             <h2 style={pageStyles.title}>{isArchitectHead ? "Invite Team & Builders" : "Invite Builders"}</h2>

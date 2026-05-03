@@ -92,8 +92,8 @@ export default function ProjectsList() {
 
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="architect-theme architect-page" style={pageStyles.page}>
+      <div className="architect-surface" style={pageStyles.card}>
         <div style={pageStyles.header}>
           <div>
             <h2 style={pageStyles.title}>View Projects</h2>
@@ -185,6 +185,22 @@ export default function ProjectsList() {
                               onClick={() => navigate(`/architect/invite?projectId=${encodeURIComponent(projectRef)}`)}
                             >
                               Invite Builders
+                            </button>
+
+                            <button
+                              type="button"
+                              style={pageStyles.secondaryBtn}
+                              onClick={() => navigate(`/architect/received?projectId=${encodeURIComponent(p.id)}`)}
+                            >
+                              View Submissions
+                            </button>
+
+                            <button
+                              type="button"
+                              style={pageStyles.secondaryBtn}
+                              onClick={() => navigate(`/architect/comparison?projectId=${encodeURIComponent(p.id)}`)}
+                            >
+                              Compare & Award
                             </button>
                           </>
                         )}

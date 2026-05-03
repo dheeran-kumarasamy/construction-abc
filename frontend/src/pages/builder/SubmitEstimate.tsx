@@ -196,8 +196,8 @@ export default function SubmitEstimate({ embedded = false }: { embedded?: boolea
   }
 
   return (
-    <div style={outerStyle}>
-      <div style={cardStyle}>
+    <div className="builder-theme builder-page" style={outerStyle}>
+      <div className="builder-surface" style={cardStyle}>
         <h2 style={pageStyles.title}>View Submission</h2>
 
         {loading ? (

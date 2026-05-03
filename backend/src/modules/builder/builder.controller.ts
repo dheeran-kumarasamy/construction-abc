@@ -46,6 +46,28 @@ async function resolveBuilderOrganizationId(userId: string, projectId?: string):
   return anyInviteOrg.rows[0]?.organization_id || null;
 }
 
+function normalizeIndianPhone(value: string): string {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+
+  let local = digits;
+  if (digits === "91") {
+    return "";
+  }
+
+  if (digits.startsWith("91") && digits.length <= 12) {
+    local = digits.slice(2, 12);
+  } else if (digits.length > 10) {
+    local = digits.slice(-10);
+  }
+
+  if (!local) {
+    return "";
+  }
+
+  return `+91 ${local}`;
+}
+
 export async function getAvailableProjects(req: Request, res: Response) {
   try {
     const user = (req as any).user;
@@ -334,9 +356,16 @@ export async function updateMyBuilderProfile(req: Request, res: Response) {
       isVisibleToArchitects,
     } = req.body;
 
+    const normalizedContactPhone = normalizeIndianPhone(String(contactPhone || ""));
+    if (normalizedContactPhone && !/^\+91\s\d{10}$/.test(normalizedContactPhone)) {
+      return res.status(400).json({
+        error: "Contact phone must be a valid Indian number in format +91 8765434556",
+      });
+    }
+
     const profile = await service.upsertBuilderProfile(userId, {
       companyName,
-      contactPhone,
+      contactPhone: normalizedContactPhone || null,
       serviceLocations,
       specialties,
       pastProjects,

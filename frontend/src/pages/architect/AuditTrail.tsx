@@ -144,8 +144,8 @@ export default function AuditTrail() {
   const totalApprovals = useMemo(() => entries.length, [entries]);
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="architect-theme architect-page" style={pageStyles.page}>
+      <div className="architect-surface" style={pageStyles.card}>
         <h2 style={pageStyles.title}>Team Approval Log</h2>
 
         {!isArchitectHead && (

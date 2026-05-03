@@ -129,7 +129,7 @@ export default function AdminInvitesPage() {
                   <td style={pageStyles.td}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button type="button" style={pageStyles.secondaryBtn} onClick={() => resendInvite(invite)} disabled={savingId === invite.id}>Resend</button>
-                      <button type="button" style={{ ...pageStyles.secondaryBtn, color: "#b91c1c", borderColor: "#fecaca" }} onClick={() => deleteInvite(invite)} disabled={savingId === invite.id}>Delete</button>
+                      <button className="admin-btn-danger" type="button" style={pageStyles.secondaryBtn} onClick={() => deleteInvite(invite)} disabled={savingId === invite.id}>Delete</button>
                     </div>
                   </td>
                 </tr>

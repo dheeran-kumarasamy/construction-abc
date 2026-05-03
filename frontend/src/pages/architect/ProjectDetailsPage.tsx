@@ -93,11 +93,36 @@ export default function ProjectDetailsPage() {
   }, [id]);
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="architect-theme architect-page" style={pageStyles.page}>
+      <div className="architect-surface" style={pageStyles.card}>
         <button style={{ ...pageStyles.secondaryBtn, marginBottom: 16 }} onClick={() => navigate(-1)}>
           ← Back
         </button>
+        {project ? (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.75rem",
+              marginBottom: "1rem",
+            }}
+          >
+            <button
+              type="button"
+              style={pageStyles.primaryBtn}
+              onClick={() => navigate(`/architect/received?projectId=${encodeURIComponent(project.id)}`)}
+            >
+              View Builder Submissions
+            </button>
+            <button
+              type="button"
+              style={pageStyles.secondaryBtn}
+              onClick={() => navigate(`/architect/comparison?projectId=${encodeURIComponent(project.id)}`)}
+            >
+              Compare & Award Best BOQ
+            </button>
+          </div>
+        ) : null}
         <h2 style={pageStyles.title}>Project Details</h2>
         {loading && <div>Loading project...</div>}
         {error && <div style={{ color: "#dc2626" }}>{error}</div>}

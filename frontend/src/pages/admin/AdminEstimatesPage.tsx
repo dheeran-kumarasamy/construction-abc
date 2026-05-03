@@ -220,12 +220,9 @@ export default function AdminEstimatesPage() {
                         Edit
                       </button>
                       <button
+                        className="admin-btn-danger"
                         type="button"
-                        style={{
-                          ...pageStyles.secondaryBtn,
-                          color: "#b91c1c",
-                          borderColor: "#fecaca",
-                        }}
+                        style={pageStyles.secondaryBtn}
                         onClick={() => deleteEstimate(estimate)}
                         disabled={savingId === estimate.id}
                       >

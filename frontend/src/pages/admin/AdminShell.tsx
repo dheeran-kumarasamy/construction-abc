@@ -65,6 +65,7 @@ export function AdminShell({
 
   return (
     <div
+      className="admin-theme"
       style={{
         ...pageStyles.page,
         alignItems: "stretch",
@@ -74,6 +75,7 @@ export function AdminShell({
       }}
     >
       <div
+        className="admin-shell"
         style={{
           width: "min(1400px, 100%)",
           margin: "0 auto",
@@ -82,19 +84,27 @@ export function AdminShell({
         }}
       >
         <div
+          className="admin-shell-panel"
           style={{
-            background: "rgba(255, 253, 248, 0.95)",
-            border: "1px solid var(--border)",
+            background: "rgba(252, 254, 255, 0.96)",
+            border: "1px solid #c9d7e6",
             borderRadius: 18,
-            boxShadow: "0 18px 50px rgba(15, 23, 42, 0.08)",
+            boxShadow: "0 22px 50px rgba(15, 23, 42, 0.09)",
             overflow: "hidden",
           }}
         >
-          <div style={{ padding: "18px 20px", background: "linear-gradient(135deg, rgba(15,118,110,0.14), rgba(255,253,248,0.96))", borderBottom: "1px solid var(--border)" }}>
+          <div
+            className="admin-hero"
+            style={{
+              padding: "18px 20px",
+              background: "linear-gradient(125deg, rgba(14, 116, 144, 0.14), rgba(245, 252, 252, 0.98) 42%, rgba(255, 250, 240, 0.95) 100%)",
+              borderBottom: "1px solid #cfdae6",
+            }}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontSize: 12, letterSpacing: 1.2, textTransform: "uppercase", color: "#0f766e", fontWeight: 700 }}>
+                  <div style={{ fontSize: 12, letterSpacing: 1.2, textTransform: "uppercase", color: "#0b7285", fontWeight: 800 }}>
                     Construction ABC Admin
                   </div>
                   {user?.adminRole && (
@@ -106,37 +116,39 @@ export function AdminShell({
                       fontSize: 10,
                       fontWeight: 700,
                       letterSpacing: 0.5,
-                      background: user.adminRole === "super_admin" ? "#0f766e" : "#7c3aed",
+                      background: user.adminRole === "super_admin" ? "#0f766e" : "#0b7285",
                       color: "#fff",
                     }}>
                       {user.adminRole === "super_admin" ? "SUPER ADMIN" : "ADMIN TEAM"}
                     </span>
                   )}
                 </div>
-                <h1 style={{ margin: "8px 0 0", fontSize: "clamp(24px, 4vw, 34px)", lineHeight: 1.05, color: "#0f172a" }}>{title}</h1>
-                {subtitle && <p style={{ margin: "8px 0 0", color: "#475569", maxWidth: 780 }}>{subtitle}</p>}
+                <h1 style={{ margin: "8px 0 0", fontSize: "clamp(24px, 4vw, 34px)", lineHeight: 1.05, color: "#0f172a", letterSpacing: "-0.4px" }}>{title}</h1>
+                {subtitle && <p style={{ margin: "8px 0 0", color: "#3f5368", maxWidth: 780 }}>{subtitle}</p>}
               </div>
               {actions && <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{actions}</div>}
             </div>
           </div>
 
-          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "rgba(248, 250, 252, 0.92)" }}>
+          <div className="admin-nav" style={{ padding: "12px 16px", borderBottom: "1px solid #d8e2ec", background: "rgba(248, 250, 252, 0.96)" }}>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               {navItems.map((item) => {
                 const active = location.pathname === item.path;
                 return (
                   <Link
+                    className={`admin-nav-link${active ? " is-active" : ""}`}
                     key={item.path}
                     to={item.path}
                     style={{
                       textDecoration: "none",
                       padding: "10px 14px",
                       borderRadius: 999,
-                      border: active ? "1px solid #0f766e" : "1px solid var(--border)",
-                      background: active ? "#0f766e" : "#ffffff",
+                      border: active ? "1px solid #0f766e" : "1px solid #c8d6e5",
+                      background: active ? "linear-gradient(90deg, #0f766e, #0b7285)" : "#ffffff",
                       color: active ? "#ffffff" : "#0f172a",
                       fontWeight: 700,
                       fontSize: 13,
+                      boxShadow: active ? "0 8px 18px rgba(15, 118, 110, 0.25)" : "none",
                     }}
                   >
                     {item.label}
@@ -146,7 +158,7 @@ export function AdminShell({
             </div>
           </div>
 
-          <div style={{ padding: "18px" }}>{children}</div>
+          <div className="admin-content" style={{ padding: "18px" }}>{children}</div>
         </div>
       </div>
     </div>
@@ -156,12 +168,13 @@ export function AdminShell({
 export function AdminCard({ children }: { children: React.ReactNode }) {
   return (
     <div
+      className="admin-card"
       style={{
         background: "#ffffff",
-        border: "1px solid #e5e7eb",
+        border: "1px solid #d8e2ec",
         borderRadius: 14,
         padding: "16px 18px",
-        boxShadow: "0 8px 20px rgba(15, 23, 42, 0.04)",
+        boxShadow: "0 8px 22px rgba(15, 23, 42, 0.05)",
       }}
     >
       {children}
@@ -171,7 +184,7 @@ export function AdminCard({ children }: { children: React.ReactNode }) {
 
 export function AdminTable({ children }: { children: React.ReactNode }) {
   return (
-    <div className="table-wrapper" style={{ color: "#0f172a" }}>
+    <div className="table-wrapper admin-table" style={{ color: "#0f172a" }}>
       {children}
     </div>
   );
@@ -179,10 +192,10 @@ export function AdminTable({ children }: { children: React.ReactNode }) {
 
 export function StatusPill({ label, tone = "neutral" }: { label: string; tone?: "neutral" | "success" | "danger" | "warning" }) {
   const toneMap = {
-    neutral: { background: "#e2e8f0", color: "#334155" },
-    success: { background: "#dcfce7", color: "#166534" },
-    danger: { background: "#fee2e2", color: "#991b1b" },
-    warning: { background: "#fef3c7", color: "#92400e" },
+    neutral: { background: "#e6edf5", color: "#334155", border: "1px solid #c7d5e5" },
+    success: { background: "#dcfce7", color: "#166534", border: "1px solid #86efac" },
+    danger: { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" },
+    warning: { background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d" },
   } as const;
 
   return (
@@ -192,8 +205,10 @@ export function StatusPill({ label, tone = "neutral" }: { label: string; tone?: 
         alignItems: "center",
         padding: "4px 10px",
         borderRadius: 999,
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: 700,
+        letterSpacing: "0.02em",
+        textTransform: "uppercase",
         ...toneMap[tone],
       }}
     >

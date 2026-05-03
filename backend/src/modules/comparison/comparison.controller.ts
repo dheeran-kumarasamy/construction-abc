@@ -31,6 +31,9 @@ export async function awardProject(req: Request, res: Response) {
     if (/only the head architect/i.test(message) || /unauthorized/i.test(message)) {
       return res.status(403).json({ error: message });
     }
+    if (/already awarded/i.test(message)) {
+      return res.status(409).json({ error: message });
+    }
     res.status(400).json({ error: message });
   }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import TableWrapper from "../../components/TableWrapper";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
@@ -15,6 +16,9 @@ interface Estimate {
   grand_total: number | null;
   rank: number;
   revision_id: string;
+  award_id?: string | null;
+  awarded_revision_id?: string | null;
+  awarded_at?: string | null;
 }
 
 function getGrandTotal(estimate: Estimate) {
@@ -22,6 +26,7 @@ function getGrandTotal(estimate: Estimate) {
 }
 
 export default function ComparisonDashboard() {
+  const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -46,7 +51,13 @@ export default function ComparisonDashboard() {
       if (!res.ok) throw new Error("Failed to load projects");
       const data = await res.json();
       setProjects(data);
-      if (data.length > 0) setSelectedProjectId(data[0].id);
+      const requestedProjectId = searchParams.get("projectId") || "";
+      const matchedProject = data.find((project: Project) => project.id === requestedProjectId);
+      if (matchedProject) {
+        setSelectedProjectId(matchedProject.id);
+      } else if (data.length > 0) {
+        setSelectedProjectId(data[0].id);
+      }
       setLoading(false);
     } catch (err) {
       console.error("Load projects error:", err);
@@ -73,7 +84,13 @@ export default function ComparisonDashboard() {
 
   async function handleAward(revisionId: string) {
     if (!selectedProjectId) return;
-    if (!confirm("Are you sure you want to award this builder?")) return;
+    const awardedRevisionId = estimates.find((estimate) => estimate.awarded_revision_id)?.awarded_revision_id || null;
+    const isChangingAward = Boolean(awardedRevisionId && awardedRevisionId !== revisionId);
+    const confirmationMessage = isChangingAward
+      ? "This project is already awarded to another builder. Are you sure you want to change the award to this builder?"
+      : "Are you sure you want to award this builder?";
+
+    if (!confirm(confirmationMessage)) return;
 
     try {
       const res = await fetch(
@@ -88,17 +105,23 @@ export default function ComparisonDashboard() {
         }
       );
 
-      if (!res.ok) throw new Error("Award failed");
-      alert("Project awarded successfully");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Award failed");
+      alert(data?.replaced ? "Award updated successfully" : "Project awarded successfully");
       fetchComparison();
     } catch (err: any) {
       alert(err.message || "Failed to award project");
     }
   }
 
+  const awardedRevisionId = estimates.find((estimate) => estimate.awarded_revision_id)?.awarded_revision_id || null;
+  const awardedEstimate = awardedRevisionId
+    ? estimates.find((estimate) => estimate.revision_id === awardedRevisionId) || null
+    : null;
+
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="architect-theme architect-page" style={pageStyles.page}>
+      <div className="architect-surface" style={pageStyles.card}>
         <div
           style={{
             display: "flex",
@@ -144,6 +167,21 @@ export default function ComparisonDashboard() {
           <p>No submitted estimates for this project yet.</p>
         ) : (
           <TableWrapper>
+            {awardedEstimate ? (
+              <div
+                style={{
+                  marginBottom: "0.9rem",
+                  padding: "0.85rem 1rem",
+                  borderRadius: "10px",
+                  border: "1px solid #99f6e4",
+                  background: "#f0fdfa",
+                  color: "#115e59",
+                  fontWeight: 600,
+                }}
+              >
+                Currently awarded builder: {awardedEstimate.builder_name}
+              </div>
+            ) : null}
             <table style={pageStyles.table}>
             <thead>
               <tr>
@@ -178,12 +216,15 @@ export default function ComparisonDashboard() {
                   <td style={pageStyles.td}>
                     <button
                       onClick={() => handleAward(e.revision_id)}
+                      disabled={e.revision_id === awardedRevisionId}
                       style={{
                         ...pageStyles.primaryBtn,
-                        ...(e.rank === 1 ? {} : { opacity: 0.6 }),
+                        ...(e.revision_id === awardedRevisionId
+                          ? { opacity: 0.55, cursor: "not-allowed" }
+                          : {}),
                       }}
                     >
-                      {e.rank === 1 ? "Award" : "View"}
+                      {e.revision_id === awardedRevisionId ? "Awarded" : "Award"}
                     </button>
                   </td>
                 </tr>

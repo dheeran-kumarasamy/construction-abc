@@ -103,6 +103,7 @@ export default function AdminDealersPage() {
                   <td style={pageStyles.td}>{formatDate(dealer.created_at)}</td>
                   <td style={pageStyles.td}>
                     <button
+                      className={dealer.is_approved ? "admin-btn-danger" : undefined}
                       type="button"
                       style={dealer.is_approved ? pageStyles.secondaryBtn : pageStyles.primaryBtn}
                       onClick={() => toggleApproval(dealer, !dealer.is_approved)}

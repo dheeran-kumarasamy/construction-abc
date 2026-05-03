@@ -105,8 +105,8 @@ export default function MarginEngine() {
   }
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="builder-theme builder-page" style={pageStyles.page}>
+      <div className="builder-surface" style={pageStyles.card}>
         <h2 style={pageStyles.title}>Margin & Uplift Engine</h2>
 
         <div style={pageStyles.controls}>

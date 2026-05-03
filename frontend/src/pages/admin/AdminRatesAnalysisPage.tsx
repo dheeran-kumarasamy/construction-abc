@@ -240,7 +240,7 @@ export default function AdminRatesAnalysisPage() {
       {success && <div style={{ ...pageStyles.success, marginBottom: 10 }}>{success}</div>}
 
       <AdminCard>
-        <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        <div className="admin-tabs-row" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
           <button
             type="button"
             style={activeTab === "overview" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
@@ -276,40 +276,40 @@ export default function AdminRatesAnalysisPage() {
           <div>
             <h3 style={{ marginTop: 0, marginBottom: 14 }}>Rates & Pricing Analysis</h3>
             {analysis ? (
-              <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+              <div className="admin-kpi-grid" style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
                 <AdminCard>
                   <div style={{ color: "#64748b", fontSize: 12, fontWeight: 600 }}>Total Price Records</div>
-                  <div style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
+                  <div className="admin-kpi-value" style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
                     {analysis.totalRecords.toLocaleString()}
                   </div>
                 </AdminCard>
                 <AdminCard>
                   <div style={{ color: "#64748b", fontSize: 12, fontWeight: 600 }}>Average Price (₹)</div>
-                  <div style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
+                  <div className="admin-kpi-value" style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
                     {formatINR(analysis.averagePrice, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                   </div>
                 </AdminCard>
                 <AdminCard>
                   <div style={{ color: "#64748b", fontSize: 12, fontWeight: 600 }}>Unique Materials</div>
-                  <div style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
+                  <div className="admin-kpi-value" style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
                     {analysis.materialCount}
                   </div>
                 </AdminCard>
                 <AdminCard>
                   <div style={{ color: "#64748b", fontSize: 12, fontWeight: 600 }}>Districts Covered</div>
-                  <div style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
+                  <div className="admin-kpi-value" style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
                     {analysis.districtCount}
                   </div>
                 </AdminCard>
                 <AdminCard>
                   <div style={{ color: "#64748b", fontSize: 12, fontWeight: 600 }}>Flagged Records</div>
-                  <div style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
+                  <div className="admin-kpi-value" style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
                     {analysis.flaggedCount}
                   </div>
                 </AdminCard>
                 <AdminCard>
                   <div style={{ color: "#64748b", fontSize: 12, fontWeight: 600 }}>Pending Approvals</div>
-                  <div style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
+                  <div className="admin-kpi-value" style={{ color: "#0f172a", fontSize: 28, fontWeight: 800, marginTop: 8 }}>
                     {approvalRequests.length}
                   </div>
                 </AdminCard>
@@ -321,9 +321,10 @@ export default function AdminRatesAnalysisPage() {
             {analysis && Object.keys(analysis.sourceCount).length > 0 && (
               <div style={{ marginTop: 20 }}>
                 <h4>Price Sources Distribution</h4>
-                <div style={{ display: "grid", gap: 8 }}>
+                <div className="admin-source-list" style={{ display: "grid", gap: 8 }}>
                   {Object.entries(analysis.sourceCount).map(([source, count]) => (
                     <div
+                      className="admin-source-item"
                       key={source}
                       style={{
                         display: "flex",

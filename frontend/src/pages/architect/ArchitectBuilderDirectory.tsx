@@ -58,8 +58,8 @@ export default function ArchitectBuilderDirectory() {
   });
 
   return (
-    <div style={pageStyles.page}>
-      <div style={pageStyles.card}>
+    <div className="architect-theme architect-page" style={pageStyles.page}>
+      <div className="architect-surface" style={pageStyles.card}>
         {/* Header */}
         <div style={pageStyles.header}>
           <div>

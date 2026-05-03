@@ -1814,8 +1814,8 @@ export default function ApplyBasePricing({
   }
 
   return (
-    <div style={outerStyle}>
-      <div style={cardStyle}>
+    <div className="builder-theme builder-page" style={outerStyle}>
+      <div className="builder-surface" style={cardStyle}>
         {!embedded ? (
           <div
             style={{
