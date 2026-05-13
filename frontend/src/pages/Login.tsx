@@ -4,13 +4,17 @@ import { useAuth } from "../auth/AuthContext";
 import { pageStyles } from "../layouts/pageStyles";
 import { apiUrl } from "../services/api";
 import FingerInAirEstimator from "../components/FingerInAirEstimator";
+import GoogleLoginButton from "../components/GoogleLoginButton";
+import type { GoogleOAuthResult } from "../services/googleOAuth";
 
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const hasGoogleClientId = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
 
   const [mode, setMode] = useState<"login" | "register" | "reset">("login");
   const [registerRole, setRegisterRole] = useState<"architect" | "dealer" | "builder">("architect");
+  const [loginRole, setLoginRole] = useState<"architect" | "builder" | "dealer" | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [organizationName, setOrganizationName] = useState("");
@@ -98,6 +102,35 @@ export default function Login() {
       else navigate("/");
     } catch (err: any) {
       setError(err.message || "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleLoginSuccess(result: GoogleOAuthResult) {
+    try {
+      setLoading(true);
+      setError("");
+      setSuccessMessage("");
+
+      login(result.email, result.role, result.orgRole || null, result.adminRole || null);
+      localStorage.setItem("token", result.token);
+      localStorage.setItem("role", result.role);
+      if (result.role === "builder") {
+        localStorage.setItem("builder_profile_complete", result.profileComplete ? "1" : "0");
+      }
+
+      if (result.role === "architect") navigate("/architect");
+      else if (result.role === "builder") {
+        if (result.profileComplete) navigate("/builder");
+        else navigate("/builder/profile/setup");
+      }
+      else if (result.role === "client") navigate("/client");
+      else if (result.role === "dealer") navigate("/prices");
+      else if (result.role === "admin") navigate("/admin");
+      else navigate("/");
+    } catch (err: any) {
+      setError(err.message || "Failed to process Google login");
     } finally {
       setLoading(false);
     }
@@ -272,6 +305,48 @@ export default function Login() {
           </button>
         </div>
 
+        {mode === "login" && (
+          <div style={{ marginBottom: "12px" }}>
+            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "12px" }}>
+              <button
+                type="button"
+                style={loginRole === "architect" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
+                onClick={() => setLoginRole("architect")}
+              >
+                Architect
+              </button>
+              <button
+                type="button"
+                style={loginRole === "builder" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
+                onClick={() => setLoginRole("builder")}
+              >
+                Builder
+              </button>
+              <button
+                type="button"
+                style={loginRole === "dealer" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
+                onClick={() => setLoginRole("dealer")}
+              >
+                Supplier
+              </button>
+            </div>
+            {loginRole && hasGoogleClientId && (
+              <GoogleLoginButton
+                role={loginRole}
+                onSuccess={handleGoogleLoginSuccess}
+                onError={setError}
+              />
+            )}
+            {loginRole && !hasGoogleClientId && (
+              <div style={{ color: "#b45309", fontSize: "12px", marginBottom: "6px" }}>
+                Google Sign-In is not configured. Set VITE_GOOGLE_CLIENT_ID in frontend env.
+              </div>
+            )}
+            <div style={{ textAlign: "center", margin: "8px 0", color: "#64748b", fontSize: "13px" }}>
+              or
+            </div>
+          </div>
+        )}
         <input
           style={pageStyles.input}
           type="email"

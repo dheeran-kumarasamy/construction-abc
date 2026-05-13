@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 
+import { GoogleOAuthProvider } from "@react-oauth/google"; // Valid import
 // Existing pages (kept for compatibility)
 import CreateProject from "./pages/architect/CreateProject";
 import BOQMapping from "./pages/architect/BOQMapping";
@@ -353,19 +354,20 @@ function ComparisonScreenWithParams() {
 // --- Main App ---
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <FlowBackgroundController />
-        <BackButton />
-        <DashboardButton />
-        <Routes>
-          {/* Public */}
-          <Route path="/" element={<Navigate to="/login" />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/accept-invite" element={<AcceptInvite />} />
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || ""}>
+      <AuthProvider>
+        <BrowserRouter>
+          <FlowBackgroundController />
+          <BackButton />
+          <DashboardButton />
+          <Routes>
+            {/* Public */}
+            <Route path="/" element={<Navigate to="/login" />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/accept-invite" element={<AcceptInvite />} />
 
-          {/* Architect */}
-          <Route
+            {/* Architect */}
+            <Route
             path="/admin"
             element={
               <RequireAuth role="admin">
@@ -795,5 +797,6 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+  </GoogleOAuthProvider>
   );
 }

@@ -10,6 +10,7 @@ import {
 	updateMyPhoneNumber,
 } from "./auth.controller";
 import { authenticate } from "./auth.middleware";
+import { googleOAuthCallback, validateToken } from "./oauth.controller";
 
 const router = Router();
 
@@ -21,5 +22,7 @@ router.post("/invite", authenticate, inviteUser);
 router.get("/invites", authenticate, getInvites);
 router.get("/me", authenticate, getMyProfile);
 router.patch("/me/phone", authenticate, updateMyPhoneNumber);
+router.post("/oauth/google-callback", googleOAuthCallback);
+router.post("/oauth/validate-token", validateToken);
 
 export default router;
