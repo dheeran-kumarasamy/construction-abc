@@ -1749,27 +1749,57 @@ export default function ApplyBasePricing({
   );
 
   const outerStyle = embedded ? { display: "block" as const } : pageStyles.page;
-  const cardStyle = embedded ? { ...pageStyles.card, padding: "0" } : pageStyles.card;
+  const shellStyle = {
+    ...(embedded ? { ...pageStyles.card } : pageStyles.card),
+    padding: 0,
+    borderRadius: 14,
+    overflow: "hidden" as const,
+  };
+  const heroStyle = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "1rem",
+    padding: "1.1rem 1.35rem",
+    background: "linear-gradient(120deg, rgba(229, 246, 245, 0.95), rgba(248, 252, 255, 0.9))",
+    borderBottom: "1px solid #d9e2ec",
+  };
+  const contentPadStyle = { padding: "0.85rem 1.35rem 1.15rem" };
+  const actionPrimaryBtnStyle = {
+    ...pageStyles.primaryBtn,
+    borderRadius: 8,
+    height: 40,
+    boxShadow: "0 1px 4px rgba(15, 23, 42, 0.12)",
+  };
+  const actionSecondaryBtnStyle = {
+    ...pageStyles.secondaryBtn,
+    borderRadius: 8,
+    height: 40,
+    border: "1px solid #9fb3c8",
+    background: "#ffffff",
+    color: "#243b53",
+  };
 
   if (submittedMaterialScreen) {
     return (
       <div style={outerStyle}>
-        <div style={cardStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+        <div className="builder-surface" style={shellStyle}>
+          <div style={heroStyle}>
             <div>
-              <h2 style={pageStyles.title}>PWD Basic Material Requirement</h2>
-              <p style={pageStyles.subtitle}>
+              <h2 style={{ margin: 0, fontSize: "clamp(27px, 3.3vw, 34px)", fontWeight: 700, color: "#102a43", letterSpacing: "-0.3px" }}>PWD Basic Material Requirement</h2>
+              <p style={{ margin: "0.35rem 0 0", color: "#486581", fontSize: 14 }}>
                 {submittedMaterialScreen.projectName} • Revision {submittedMaterialScreen.revisionNumber} • {formatINR(submittedMaterialScreen.grandTotal, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
-            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-              <button type="button" style={pageStyles.secondaryBtn} onClick={() => navigate("/builder/submit")}>View Submissions</button>
-              <button type="button" style={pageStyles.secondaryBtn} onClick={() => setSubmittedMaterialScreen(null)}>Create Another Estimate</button>
-              <button type="button" style={pageStyles.primaryBtn} onClick={() => navigate("/builder")}>Back To Dashboard</button>
+            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
+              <button type="button" style={actionSecondaryBtnStyle} onClick={() => navigate("/builder/submit")}>View Submissions</button>
+              <button type="button" style={actionSecondaryBtnStyle} onClick={() => setSubmittedMaterialScreen(null)}>Create Another Estimate</button>
+              <button type="button" style={actionPrimaryBtnStyle} onClick={() => navigate("/builder")}>Back To Dashboard</button>
             </div>
           </div>
 
-          <div style={{ ...pageStyles.result, marginTop: "1rem" }}>
+          <div style={{ ...contentPadStyle }}>
+          <div style={{ ...pageStyles.result, marginBottom: "1rem" }}>
             Stage-wise quantities are derived using PWD-style item-to-material factors from your submitted BOQ lines.
           </div>
 
@@ -1808,6 +1838,7 @@ export default function ApplyBasePricing({
               </div>
             ))}
           </div>
+          </div>
         </div>
       </div>
     );
@@ -1815,34 +1846,28 @@ export default function ApplyBasePricing({
 
   return (
     <div className="builder-theme builder-page" style={outerStyle}>
-      <div className="builder-surface" style={cardStyle}>
+      <div className="builder-surface" style={shellStyle}>
         {!embedded ? (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: "2rem",
-            }}
-          >
-            <h2 style={pageStyles.title}>{pageHeading}</h2>
-            <div style={{ width: "120px", opacity: 0.7 }}>
+          <div style={heroStyle}>
+            <h2 style={{ margin: 0, fontSize: "clamp(27px, 3.3vw, 34px)", fontWeight: 700, color: "#102a43", letterSpacing: "-0.3px" }}>{pageHeading}</h2>
+            <div style={{ width: "340px", maxWidth: "100%", opacity: 0.34, filter: "grayscale(100%)", marginRight: "0.2rem" }}>
               <ConstructionIllustration type="blueprint" />
             </div>
           </div>
         ) : (
-          <div style={{ marginBottom: "1rem" }}>
-            <h3 style={{ ...pageStyles.title, fontSize: "clamp(18px, 3vw, 24px)" }}>{pageHeading}</h3>
+          <div style={{ padding: "0.75rem 1.35rem", borderBottom: "1px solid #d9e2ec", background: "#f8fafc" }}>
+            <h3 style={{ margin: 0, fontSize: "clamp(18px, 3vw, 24px)", fontWeight: 700, color: "#102a43" }}>{pageHeading}</h3>
             {selectedProject ? (
-              <p style={pageStyles.subtitle}>
+              <p style={{ margin: "0.25rem 0 0", color: "#486581", fontSize: 14 }}>
                 Selected project: {selectedProject.name} ({selectedProject.site_address || "No location"})
               </p>
             ) : (
-              <p style={pageStyles.subtitle}>Select a project from the dashboard status board below.</p>
+              <p style={{ margin: "0.25rem 0 0", color: "#486581", fontSize: 14 }}>Select a project from the dashboard status board below.</p>
             )}
           </div>
         )}
 
+        <div style={contentPadStyle}>
         {/* Project Selection */}
         <div style={{ marginBottom: "2rem" }}>
           <label
@@ -2601,6 +2626,7 @@ export default function ApplyBasePricing({
             Please select a project to start BOQ estimate.
           </p>
         )}
+        </div>{/* end contentPadStyle */}
       </div>
 
       {isUiLocked && (
