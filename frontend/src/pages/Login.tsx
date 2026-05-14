@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { pageStyles } from "../layouts/pageStyles";
@@ -107,7 +107,7 @@ export default function Login() {
     }
   }
 
-  async function handleGoogleLoginSuccess(result: GoogleOAuthResult) {
+  const handleGoogleLoginSuccess = useCallback(async (result: GoogleOAuthResult) => {
     try {
       setLoading(true);
       setError("");
@@ -134,7 +134,7 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [login, navigate]);
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();

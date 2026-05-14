@@ -5,6 +5,7 @@ import { apiUrl } from "../../services/api";
 import { formatINR } from "../../services/currency";
 import { formatDate, formatTime } from "../../services/dateTime";
 import TableWrapper from "../../components/TableWrapper";
+import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 
 interface Estimate {
   estimate_id: string;
@@ -151,7 +152,54 @@ export default function SubmitEstimate({ embedded = false }: { embedded?: boolea
   };
 
   const outerStyle = embedded ? { display: "block" as const } : pageStyles.page;
-  const cardStyle = embedded ? { ...pageStyles.card, padding: "0" } : pageStyles.card;
+  const shellStyle = {
+    ...(embedded ? { ...pageStyles.card } : pageStyles.card),
+    padding: 0,
+    borderRadius: 14,
+    overflow: "hidden" as const,
+  };
+  const heroStyle = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "1rem",
+    padding: "1.1rem 1.35rem",
+    background: "linear-gradient(120deg, rgba(229, 246, 245, 0.95), rgba(248, 252, 255, 0.9))",
+    borderBottom: "1px solid #d9e2ec",
+  };
+  const insightsBandStyle = {
+    padding: "0.75rem 1.35rem",
+    borderBottom: "1px solid #d9e2ec",
+    background: "#f8fafc",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "0.75rem",
+    flexWrap: "wrap" as const,
+  };
+  const metricCardStyle = {
+    border: "1px solid #d9e2ec",
+    borderRadius: 10,
+    background: "#ffffff",
+    padding: "0.55rem 0.75rem",
+    minWidth: 138,
+  };
+  const panelStyle = {
+    border: "1px solid #d9e2ec",
+    borderRadius: 12,
+    background: "#ffffff",
+    padding: "0.9rem",
+  };
+  const actionPrimaryBtnStyle = {
+    ...pageStyles.primaryBtn,
+    borderRadius: 8,
+    height: 40,
+    boxShadow: "0 1px 4px rgba(15, 23, 42, 0.12)",
+  };
+
+  const totalEstimates = estimates.length;
+  const pendingCount = estimates.filter((estimate) => !estimate.latest_review_status).length;
+  const changeRequestedCount = estimates.filter((estimate) => estimate.latest_review_status === "changes_requested").length;
   const selectedEstimate = estimates.find((estimate) => estimate.estimate_id === selectedEstimateId) || null;
 
   function renderNotesCell(note: string | null | undefined, title: string) {
@@ -197,74 +245,108 @@ export default function SubmitEstimate({ embedded = false }: { embedded?: boolea
 
   return (
     <div className="builder-theme builder-page" style={outerStyle}>
-      <div className="builder-surface" style={cardStyle}>
-        <h2 style={pageStyles.title}>View Submission</h2>
-
-        {loading ? (
-          <p>Loading submitted estimates...</p>
-        ) : estimates.length === 0 ? (
-          <div>
-            <p>No submitted estimates found.</p>
-            <button
-              style={{ ...pageStyles.primaryBtn, marginTop: "1rem" }}
-              onClick={() => navigate("/builder/apply-pricing")}
-            >
-              Go to Replace BOQ Rates With PWD Rates
-            </button>
+      <div className="builder-surface" style={shellStyle}>
+        <div style={heroStyle}>
+          <h2 style={{ margin: 0, fontSize: "clamp(27px, 3.3vw, 34px)", fontWeight: 700, color: "#102a43", letterSpacing: "-0.3px" }}>
+            View Submission
+          </h2>
+          <div style={{ width: "340px", maxWidth: "100%", opacity: 0.34, filter: "grayscale(100%)", marginRight: "0.2rem" }}>
+            <ConstructionIllustration type="tools" />
           </div>
-        ) : (
-          <TableWrapper>
-            <table style={{ ...pageStyles.table, minWidth: "1640px" }}>
-              <thead>
-                <tr>
-                  <th style={noWrapHeaderStyle}>Project</th>
-                  <th style={noWrapHeaderStyle}>Architect/Designer Org</th>
-                  <th style={noWrapHeaderStyle}>Review Status</th>
-                  <th style={noWrapHeaderStyle}>Latest Architect Comment</th>
-                  <th className="num-header" style={noWrapHeaderStyle}>Margin %</th>
-                  <th className="amount-header" style={noWrapHeaderStyle}>Grand Total</th>
-                  <th style={noWrapHeaderStyle}>Submitted At</th>
-                  <th style={noWrapHeaderStyle}>Notes</th>
-                  <th style={noWrapHeaderStyle}>Submitted Estimate</th>
-                  <th style={noWrapHeaderStyle}>History</th>
-                </tr>
-              </thead>
-              <tbody>
-                {estimates.map((estimate, idx) => (
-                  <tr key={estimate.revision_id || estimate.estimate_id} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
-                    <td style={noWrapCellStyle}>{estimate.project_name}</td>
-                    <td style={noWrapCellStyle}>{estimate.architect_designer_org_name || "-"}</td>
-                    <td style={noWrapCellStyle}>{formatReviewStatus(estimate.latest_review_status)}</td>
-                    <td style={wrapCellStyle}>{estimate.latest_review_comment || "-"}</td>
-                    <td className="num-cell" style={{ ...noWrapCellStyle, ...pageStyles.tdPercent }}>{Number(estimate.margin_percent || 0)}%</td>
-                    <td className="amount-cell" style={noWrapCellStyle}>{formatINR(estimate.grand_total || 0, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
-                    <td style={{ ...noWrapCellStyle, ...pageStyles.tdDateTime }}>{renderDateTime(estimate.submitted_at)}</td>
-                    <td style={wrapCellStyle}>{renderNotesCell(estimate.notes, `${estimate.project_name} - Notes`)}</td>
-                    <td style={{ ...noWrapCellStyle, ...pageStyles.tdCenter }}>
-                      <button
-                        style={pageStyles.secondaryBtn}
-                        onClick={() => navigate(`/builder/apply-pricing?projectId=${encodeURIComponent(estimate.project_id)}`)}
-                      >
-                        View
-                      </button>
-                    </td>
-                    <td style={{ ...noWrapCellStyle, ...pageStyles.tdCenter }}>
-                      <button
-                        style={pageStyles.secondaryBtn}
-                        onClick={() => fetchEstimateHistory(estimate.estimate_id)}
-                      >
-                        View History
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableWrapper>
-        )}
+        </div>
+
+        <div style={insightsBandStyle}>
+          <div>
+            <p style={{ margin: 0, color: "#334e68", fontSize: 12, fontWeight: 800, letterSpacing: "0.08em" }}>INSIGHTS</p>
+          </div>
+          <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap" }}>
+            <div style={metricCardStyle}>
+              <p style={{ margin: 0, color: "#486581", fontSize: 12, fontWeight: 600 }}>Total Submissions</p>
+              <p style={{ margin: "0.1rem 0 0", fontWeight: 700, fontSize: "1.9rem", color: "#227c9d", lineHeight: 1 }}>{totalEstimates}</p>
+            </div>
+            <div style={metricCardStyle}>
+              <p style={{ margin: 0, color: "#486581", fontSize: 12, fontWeight: 600 }}>Awaiting Review</p>
+              <p style={{ margin: "0.1rem 0 0", fontWeight: 700, fontSize: "1.9rem", color: "#2f855a", lineHeight: 1 }}>{pendingCount}</p>
+            </div>
+            <div style={metricCardStyle}>
+              <p style={{ margin: 0, color: "#486581", fontSize: 12, fontWeight: 600 }}>Changes Requested</p>
+              <p style={{ margin: "0.1rem 0 0", fontWeight: 700, fontSize: "1.9rem", color: "#b7791f", lineHeight: 1 }}>{changeRequestedCount}</p>
+            </div>
+          </div>
+          <button type="button" style={actionPrimaryBtnStyle} onClick={fetchSubmittedEstimates}>
+            Refresh
+          </button>
+        </div>
+
+        <div style={{ padding: "0.85rem 1.35rem 1.15rem" }}>
+          <div style={panelStyle}>
+            {loading ? (
+              <p>Loading submitted estimates...</p>
+            ) : estimates.length === 0 ? (
+              <div>
+                <p>No submitted estimates found.</p>
+                <button
+                  style={{ ...pageStyles.primaryBtn, marginTop: "1rem" }}
+                  onClick={() => navigate("/builder/apply-pricing")}
+                >
+                  Go to Replace BOQ Rates With PWD Rates
+                </button>
+              </div>
+            ) : (
+              <TableWrapper>
+                <table style={{ ...pageStyles.table, minWidth: "1640px" }}>
+                  <thead>
+                    <tr>
+                      <th style={noWrapHeaderStyle}>Project</th>
+                      <th style={noWrapHeaderStyle}>Architect/Designer Org</th>
+                      <th style={noWrapHeaderStyle}>Review Status</th>
+                      <th style={noWrapHeaderStyle}>Latest Architect Comment</th>
+                      <th className="num-header" style={noWrapHeaderStyle}>Margin %</th>
+                      <th className="amount-header" style={noWrapHeaderStyle}>Grand Total</th>
+                      <th style={noWrapHeaderStyle}>Submitted At</th>
+                      <th style={noWrapHeaderStyle}>Notes</th>
+                      <th style={noWrapHeaderStyle}>Submitted Estimate</th>
+                      <th style={noWrapHeaderStyle}>History</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {estimates.map((estimate, idx) => (
+                      <tr key={estimate.revision_id || estimate.estimate_id} style={idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd}>
+                        <td style={noWrapCellStyle}>{estimate.project_name}</td>
+                        <td style={noWrapCellStyle}>{estimate.architect_designer_org_name || "-"}</td>
+                        <td style={noWrapCellStyle}>{formatReviewStatus(estimate.latest_review_status)}</td>
+                        <td style={wrapCellStyle}>{estimate.latest_review_comment || "-"}</td>
+                        <td className="num-cell" style={{ ...noWrapCellStyle, ...pageStyles.tdPercent }}>{Number(estimate.margin_percent || 0)}%</td>
+                        <td className="amount-cell" style={noWrapCellStyle}>{formatINR(estimate.grand_total || 0, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                        <td style={{ ...noWrapCellStyle, ...pageStyles.tdDateTime }}>{renderDateTime(estimate.submitted_at)}</td>
+                        <td style={wrapCellStyle}>{renderNotesCell(estimate.notes, `${estimate.project_name} - Notes`)}</td>
+                        <td style={{ ...noWrapCellStyle, ...pageStyles.tdCenter }}>
+                          <button
+                            style={pageStyles.secondaryBtn}
+                            onClick={() => navigate(`/builder/apply-pricing?projectId=${encodeURIComponent(estimate.project_id)}`)}
+                          >
+                            View
+                          </button>
+                        </td>
+                        <td style={{ ...noWrapCellStyle, ...pageStyles.tdCenter }}>
+                          <button
+                            style={pageStyles.secondaryBtn}
+                            onClick={() => fetchEstimateHistory(estimate.estimate_id)}
+                          >
+                            View History
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TableWrapper>
+            )}
+          </div>
+        </div>
 
         {selectedEstimateId && (
-          <div style={{ marginTop: "1.25rem", border: "1px solid #ccfbf1", borderRadius: "8px", padding: "1rem", background: "#f0fdfa" }}>
+          <div style={{ margin: "0 1.35rem 1.15rem", border: "1px solid #ccfbf1", borderRadius: "12px", padding: "1rem", background: "#f0fdfa" }}>
             <h3 style={{ ...pageStyles.subtitle, marginTop: 0 }}>Resubmission History</h3>
             {selectedEstimate?.architect_designer_org_name && (
               <p style={{ marginTop: 0, color: "#0f172a", fontWeight: 600 }}>
