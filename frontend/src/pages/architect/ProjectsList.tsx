@@ -91,127 +91,145 @@ export default function ProjectsList() {
 
 
 
+  const outerStyle = pageStyles.page;
+  const shellStyle = {
+    ...pageStyles.card,
+    padding: 0,
+    borderRadius: 14,
+    overflow: "hidden" as const,
+  };
+  const heroStyle = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "1rem",
+    padding: "1.1rem 1.35rem",
+    background: "linear-gradient(120deg, rgba(243, 232, 255, 0.95), rgba(248, 252, 255, 0.9))",
+    borderBottom: "1px solid #e5d7f7",
+  };
+  const contentPadStyle = { padding: "0.85rem 1.35rem 1.15rem" };
+  const actionPrimaryBtnStyle = {
+    ...pageStyles.primaryBtn,
+    borderRadius: 8,
+    height: 40,
+    boxShadow: "0 1px 4px rgba(15, 23, 42, 0.12)",
+  };
+  const actionSecondaryBtnStyle = {
+    ...pageStyles.secondaryBtn,
+    borderRadius: 8,
+    height: 40,
+    border: "1px solid #bda6e6",
+    background: "#ffffff",
+    color: "#3f2d5c",
+  };
+
   return (
-    <div className="architect-theme architect-page" style={pageStyles.page}>
-      <div className="architect-surface" style={pageStyles.card}>
-        <div style={pageStyles.header}>
+    <div className="architect-theme architect-page" style={outerStyle}>
+      <div className="architect-surface" style={shellStyle}>
+        <div style={heroStyle}>
           <div>
-            <h2 style={pageStyles.title}>View Projects</h2>
-            <p style={pageStyles.subtitle}>
+            <h2 style={{ margin: 0, fontSize: "clamp(27px, 3.3vw, 34px)", fontWeight: 700, color: "#3f2d5c", letterSpacing: "-0.3px" }}>
+              View Projects
+            </h2>
+            <p style={{ margin: "0.4rem 0 0", color: "#6b5b7f", fontSize: 15 }}>
               Default architect workspace for project access, BOQ actions, submitted estimates, and self-estimation.
             </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-            <ConstructionIllustration type="building" size={80} />
-            <button style={pageStyles.primaryBtn} onClick={() => navigate("/architect/create")}>
-              New Project
-            </button>
-            <button style={pageStyles.secondaryBtn} onClick={() => navigate("/architect/builders")}>
-              Browse Builders
-            </button>
-            {isArchitectHead ? (
-              <button
-                style={pageStyles.secondaryBtn}
-                onClick={() => navigate("/architect/invite?role=architect")}
-              >
-                Architect Team Invite
-              </button>
-            ) : null}
-            <button style={pageStyles.secondaryBtn} onClick={() => navigate("/architect/plan-requirements")}>
-              2D Plan & Requirements
-            </button>
+          <div style={{ width: "340px", maxWidth: "100%", opacity: 0.34, filter: "grayscale(100%)", marginRight: "0.2rem" }}>
+            <ConstructionIllustration type="building" />
           </div>
         </div>
+        <div style={contentPadStyle}>
+          {loading && <div>Loading projects...</div>}
+          {error && <div style={pageStyles.error}>{error}</div>}
 
-        {loading && <div>Loading projects...</div>}
-        {error && <div style={pageStyles.error}>{error}</div>}
+          {!loading && !error && projects.length === 0 && (
+            <div>No projects yet. Create your first project.</div>
+          )}
 
-        {!loading && !error && projects.length === 0 && (
-          <div>No projects yet. Create your first project.</div>
-        )}
-
-        {!loading && !error && projects.length > 0 && (
-          <div style={{ overflowX: "auto" }}>
-            <table style={pageStyles.table}>
-              <thead>
-                <tr>
-                  <th style={pageStyles.th}>Project Name</th>
-                  <th style={pageStyles.th}>Project Type</th>
-                  <th style={pageStyles.th}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map((p) => {
-                  const projectRef = resolveProjectRef(p);
-                  const hasSubmittedBoq = Boolean(p.boq_id);
-                  return (
-                  <tr key={p.id}>
-                    <td style={pageStyles.td}>
-                      <a
-                        href="#"
-                        style={{ color: "#0f766e", textDecoration: "underline", fontWeight: 600 }}
-                        onClick={e => {
-                          e.preventDefault();
-                          navigate(`/architect/project/${p.id}`);
-                        }}
-                      >
-                        {p.name}
-                      </a>
-                    </td>
-                    <td style={pageStyles.td}>{formatProjectType(p.building_type)}</td>
-                    <td style={pageStyles.td}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button
-                          type="button"
-                          style={hasSubmittedBoq ? pageStyles.secondaryBtn : pageStyles.primaryBtn}
-                          onClick={() => navigate(getBoqEntryPath(p))}
-                        >
-                          Enter New BOQ
-                        </button>
-
-                        {p.boq_id && (
-                          <>
-                            <button
-                              type="button"
-                              style={pageStyles.primaryBtn}
-                              onClick={() => navigate(`/estimation/${projectRef}?mode=view`)}
-                            >
-                              View Existing BOQ
-                            </button>
-
-                            <button
-                              type="button"
-                              style={pageStyles.primaryBtn}
-                              onClick={() => navigate(`/architect/invite?projectId=${encodeURIComponent(projectRef)}`)}
-                            >
-                              Invite Builders
-                            </button>
-
-                            <button
-                              type="button"
-                              style={pageStyles.secondaryBtn}
-                              onClick={() => navigate(`/architect/received?projectId=${encodeURIComponent(p.id)}`)}
-                            >
-                              View Submissions
-                            </button>
-
-                            <button
-                              type="button"
-                              style={pageStyles.secondaryBtn}
-                              onClick={() => navigate(`/architect/comparison?projectId=${encodeURIComponent(p.id)}`)}
-                            >
-                              Compare & Award
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
+          {!loading && !error && projects.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table style={pageStyles.table}>
+                <thead>
+                  <tr>
+                    <th style={pageStyles.th}>Project Name</th>
+                    <th style={pageStyles.th}>Project Type</th>
+                    <th style={pageStyles.th}>Actions</th>
                   </tr>
-                )})}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {projects.map((p) => {
+                    const projectRef = resolveProjectRef(p);
+                    const hasSubmittedBoq = Boolean(p.boq_id);
+                    return (
+                      <tr key={p.id}>
+                        <td style={pageStyles.td}>
+                          <a
+                            href="#"
+                            style={{ color: "#0f766e", textDecoration: "underline", fontWeight: 600 }}
+                            onClick={e => {
+                              e.preventDefault();
+                              navigate(`/architect/project/${p.id}`);
+                            }}
+                          >
+                            {p.name}
+                          </a>
+                        </td>
+                        <td style={pageStyles.td}>{formatProjectType(p.building_type)}</td>
+                        <td style={pageStyles.td}>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              style={hasSubmittedBoq ? pageStyles.secondaryBtn : pageStyles.primaryBtn}
+                              onClick={() => navigate(getBoqEntryPath(p))}
+                            >
+                              Enter New BOQ
+                            </button>
+
+                            {p.boq_id && (
+                              <>
+                                <button
+                                  type="button"
+                                  style={pageStyles.primaryBtn}
+                                  onClick={() => navigate(`/estimation/${projectRef}?mode=view`)}
+                                >
+                                  View Existing BOQ
+                                </button>
+
+                                <button
+                                  type="button"
+                                  style={pageStyles.primaryBtn}
+                                  onClick={() => navigate(`/architect/invite?projectId=${encodeURIComponent(projectRef)}`)}
+                                >
+                                  Invite Builders
+                                </button>
+
+                                <button
+                                  type="button"
+                                  style={pageStyles.secondaryBtn}
+                                  onClick={() => navigate(`/architect/received?projectId=${encodeURIComponent(p.id)}`)}
+                                >
+                                  View Submissions
+                                </button>
+
+                                <button
+                                  type="button"
+                                  style={pageStyles.secondaryBtn}
+                                  onClick={() => navigate(`/architect/comparison?projectId=${encodeURIComponent(p.id)}`)}
+                                >
+                                  Compare & Award
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )})}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>{/* end contentPadStyle */}
       </div>
     </div>
   );

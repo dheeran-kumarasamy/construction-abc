@@ -119,24 +119,37 @@ export default function ComparisonDashboard() {
     ? estimates.find((estimate) => estimate.revision_id === awardedRevisionId) || null
     : null;
 
+  const outerStyle = pageStyles.page;
+  const shellStyle = {
+    ...pageStyles.card,
+    padding: 0,
+    borderRadius: 14,
+    overflow: "hidden" as const,
+  };
+  const heroStyle = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "1rem",
+    padding: "1.1rem 1.35rem",
+    background: "linear-gradient(120deg, rgba(243, 232, 255, 0.95), rgba(248, 252, 255, 0.9))",
+    borderBottom: "1px solid #e5d7f7",
+  };
+  const contentPadStyle = { padding: "0.85rem 1.35rem 1.15rem" };
+
   return (
-    <div className="architect-theme architect-page" style={pageStyles.page}>
-      <div className="architect-surface" style={pageStyles.card}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "2rem",
-          }}
-        >
-          <h2 style={pageStyles.title}>Builder Estimate Comparison</h2>
-          <div style={{ width: "120px", opacity: 0.7 }}>
+    <div className="architect-theme architect-page" style={outerStyle}>
+      <div className="architect-surface" style={shellStyle}>
+        <div style={heroStyle}>
+          <h2 style={{ margin: 0, fontSize: "clamp(27px, 3.3vw, 34px)", fontWeight: 700, color: "#3f2d5c", letterSpacing: "-0.3px" }}>
+            Builder Estimate Comparison
+          </h2>
+          <div style={{ width: "340px", maxWidth: "100%", opacity: 0.34, filter: "grayscale(100%)", marginRight: "0.2rem" }}>
             <ConstructionIllustration type="blueprint" />
           </div>
         </div>
 
-        <div style={{ marginBottom: "1rem" }}>
+        <div style={contentPadStyle}>
           <label
             style={{
               display: "block",
@@ -159,80 +172,7 @@ export default function ComparisonDashboard() {
               </option>
             ))}
           </select>
-        </div>
-
-        {loading ? (
-          <p>Loading projects...</p>
-        ) : estimates.length === 0 ? (
-          <p>No submitted estimates for this project yet.</p>
-        ) : (
-          <TableWrapper>
-            {awardedEstimate ? (
-              <div
-                style={{
-                  marginBottom: "0.9rem",
-                  padding: "0.85rem 1rem",
-                  borderRadius: "10px",
-                  border: "1px solid #99f6e4",
-                  background: "#f0fdfa",
-                  color: "#115e59",
-                  fontWeight: 600,
-                }}
-              >
-                Currently awarded builder: {awardedEstimate.builder_name}
-              </div>
-            ) : null}
-            <table style={pageStyles.table}>
-            <thead>
-              <tr>
-                <th className="num-header" style={pageStyles.th}>Rank</th>
-                <th style={pageStyles.th}>Builder</th>
-                <th className="amount-header" style={pageStyles.th}>Grand Total</th>
-                <th style={pageStyles.th}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {estimates.map((e, idx) => (
-                <tr
-                  key={e.revision_id}
-                  style={
-                    e.rank === 1
-                      ? { ...(idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd), backgroundColor: "#f0fdfa" }
-                      : (idx % 2 === 0 ? pageStyles.rowEven : pageStyles.rowOdd)
-                  }
-                >
-                  <td className="num-cell" style={{ ...pageStyles.td, fontWeight: "bold" }}>#{e.rank}</td>
-                  <td style={pageStyles.td}>{e.builder_name}</td>
-                  <td
-                    className="amount-cell"
-                    style={{
-                      ...pageStyles.td,
-                      fontWeight: e.rank === 1 ? "bold" : "normal",
-                      color: e.rank === 1 ? "#16A34A" : "inherit",
-                    }}
-                  >
-                    {formatINR(getGrandTotal(e), { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                  </td>
-                  <td style={pageStyles.td}>
-                    <button
-                      onClick={() => handleAward(e.revision_id)}
-                      disabled={e.revision_id === awardedRevisionId}
-                      style={{
-                        ...pageStyles.primaryBtn,
-                        ...(e.revision_id === awardedRevisionId
-                          ? { opacity: 0.55, cursor: "not-allowed" }
-                          : {}),
-                      }}
-                    >
-                      {e.revision_id === awardedRevisionId ? "Awarded" : "Award"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </TableWrapper>
-        )}
+        </div>{/* end contentPadStyle */}
       </div>
     </div>
   );
