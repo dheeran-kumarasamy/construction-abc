@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { pageStyles } from "../../layouts/pageStyles";
 import { ConstructionIllustration } from "../../components/ConstructionIllustration";
 import { apiUrl } from "../../services/api";
-import { useAuth } from "../../auth/AuthContext";
 
 interface ProjectRow {
   id: string; // UUID
@@ -52,8 +51,6 @@ function formatProjectType(value?: string | null): string {
 
 export default function ProjectsList() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const isArchitectHead = user?.role === "architect" && user?.orgRole === "head";
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -108,20 +105,6 @@ export default function ProjectsList() {
     borderBottom: "1px solid #e5d7f7",
   };
   const contentPadStyle = { padding: "0.85rem 1.35rem 1.15rem" };
-  const actionPrimaryBtnStyle = {
-    ...pageStyles.primaryBtn,
-    borderRadius: 8,
-    height: 40,
-    boxShadow: "0 1px 4px rgba(15, 23, 42, 0.12)",
-  };
-  const actionSecondaryBtnStyle = {
-    ...pageStyles.secondaryBtn,
-    borderRadius: 8,
-    height: 40,
-    border: "1px solid #bda6e6",
-    background: "#ffffff",
-    color: "#3f2d5c",
-  };
 
   return (
     <div className="architect-theme architect-page" style={outerStyle}>
