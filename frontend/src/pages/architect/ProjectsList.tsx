@@ -118,8 +118,17 @@ export default function ProjectsList() {
               Default architect workspace for project access, BOQ actions, submitted estimates, and self-estimation.
             </p>
           </div>
-          <div style={{ width: "340px", maxWidth: "100%", opacity: 0.34, filter: "grayscale(100%)", marginRight: "0.2rem" }}>
-            <ConstructionIllustration type="building" />
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <button
+              type="button"
+              style={{ ...pageStyles.primaryBtn, borderRadius: 8, height: 40, whiteSpace: "nowrap" }}
+              onClick={() => navigate("/architect/create")}
+            >
+              + Create New Project
+            </button>
+            <div style={{ width: "260px", maxWidth: "100%", opacity: 0.34, filter: "grayscale(100%)" }}>
+              <ConstructionIllustration type="building" />
+            </div>
           </div>
         </div>
         <div style={contentPadStyle}>
@@ -127,7 +136,16 @@ export default function ProjectsList() {
           {error && <div style={pageStyles.error}>{error}</div>}
 
           {!loading && !error && projects.length === 0 && (
-            <div>No projects yet. Create your first project.</div>
+            <div style={{ padding: "2rem 0", textAlign: "center", color: "#6b5b7f" }}>
+              <p style={{ marginBottom: "1rem", fontSize: 16 }}>No projects yet.</p>
+              <button
+                type="button"
+                style={{ ...pageStyles.primaryBtn, borderRadius: 8, height: 40 }}
+                onClick={() => navigate("/architect/create")}
+              >
+                + Create Your First Project
+              </button>
+            </div>
           )}
 
           {!loading && !error && projects.length > 0 && (
