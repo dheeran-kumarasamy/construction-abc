@@ -288,7 +288,9 @@ export async function getAllProjectEstimates(projectId: string) {
        e.project_id,
        e.builder_org_id,
        e.status,
-       o.name AS builder_name,
+       COALESCE(bp.company_name, o.name) AS builder_name,
+       o.name AS org_name,
+       bp.company_name,
        er.id AS revision_id,
        er.revision_number,
        er.pricing_snapshot,
@@ -302,6 +304,8 @@ export async function getAllProjectEstimates(projectId: string) {
        review.created_at AS latest_review_at
      FROM estimates e
      JOIN organizations o ON o.id = e.builder_org_id
+     LEFT JOIN users u ON u.organization_id = o.id AND u.role = 'builder'
+     LEFT JOIN builder_profiles bp ON bp.user_id = u.id
      LEFT JOIN LATERAL (
        SELECT id, revision_number, pricing_snapshot, grand_total, notes, submitted_at, margin_config
        FROM estimate_revisions
