@@ -31,6 +31,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [registrationStep, setRegistrationStep] = useState<"form" | "otp">("form");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSending, setOtpSending] = useState(false);
 
   useEffect(() => {
     if (mode !== "register" || registerRole !== "dealer") return;
@@ -136,21 +139,47 @@ export default function Login() {
     }
   }, [login, navigate]);
 
-  async function handleRegister(e: React.FormEvent) {
+  async function handleSendOtp(e: React.FormEvent) {
+    e.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError("Please enter your email address.");
+      return;
+    }
+    setOtpSending(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      const res = await fetch(apiUrl("/auth/otp/send"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send code");
+      setOtpCode("");
+      setRegistrationStep("otp");
+      setSuccessMessage(`A 6-digit code was sent to ${normalizedEmail}`);
+    } catch (err: any) {
+      setError(err.message || "Could not send verification code");
+    } finally {
+      setOtpSending(false);
+    }
+  }
+
+  async function handleRegisterWithOtp(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
     setSuccessMessage("");
-
     try {
       const normalizedEmail = email.trim().toLowerCase();
-
       const payload: Record<string, any> = {
         email: normalizedEmail,
         password,
         role: registerRole,
+        otp: otpCode.trim(),
       };
-
       if (registerRole === "architect") {
         payload.organizationName = organizationName.trim();
         payload.phoneNumber = architectPhoneNumber.trim() || undefined;
@@ -171,34 +200,24 @@ export default function Login() {
           productCategoryIds: dealerCategoryIds,
         };
       }
-
       const res = await fetch(apiUrl("/auth/register"), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Registration failed");
-      }
-
+      if (!res.ok) throw new Error(data.error || "Registration failed");
       login(normalizedEmail, data.role, data.orgRole || null);
       localStorage.setItem("token", data.token);
       localStorage.setItem("role", data.role);
       if (data.role === "builder") {
         localStorage.setItem("builder_profile_complete", data.profileComplete ? "1" : "0");
       }
-
       if (data.role === "architect") navigate("/architect");
       else if (data.role === "builder") {
         if (data.profileComplete) navigate("/builder");
         else navigate("/builder/profile/setup");
-      }
-      else if (data.role === "dealer") navigate("/prices");
+      } else if (data.role === "dealer") navigate("/prices");
       else navigate("/");
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -244,7 +263,15 @@ export default function Login() {
     <div style={pageStyles.page}>
       <form
         style={{ ...pageStyles.card, width: "min(380px, 100%)" }}
-        onSubmit={mode === "login" ? handleLogin : mode === "register" ? handleRegister : handleResetPassword}
+        onSubmit={
+          mode === "login"
+            ? handleLogin
+            : mode === "register"
+            ? registrationStep === "form"
+              ? handleSendOtp
+              : handleRegisterWithOtp
+            : handleResetPassword
+        }
       >
         <h2 style={pageStyles.title}>{mode === "login" ? "Login" : mode === "register" ? "Register" : "Reset Password"}</h2>
 
@@ -278,6 +305,7 @@ export default function Login() {
               setMode("login");
               setError("");
             }}
+            // Reset registration step when switching modes
           >
             Login
           </button>
@@ -286,6 +314,8 @@ export default function Login() {
             style={mode === "register" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
             onClick={() => {
               setMode("register");
+              setRegistrationStep("form");
+              setOtpCode("");
               setError("");
               setSuccessMessage("");
             }}
@@ -297,6 +327,7 @@ export default function Login() {
             style={mode === "reset" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
             onClick={() => {
               setMode("reset");
+              setRegistrationStep("form");
               setError("");
               setSuccessMessage("");
             }}
@@ -363,30 +394,86 @@ export default function Login() {
         {mode === "register" && (
           <>
             <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button
-                type="button"
-                style={registerRole === "architect" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
-                onClick={() => setRegisterRole("architect")}
-              >
-                Architect
-              </button>
-              <button
-                type="button"
-                style={registerRole === "builder" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
-                onClick={() => setRegisterRole("builder")}
-              >
-                Builder
-              </button>
-              <button
+              {registrationStep === "otp" ? (
+                <button
+                  type="button"
+                  style={pageStyles.secondaryBtn}
+                  onClick={() => { setRegistrationStep("form"); setError(""); setSuccessMessage(""); setOtpCode(""); }}
+                >
+                  ← Back
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    style={registerRole === "architect" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
+                    onClick={() => setRegisterRole("architect")}
+                  >
+                    Architect
+                  </button>
+                  <button
+                    type="button"
+                    style={registerRole === "builder" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
+                    onClick={() => setRegisterRole("builder")}
+                  >
+                    Builder
+                  </button>
+                  <button
                 type="button"
                 style={registerRole === "dealer" ? pageStyles.primaryBtn : pageStyles.secondaryBtn}
                 onClick={() => setRegisterRole("dealer")}
               >
                 Supplier
               </button>
+                </>
+              )}
             </div>
 
-            {registerRole === "architect" ? (
+            {registrationStep === "otp" ? (
+              <div>
+                <p style={{ margin: "0 0 10px", color: "#334155", fontSize: 14 }}>
+                  Enter the 6-digit code sent to <strong>{email.trim().toLowerCase()}</strong>
+                </p>
+                <input
+                  style={{ ...pageStyles.input, letterSpacing: 6, fontSize: 22, textAlign: "center" }}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="000000"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                  autoFocus
+                  required
+                />
+                <button
+                  type="button"
+                  style={{ ...pageStyles.secondaryBtn, marginTop: 4, fontSize: 13 }}
+                  disabled={otpSending}
+                  onClick={async () => {
+                    setOtpSending(true);
+                    setError("");
+                    setSuccessMessage("");
+                    try {
+                      const res = await fetch(apiUrl("/auth/otp/send"), {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error || "Failed to resend");
+                      setOtpCode("");
+                      setSuccessMessage("A new code was sent.");
+                    } catch (err: any) {
+                      setError(err.message || "Could not resend code");
+                    } finally {
+                      setOtpSending(false);
+                    }
+                  }}
+                >
+                  {otpSending ? "Sending..." : "Resend Code"}
+                </button>
+              </div>
+            ) : registerRole === "architect" ? (
               <>
                 <input
                   style={pageStyles.input}
@@ -537,7 +624,9 @@ export default function Login() {
             : mode === "login"
             ? "Sign In"
             : mode === "register"
-            ? "Create Account"
+            ? registrationStep === "form"
+              ? (otpSending ? "Sending code..." : "Send Verification Code")
+              : (loading ? "Creating account..." : "Verify & Create Account")
             : "Reset Password"}
         </button>
       </form>

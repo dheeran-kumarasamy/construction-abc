@@ -91,3 +91,46 @@ export async function sendInviteEmail(input: InviteEmailInput): Promise<boolean>
 
   return true;
 }
+
+type OtpEmailInput = {
+  to: string;
+  otp: string;
+  purpose?: string;
+};
+
+export async function sendOtpEmail(input: OtpEmailInput): Promise<void> {
+  const tx = getTransporter();
+  if (!tx) {
+    throw new Error(
+      "Email service is not configured. Please contact support or try again later."
+    );
+  }
+
+  const appName = process.env.APP_NAME || "Construction App";
+  const from =
+    process.env.SMTP_FROM ||
+    process.env.BREVO_SMTP_FROM ||
+    process.env.SMTP_USER ||
+    process.env.BREVO_SMTP_LOGIN ||
+    "no-reply@example.com";
+
+  const subject = `${appName}: Your verification code`;
+  const text = [
+    `Your ${appName} verification code is: ${input.otp}`,
+    "",
+    "This code expires in 10 minutes. Do not share it with anyone.",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #0f172a;">
+      <h2 style="margin: 0 0 12px;">${appName} — Email Verification</h2>
+      <p>Use the code below to complete your registration:</p>
+      <p style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #0f766e; margin: 20px 0;">
+        ${input.otp}
+      </p>
+      <p style="color:#64748b;">This code expires in <strong>10 minutes</strong>. Do not share it with anyone.</p>
+    </div>
+  `;
+
+  await tx.sendMail({ from, to: input.to, subject, text, html });
+}

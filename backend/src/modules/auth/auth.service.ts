@@ -2,7 +2,7 @@ import { pool } from "../../config/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { sendInviteEmail } from "../../services/email";
+import { sendInviteEmail, sendOtpEmail } from "../../services/email";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
@@ -39,10 +39,85 @@ function normalizeOrgRole(role?: string | null): "head" | "member" | null {
   return null;
 }
 
+export async function sendRegistrationOtp(email: string): Promise<{ sent: boolean }> {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) throw new Error("Email is required");
+
+  // Rate-limit: block if a valid (unused, non-expired) OTP was issued within the last 60 seconds
+  const recent = await pool.query(
+    `SELECT created_at FROM email_otps
+     WHERE email = $1 AND purpose = 'registration' AND used_at IS NULL AND expires_at > NOW()
+     ORDER BY created_at DESC LIMIT 1`,
+    [normalizedEmail]
+  );
+  if (recent.rows.length > 0) {
+    const secondsAgo = (Date.now() - new Date(recent.rows[0].created_at).getTime()) / 1000;
+    if (secondsAgo < 60) {
+      throw new Error("Please wait before requesting another code");
+    }
+  }
+
+  // Invalidate any previous unused OTPs for this email
+  await pool.query(
+    `UPDATE email_otps SET used_at = NOW()
+     WHERE email = $1 AND purpose = 'registration' AND used_at IS NULL`,
+    [normalizedEmail]
+  );
+
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  await pool.query(
+    `INSERT INTO email_otps (email, otp_code, purpose, expires_at)
+     VALUES ($1, $2, 'registration', $3)`,
+    [normalizedEmail, otp, expiresAt]
+  );
+
+  // Throws if SMTP not configured — caller should surface the error
+  await sendOtpEmail({ to: normalizedEmail, otp });
+
+  return { sent: true };
+}
+
+async function validateRegistrationOtp(email: string, otp: string): Promise<void> {
+  const { rows } = await pool.query(
+    `SELECT id, otp_code, attempts FROM email_otps
+     WHERE email = $1 AND purpose = 'registration' AND used_at IS NULL AND expires_at > NOW()
+     ORDER BY created_at DESC LIMIT 1`,
+    [email]
+  );
+
+  if (rows.length === 0) {
+    throw new Error("OTP expired or not found. Please request a new code.");
+  }
+
+  const record = rows[0];
+
+  if (record.attempts >= 5) {
+    throw new Error("Too many incorrect attempts. Please request a new code.");
+  }
+
+  if (record.otp_code !== String(otp).trim()) {
+    await pool.query(
+      `UPDATE email_otps SET attempts = attempts + 1 WHERE id = $1`,
+      [record.id]
+    );
+    const remaining = 4 - record.attempts;
+    throw new Error(`Incorrect verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`);
+  }
+
+  // Mark as used
+  await pool.query(
+    `UPDATE email_otps SET used_at = NOW() WHERE id = $1`,
+    [record.id]
+  );
+}
+
 export async function registerUser(input: {
   email: string;
   password: string;
   role: "architect" | "builder" | "dealer" | "admin";
+  otp?: string;
   organizationName?: string;
   phoneNumber?: string;
   dealerData?: {
@@ -91,6 +166,12 @@ export async function registerUser(input: {
   if (password.length < 6) {
     throw new Error("Password must be at least 6 characters");
   }
+
+  // Validate OTP before doing any account creation work
+  if (!input.otp) {
+    throw new Error("Verification code is required. Please request a code and try again.");
+  }
+  await validateRegistrationOtp(email, input.otp);
 
   if (role === "builder" && !String(builderData?.companyName || "").trim()) {
     throw new Error("companyName is required for builder registration");
