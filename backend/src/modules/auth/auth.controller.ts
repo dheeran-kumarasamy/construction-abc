@@ -59,14 +59,35 @@ async function getRequesterProfile(req: Request) {
   return rows[0] || null;
 }
 
+export async function sendOtp(req: Request, res: Response) {
+  try {
+    const { email } = req.body || {};
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ error: "email is required" });
+    }
+    const result = await service.sendRegistrationOtp(email.trim().toLowerCase());
+    return res.json(result);
+  } catch (err: any) {
+    const message = String(err?.message || "Failed to send verification code");
+    if (/wait before requesting/i.test(message)) {
+      return res.status(429).json({ error: message });
+    }
+    if (/email service is not configured/i.test(message)) {
+      return res.status(503).json({ error: message });
+    }
+    return res.status(400).json({ error: message });
+  }
+}
+
 export async function register(req: Request, res: Response) {
   try {
-    const { email, password, role, organizationName, phoneNumber, dealerData, builderData } = req.body || {};
+    const { email, password, role, organizationName, phoneNumber, dealerData, builderData, otp } = req.body || {};
 
     const result = await service.registerUser({
       email,
       password,
       role,
+      otp,
       organizationName,
       phoneNumber,
       dealerData,

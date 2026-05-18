@@ -8,6 +8,7 @@ import {
 	getInvites,
 	getMyProfile,
 	updateMyPhoneNumber,
+	sendOtp,
 } from "./auth.controller";
 import { authenticate } from "./auth.middleware";
 import { googleOAuthCallback, validateToken } from "./oauth.controller";
@@ -15,6 +16,7 @@ import { googleOAuthCallback, validateToken } from "./oauth.controller";
 const router = Router();
 
 router.post("/login", login);
+router.post("/otp/send", sendOtp);
 router.post("/register", register);
 router.post("/reset-password", resetPassword);
 router.post("/accept-invite", acceptInvite);
